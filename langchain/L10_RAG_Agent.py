@@ -21,7 +21,7 @@ ZHIPU_API_KEY = "sk-lLKjavEquIsN4nk6eguOXFlhBXbXntGLHo5tOhbQWkBztYbj"
 ZHIPU_BASE_URL = "https://ai-hub.digiwincloud.com.cn/v1"
 ZHIPU_CHAT_MODEL = "ep-cl-glm-5.1"
 ZHIPU_EMBEDDING_MODEL = "embedding-3"
-LOAD_LIVE_WEB_PAGE = False
+LOAD_LIVE_WEB_PAGE = True
 RUN_LIVE_DEMO = True
 STABLE_TEMPERATURE = 0.1
 

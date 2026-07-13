@@ -1,6 +1,10 @@
+import atexit
 import json
+import os
 import sqlite3
 import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -19,8 +23,8 @@ if VENV_SITE_PACKAGES.exists():
 ZHIPU_API_KEY = "sk-lLKjavEquIsN4nk6eguOXFlhBXbXntGLHo5tOhbQWkBztYbj"
 ZHIPU_BASE_URL = "https://ai-hub.digiwincloud.com.cn/v1"
 ZHIPU_CHAT_MODEL = "ep-cl-glm-5.1"
-DOWNLOAD_CHINOOK_DB = False
-RUN_LIVE_DEMO = False
+DOWNLOAD_CHINOOK_DB = True
+RUN_LIVE_DEMO = True
 STABLE_TEMPERATURE = 0.1
 
 OFFICIAL_SOURCE = "https://docs.langchain.com/oss/python/langchain/sql-agent"
@@ -82,47 +86,73 @@ def model_dump(value):
         return [model_dump(item) for item in value]
     return value
 
-
-def create_sample_database() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
+# @contextmanager 和 yield 配合，是为了把“打开资源 → 使用资源 → 关闭资源”写成 with 语法。
+@contextmanager
+def database_connection(database_path: Path, *, read_only: bool = False):
+    """Open one SQLite connection for the current tool invocation only."""
+    if read_only:
+        database_uri = f"{database_path.resolve().as_uri()}?mode=ro"
+        conn = sqlite3.connect(database_uri, uri=True)
+    else:
+        conn = sqlite3.connect(database_path)
     conn.row_factory = sqlite3.Row
-    conn.executescript(
-        """
-        CREATE TABLE Genre (
-            GenreId INTEGER PRIMARY KEY,
-            Name TEXT NOT NULL
-        );
-        CREATE TABLE Track (
-            TrackId INTEGER PRIMARY KEY,
-            Name TEXT NOT NULL,
-            GenreId INTEGER NOT NULL,
-            Milliseconds INTEGER NOT NULL,
-            FOREIGN KEY (GenreId) REFERENCES Genre(GenreId)
-        );
-        INSERT INTO Genre VALUES
-            (1, 'Rock'),
-            (2, 'Jazz'),
-            (3, 'Classical');
-        INSERT INTO Track VALUES
-            (1, 'Short Rock Song', 1, 180000),
-            (2, 'Long Rock Song', 1, 420000),
-            (3, 'Jazz Improvisation', 2, 540000),
-            (4, 'Classical Movement', 3, 900000);
-        """
+    try:
+        # 表示函数先暂停，把 conn 临时交出去；
+        # 当 with 结束时，函数再继续执行 finally，关闭连接。
+        yield conn
+    finally:
+        conn.close()
+
+
+def create_sample_database() -> Path:
+    """Create a temporary file-backed sample database for per-tool connections."""
+    file_descriptor, raw_path = tempfile.mkstemp(
+        prefix="langchain-l11-sql-agent-",
+        suffix=".db",
     )
-    return conn
+    os.close(file_descriptor)
+    database_path = Path(raw_path)
+    # 临时文件清理：登记一个“程序正常退出时执行”的清理函数
+    atexit.register(database_path.unlink, missing_ok=True)
+
+    with database_connection(database_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE Genre (
+                GenreId INTEGER PRIMARY KEY,
+                Name TEXT NOT NULL
+            );
+            CREATE TABLE Track (
+                TrackId INTEGER PRIMARY KEY,
+                Name TEXT NOT NULL,
+                GenreId INTEGER NOT NULL,
+                Milliseconds INTEGER NOT NULL,
+                FOREIGN KEY (GenreId) REFERENCES Genre(GenreId)
+            );
+            INSERT INTO Genre VALUES
+                (1, 'Rock'),
+                (2, 'Jazz'),
+                (3, 'Classical');
+            INSERT INTO Track VALUES
+                (1, 'Short Rock Song', 1, 180000),
+                (2, 'Long Rock Song', 1, 420000),
+                (3, 'Jazz Improvisation', 2, 540000),
+                (4, 'Classical Movement', 3, 900000);
+            """
+        )
+        conn.commit()
+    return database_path
 
 
-def download_chinook_database(deps, target_path: Path):
+# 下载 SQLite 数据库文件到本地，并返回文件路径。
+def download_chinook_database(deps, target_path: Path) -> Path:
     response = deps["requests"].get(CHINOOK_URL, timeout=30)
     response.raise_for_status()
     target_path.write_bytes(response.content)
-    conn = sqlite3.connect(target_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return target_path
 
 
-def build_connection(deps):
+def build_database_path(deps) -> Path:
     if DOWNLOAD_CHINOOK_DB:
         return download_chinook_database(
             deps,
@@ -140,11 +170,16 @@ def ensure_read_only_sql(query: str):
         raise ValueError("检测到写操作关键字，拒绝执行。")
 
 
+# 讲sql数据带列名的结果集转成字典列表，方便json序列化
+# [
+#     {"GenreId": 1, "Name": "Rock"},
+#     {"GenreId": 2, "Name": "Jazz"},
+# ]
 def rows_to_dicts(cursor):
     return [dict(row) for row in cursor.fetchall()]
 
 
-def define_sql_tools(deps, conn):
+def define_sql_tools(deps, database_path: Path):
     BaseModel = deps["BaseModel"]
     Field = deps["Field"]
     tool = deps["tool"]
@@ -158,46 +193,53 @@ def define_sql_tools(deps, conn):
     @tool
     def list_tables() -> str:
         """List available table names in the SQLite database."""
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        )
-        return ", ".join(row["name"] for row in cursor.fetchall())
+        with database_connection(database_path, read_only=True) as conn:
+            cursor = conn.execute(
+                # 默认打开的那个数据库文件里的表
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+            return ", ".join(row["name"] for row in cursor.fetchall())
 
     @tool(args_schema=TableNamesInput)
     def describe_tables(table_names: str) -> str:
         """Show schema for one or more comma-separated table names."""
+        # strip() 除字符串开头和结尾的空白字符，包括空格、制表符、换行
+        # if bool(part.strip()): if 非空字符串 = true, 空字符串 = false
         parts = [part.strip() for part in table_names.split(",") if part.strip()]
         output = []
-        for table in parts:
-            cursor = conn.execute(f"PRAGMA table_info({table})")
-            columns = rows_to_dicts(cursor)
-            if not columns:
-                output.append(f"{table}: 表不存在或没有字段")
-                continue
-            output.append(f"{table}: {json.dumps(columns, ensure_ascii=False)}")
+        with database_connection(database_path, read_only=True) as conn:
+            for table in parts:
+                cursor = conn.execute(f"PRAGMA table_info({table})")
+                columns = rows_to_dicts(cursor)
+                if not columns:
+                    output.append(f"{table}: 表不存在或没有字段")
+                    continue
+                output.append(f"{table}: {json.dumps(columns, ensure_ascii=False)}")
         return "\n".join(output)
 
     @tool(args_schema=SqlInput)
     def check_sql_query(query: str) -> str:
         """Check whether a SQL query is read-only and syntactically valid."""
         ensure_read_only_sql(query)
-        conn.execute(f"EXPLAIN QUERY PLAN {query}")
+        with database_connection(database_path, read_only=True) as conn:
+            conn.execute(f"EXPLAIN QUERY PLAN {query}")
         return "SQL 检查通过，可以执行。"
 
     @tool(args_schema=SqlInput)
     def run_sql_query(query: str) -> str:
         """Run a read-only SQL query and return result rows."""
         ensure_read_only_sql(query)
-        cursor = conn.execute(query)
-        rows = rows_to_dicts(cursor)
+        with database_connection(database_path, read_only=True) as conn:
+            cursor = conn.execute(query)
+            rows = rows_to_dicts(cursor)
         return json.dumps(rows[:20], ensure_ascii=False)
 
     return [list_tables, describe_tables, check_sql_query, run_sql_query]
 
 
 def build_sql_agent(deps):
-    conn = build_connection(deps)
-    tools = define_sql_tools(deps, conn)
+    database_path = build_database_path(deps)
+    tools = define_sql_tools(deps, database_path)
     agent = deps["create_agent"](
         model=build_model(deps["ChatOpenAI"]),
         tools=tools,
@@ -205,14 +247,14 @@ def build_sql_agent(deps):
     )
     return {
         "agent": agent,
-        "connection": conn,
+        "database_path": database_path,
         "tools": tools,
     }
 
 
 def tool_only_demo(deps):
-    conn = build_connection(deps)
-    tools = {item.name: item for item in define_sql_tools(deps, conn)}
+    database_path = build_database_path(deps)
+    tools = {item.name: item for item in define_sql_tools(deps, database_path)}
     query = """
     SELECT g.Name AS genre, AVG(t.Milliseconds) AS avg_ms
     FROM Track t
