@@ -1,0 +1,56 @@
+name: RAG knowledge-base CI
+
+on:
+  push:
+    paths:
+      - "4_rag_knowledge_base_service/**"
+      - ".github/workflows/rag-kb-ci.yml"
+  pull_request:
+    paths:
+      - "4_rag_knowledge_base_service/**"
+      - ".github/workflows/rag-kb-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-offline:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 4_rag_knowledge_base_service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: 4_rag_knowledge_base_service/requirements.txt
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt
+      - run: python -m compileall -q .
+      - run: python scripts/smoke.py
+      - run: python evaluate.py --output "$RUNNER_TEMP/evaluation.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rag-evaluation-report
+          path: ${{ runner.temp }}/evaluation.json
+          if-no-files-found: warn
+
+  docker-build:
+    needs: verify-offline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t andrew-rag-kb:ci 4_rag_knowledge_base_service
+      - run: |
+          docker run -d --rm --name andrew-rag-kb-ci -p 8000:8000 andrew-rag-kb:ci
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:8000/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs andrew-rag-kb-ci
+          exit 1
+      - if: always()
+        run: docker stop andrew-rag-kb-ci || true

@@ -1,0 +1,8 @@
+.env
+.venv/
+runtime/
+reports/
+__pycache__/
+*.py[cod]
+.git/
+docs/

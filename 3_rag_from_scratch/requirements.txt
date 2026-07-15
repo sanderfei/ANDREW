@@ -1,0 +1,8 @@
+langchain-core>=1.0,<2.0
+langchain-openai>=1.0,<2.0
+langchain-text-splitters>=1.0,<2.0
+tiktoken>=0.8,<1.0
+
+# 仅 --web-source 需要。
+langchain-community>=0.4,<1.0
+beautifulsoup4>=4.12,<5.0

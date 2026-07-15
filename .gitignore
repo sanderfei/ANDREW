@@ -2,3 +2,21 @@
 **/.python_packages/
 **/__pycache__/
 *.py[cod]
+
+# Local credentials and developer tooling.
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Generated outputs from the existing deep-agent lesson.
+2_langchain/.local_l8_sandbox/analysis_report.md
+2_langchain/.local_l8_sandbox/agent_analysis_report.md
+
+# Local state and reports for the RAG knowledge-base service.
+4_rag_knowledge_base_service/runtime/
+4_rag_knowledge_base_service/reports/

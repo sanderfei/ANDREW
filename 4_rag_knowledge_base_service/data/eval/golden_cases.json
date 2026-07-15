@@ -1,0 +1,143 @@
+[
+  {
+    "id": "rag-flow",
+    "category": "hit",
+    "question": "two_step_rag 的固定数据流是什么？",
+    "expected_answerable": true,
+    "expected_sources": ["rag_basics.md"],
+    "expected_terms": ["two_step_rag"]
+  },
+  {
+    "id": "embedding-contract",
+    "category": "hit",
+    "question": "embed_documents 和 embed_query 分别在什么时候调用？",
+    "expected_answerable": true,
+    "expected_sources": ["rag_basics.md"],
+    "expected_terms": ["embed_documents"]
+  },
+  {
+    "id": "chunk-overlap",
+    "category": "near-match",
+    "question": "chunk_overlap 为什么要保留边界内容？",
+    "expected_answerable": true,
+    "expected_sources": ["rag_basics.md"],
+    "expected_terms": ["chunk_overlap"]
+  },
+  {
+    "id": "stable-id",
+    "category": "hit",
+    "question": "stable_chunk_id 如何帮助增量索引？",
+    "expected_answerable": true,
+    "expected_sources": ["rag_basics.md"],
+    "expected_terms": ["stable_chunk_id"]
+  },
+  {
+    "id": "retriever-contract",
+    "category": "hit",
+    "question": "retriever.invoke(question) 的输入输出契约是什么？",
+    "expected_answerable": true,
+    "expected_sources": ["retrieval_and_citations.md"],
+    "expected_terms": ["retriever"]
+  },
+  {
+    "id": "citation-fields",
+    "category": "citation",
+    "question": "citation 必须包含哪些定位字段？",
+    "expected_answerable": true,
+    "expected_sources": ["retrieval_and_citations.md"],
+    "expected_terms": ["chunk_id"]
+  },
+  {
+    "id": "refusal-gate",
+    "category": "refusal",
+    "question": "什么时候必须返回 answerable=false？",
+    "expected_answerable": true,
+    "expected_sources": ["retrieval_and_citations.md"],
+    "expected_terms": ["answerable=false"]
+  },
+  {
+    "id": "wrong-citation",
+    "category": "citation",
+    "question": "wrong citation 是什么，评测应如何防护？",
+    "expected_answerable": true,
+    "expected_sources": ["retrieval_and_citations.md"],
+    "expected_terms": ["错误引用"]
+  },
+  {
+    "id": "reindex-incremental",
+    "category": "operations",
+    "question": "POST /v1/reindex 如何处理修改后的文件？",
+    "expected_answerable": true,
+    "expected_sources": ["service_operations.md"],
+    "expected_terms": ["manifest"]
+  },
+  {
+    "id": "health-contract",
+    "category": "operations",
+    "question": "GET /health 会返回哪些索引状态？",
+    "expected_answerable": true,
+    "expected_sources": ["service_operations.md"],
+    "expected_terms": ["GET /health"]
+  },
+  {
+    "id": "index-fingerprint",
+    "category": "operations",
+    "question": "index_fingerprint 改变后为什么需要 reset=true？",
+    "expected_answerable": true,
+    "expected_sources": ["service_operations.md"],
+    "expected_terms": ["reset=true"]
+  },
+  {
+    "id": "request-id",
+    "category": "operations",
+    "question": "X-Request-ID 在服务中有什么用途？",
+    "expected_answerable": true,
+    "expected_sources": ["service_operations.md"],
+    "expected_terms": ["request_id"]
+  },
+  {
+    "id": "golden-cases",
+    "category": "evaluation",
+    "question": "golden_cases 应覆盖哪些 RAG 失败情形？",
+    "expected_answerable": true,
+    "expected_sources": ["evaluation.md"],
+    "expected_terms": ["黄金问题集"]
+  },
+  {
+    "id": "offline-regression",
+    "category": "evaluation",
+    "question": "为什么离线 regression 不需要 API key？",
+    "expected_answerable": true,
+    "expected_sources": ["evaluation.md"],
+    "expected_terms": ["离线回归"]
+  },
+  {
+    "id": "langsmith-optional",
+    "category": "evaluation",
+    "question": "LangSmith tracing 在这个项目中是必需的吗？",
+    "expected_answerable": true,
+    "expected_sources": ["evaluation.md"],
+    "expected_terms": ["可选"]
+  },
+  {
+    "id": "no-weather",
+    "category": "no-answer",
+    "question": "今天上海的实时天气是什么？",
+    "expected_answerable": false,
+    "expected_sources": []
+  },
+  {
+    "id": "no-database",
+    "category": "no-answer",
+    "question": "项目采用什么关系型数据库集群？",
+    "expected_answerable": false,
+    "expected_sources": []
+  },
+  {
+    "id": "no-author",
+    "category": "no-answer",
+    "question": "知识库文档的作者是谁？",
+    "expected_answerable": false,
+    "expected_sources": []
+  }
+]
