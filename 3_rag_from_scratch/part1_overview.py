@@ -11,6 +11,7 @@ try:  # 支持 `python 3_rag_from_scratch/part1_overview.py` 直接运行。
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
@@ -25,6 +26,7 @@ except ImportError:  # pragma: no cover - 仅 direct-script 入口会走到这�
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
@@ -32,16 +34,43 @@ except ImportError:  # pragma: no cover - 仅 direct-script 入口会走到这�
     )
 
 
+# question
+#    ↓
+# Retriever 做向量检索
+#    ↓
+# list[Document]
+#    ↓
+# 提取 Document.page_content，拼成 context 字符串
+#    ↓
+# context + 原始 question 填入 Prompt
+# 经过填充后，模型实际看到的内容类似：
+# Answer the question using only the supplied context.
+# <context>
+# [source=local-rag-notes]
+# Task decomposition breaks a complex task into smaller...
+# [source=local-rag-notes]
+# Indexing normally loads source documents...
+# </context>
+# Question: What is Task Decomposition?
+#    ↓
+# 交给模型回答
+#    ↓
+# 得到字符串答案
 def main() -> None:
     options = parse_runtime_options("RAG From Scratch Part 1：完整最小 RAG")
 
     # 1) Indexing：Document -> chunk -> embedding -> vector store。
     source_documents = load_source_documents(options.use_web_source)
     chunks = split_documents(source_documents, chunk_size=1_000, chunk_overlap=200)
-    vector_store = build_vector_store(chunks, use_live=options.use_live)
+    # 生成向量并建立向量库
+    vector_store = build_vector_store(
+        chunks,
+        embedding_mode=options.embedding_mode,
+    )
 
     # 2) Retrieval：把 vector store 包装为可 invoke 的 retriever。
     retriever = build_retriever(vector_store, k=2)
+    # retriever.invoke实际执行 LocalMiniLMEmbeddings.embed_query() 返回相似度最高的两个 Document
     retrieved_documents = retriever.invoke(DEFAULT_QUESTION)
 
     # 3) Generation：固定先检索，再把 context 和问题交给 prompt | model | parser。
@@ -53,7 +82,8 @@ def main() -> None:
             "official_tutorial": OFFICIAL_TUTORIAL_URL,
             "current_api_docs": CURRENT_RETRIEVAL_DOCS_URL,
             "source_mode": "web" if options.use_web_source else "local fixture",
-            "runtime_mode": "live GLM" if options.use_live else "offline teaching",
+            "embedding": embedding_runtime_config(options.embedding_mode),
+            "generation_mode": "online chat model" if options.use_live else "offline extractive",
             "pipeline": "Document -> chunks -> InMemoryVectorStore -> retriever.invoke -> prompt -> model",
             "question": DEFAULT_QUESTION,
             "indexed_chunk_count": len(chunks),

@@ -11,6 +11,7 @@ try:  # 支持 `python 3_rag_from_scratch/part2_indexing.py` 直接运行。
         compact_documents,
         cosine_similarity,
         count_tokens,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
@@ -25,6 +26,7 @@ except ImportError:  # pragma: no cover - 仅 direct-script 入口会走到这�
         compact_documents,
         cosine_similarity,
         count_tokens,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
@@ -41,7 +43,7 @@ def main() -> None:
     options = parse_runtime_options("RAG From Scratch Part 2：Indexing")
 
     # 手动调用时：embed_query 给问题，embed_documents 给待写入的文档列表。
-    embeddings = build_embeddings(use_live=options.use_live)
+    embeddings = build_embeddings(mode=options.embedding_mode)
     question_vector = embeddings.embed_query(QUESTION)
     document_vector = embeddings.embed_documents([DOCUMENT])[0]
 
@@ -57,7 +59,7 @@ def main() -> None:
             "official_tutorial": OFFICIAL_TUTORIAL_URL,
             "current_api_docs": CURRENT_KNOWLEDGE_BASE_DOCS_URL,
             "source_mode": "web" if options.use_web_source else "local fixture",
-            "runtime_mode": "live GLM embedding-3" if options.use_live else "offline stable hash embeddings",
+            "embedding": embedding_runtime_config(options.embedding_mode),
             "token_example": {
                 "text": QUESTION,
                 "encoding": "cl100k_base",

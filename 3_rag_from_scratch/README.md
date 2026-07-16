@@ -2,7 +2,7 @@
 
 这个目录先把官方 RAG From Scratch Part 1–4 拆成可直接运行的 Python 课件，再补入求职中必须能讲清的切块参数、score、MMR、拒答、citation、Multi Query 和 RRF 重排序。
 
-官方原代码中的 OpenAI 调用已换成仓库现有的 GLM OpenAI-compatible 配置；旧 LangChain API 也已更新为当前 1.x 写法。默认仍为可复现离线模式，只有显式传入 `--live` 才会调用 GLM。
+旧 LangChain API 已更新为当前 1.x 写法。Embedding 默认使用本机 CPU 运行的多语言 MiniLM；回答生成默认是可复现的离线抽取，只有显式传入 `--live` 才在生成阶段调用在线聊天模型。
 
 ## 学习顺序
 
@@ -11,17 +11,17 @@
 | 1 | [part1_overview.py](part1_overview.py) | Part 1：`Document -> indexing -> retrieval -> generation` |
 | 2 | [part2_indexing.py](part2_indexing.py) | Part 2：token、`embed_query`、`embed_documents`、余弦相似度、切块与入库 |
 | 3 | [part2_chunking_parameter_comparison.py](part2_chunking_parameter_comparison.py) | Part 2 求职扩展：三组 token-aware chunk 参数对比 |
-| 4 | [part2_offline_vs_glm_embeddings.py](part2_offline_vs_glm_embeddings.py) | Part 2 GLM 适配：离线词项基线 vs `embedding-3` |
+| 4 | [part2_offline_vs_glm_embeddings.py](part2_offline_vs_glm_embeddings.py) | Part 2：哈希词项基线 vs 本地 MiniLM，可选对比 `embedding-3` |
 | 5 | [part3_retrieval.py](part3_retrieval.py) | Part 3：`retriever.invoke(...)` 与 `batch(...)` |
 | 6 | [part3_retrieval_k_score_mmr_no_answer.py](part3_retrieval_k_score_mmr_no_answer.py) | Part 3 求职扩展：`k` / score / MMR / 无答案问题 |
 | 7 | [part4_generation.py](part4_generation.py) | Part 4：`prompt | model | StrOutputParser` 与固定两步 RAG |
 | 8 | [part4_answer_with_citations.py](part4_answer_with_citations.py) | Part 4 求职扩展：`answer + answerable + citations + retrieval` |
-| 9 | [part5_multi_query.py](part5_multi_query.py) | Part 5：GLM 生成多个查询，分别检索并保序去重 |
+| 9 | [part5_multi_query.py](part5_multi_query.py) | Part 5：生成多个查询，分别检索并保序去重；`--live` 可用在线模型改写 |
 | 10 | [part15_reciprocal_rank_fusion_reranking.py](part15_reciprocal_rank_fusion_reranking.py) | Part 15：对多个排名执行 Reciprocal Rank Fusion |
 
 Part 3 的 score、MMR 和 no-answer，以及 Part 4 的 citation 闭环，是基于官方主线增加的本地求职向实验，不冒充官方 Notebook 原样代码。
 
-## 当前 API 与 GLM 适配
+## 当前 API、本地模型与 GLM 适配
 
 | 官方旧写法 | 本地当前写法 |
 | --- | --- |
@@ -30,20 +30,28 @@ Part 3 的 score、MMR 和 no-answer，以及 Part 4 的 citation 闭环，是�
 | `Chroma.from_documents(...)` | 基础课件使用 `InMemoryVectorStore` |
 | `get_relevant_documents(question)` | `retriever.invoke(question)` |
 | `ChatOpenAI()` | `ChatOpenAI(model=ZHIPU_CHAT_MODEL, openai_api_base=ZHIPU_BASE_URL, ...)` |
-| `OpenAIEmbeddings()` | `OpenAIEmbeddings(model=ZHIPU_EMBEDDING_MODEL, openai_api_base=ZHIPU_BASE_URL, ...)` |
+| `OpenAIEmbeddings()` | 默认 `LocalMiniLMEmbeddings`；仅 `--embedding glm` 使用远程 `OpenAIEmbeddings` |
 
-GLM 配置统一来自根目录 `.env` 或已导出的环境变量：
+默认模型为：
+
+```text
+sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+```
+
+它由 FastEmbed / ONNX Runtime 在 CPU 上运行，输出 384 维向量，支持中英文。第一次执行 embedding 时会把约 120–220 MB（取决于量化格式与下载源）的模型文件放到 `~/.cache/fastembed`；后续复用缓存，不需要 API Key，也不会调用远程 embedding 服务。
+
+需要在线回答、查询改写或远程 embedding 对比时，GLM 配置来自根目录 `.env` 或已导出的环境变量：
 
 ```bash
 ZHIPU_API_KEY=...
 ZHIPU_BASE_URL=https://ai-hub.digiwincloud.com.cn/v1
-ZHIPU_CHAT_MODEL=ep-cl-glm-5.1
+ZHIPU_CHAT_MODEL=ep-qwen2.5-72b
 ZHIPU_EMBEDDING_MODEL=embedding-3
 ```
 
-`ChatOpenAI` / `OpenAIEmbeddings` 只是 LangChain 的兼容适配器，实际请求会发到 `ZHIPU_BASE_URL`。聊天模型权限不代表一定有 `embedding-3` 权限；如果 live 检索报权限错误，需先在 provider 侧开通 embedding 模型。
+`--live` 只控制在线回答生成与 Multi Query 改写，不再决定 embedding。只有显式使用 `--embedding glm` 才会请求 `embedding-3`，因此现有 key 没有该模型权限也不影响默认课程运行。
 
-## 安装与离线运行
+## 安装与本地运行
 
 在仓库根目录执行：
 
@@ -62,19 +70,31 @@ ZHIPU_EMBEDDING_MODEL=embedding-3
 .venv/bin/python 3_rag_from_scratch/part15_reciprocal_rank_fusion_reranking.py
 ```
 
-离线模式使用 `StableHashEmbeddings`，支持中英文词项且不会因词表外问题产生 NaN。Part 1 / 4 / 5 的离线生成器是明确标注的抽取式基线，不伪装成 GLM 生成。
+默认使用本地 `LocalMiniLMEmbeddings`。如果想观察“词项哈希”和“真实语义模型”的差异，可加 `--embedding hash`：
 
-## GLM live 运行
+```bash
+.venv/bin/python 3_rag_from_scratch/part1_overview.py --embedding hash
+```
+
+Part 1 / 4 / 5 不加 `--live` 时，回答生成器仍是明确标注的离线抽取式基线，不伪装成在线模型生成。
+
+## 在线模型 live 运行
 
 复制根目录配置模板，填写自己的 key，不要写入 Python 文件：
 
 ```bash
 cp .env.example .env
 
-.venv/bin/python 3_rag_from_scratch/part2_offline_vs_glm_embeddings.py --live
+.venv/bin/python 3_rag_from_scratch/part1_overview.py --live
 .venv/bin/python 3_rag_from_scratch/part4_answer_with_citations.py --live
 .venv/bin/python 3_rag_from_scratch/part5_multi_query.py --live
 .venv/bin/python 3_rag_from_scratch/part15_reciprocal_rank_fusion_reranking.py --live
+```
+
+上面这些命令仍使用本地 MiniLM 检索，只把生成/查询改写交给配置的在线模型。若 provider 以后开放 `embedding-3`，可单独运行远程对比：
+
+```bash
+.venv/bin/python 3_rag_from_scratch/part2_offline_vs_glm_embeddings.py --embedding glm
 ```
 
 涉及资料源的课件可加 `--web-source`，改用官方 Lilian Weng 博客资料。切块实验使用的 `cl100k_base` 只是为了复现官方 tiktoken 实验与估算上下文大小，不能当作 GLM 的精确 tokenizer。
@@ -99,4 +119,6 @@ RRF 是基于排名的融合算法，不是 Cohere/cross-encoder 语义 reranker
 - [RAG From Scratch Part 15–18](https://github.com/langchain-ai/rag-from-scratch/blob/main/rag_from_scratch_15_to_18.ipynb)
 - [LangChain Retrieval / RAG](https://docs.langchain.com/oss/python/langchain/retrieval)
 - [LangChain token splitting](https://docs.langchain.com/oss/python/integrations/splitters/split_by_token)
+- [FastEmbed 支持的模型](https://qdrant.github.io/fastembed/examples/Supported_Models/)
+- [paraphrase-multilingual-MiniLM-L12-v2](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2)
 - [GLM OpenAI API 兼容说明](https://docs.bigmodel.cn/cn/guide/develop/openai/introduction)

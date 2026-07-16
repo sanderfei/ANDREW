@@ -15,6 +15,7 @@ try:  # 支持 `python 3_rag_from_scratch/part4_generation.py` 直接运行。
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         format_documents,
         load_source_documents,
         parse_runtime_options,
@@ -34,6 +35,7 @@ except ImportError:  # pragma: no cover - 仅 direct-script 入口会走到这�
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         format_documents,
         load_source_documents,
         parse_runtime_options,
@@ -50,7 +52,7 @@ def main() -> None:
         chunk_size=300,
         chunk_overlap=50,
     )
-    embeddings = build_embeddings(use_live=options.use_live)
+    embeddings = build_embeddings(mode=options.embedding_mode)
     vector_store = build_vector_store(chunks, embeddings=embeddings)
     retriever = build_retriever(vector_store, k=2)
 
@@ -75,7 +77,8 @@ def main() -> None:
         {
             "official_tutorial": OFFICIAL_TUTORIAL_URL,
             "current_api_docs": CURRENT_RETRIEVAL_DOCS_URL,
-            "runtime_mode": "live GLM" if options.use_live else "offline teaching",
+            "embedding": embedding_runtime_config(options.embedding_mode),
+            "generation_mode": "online chat model" if options.use_live else "offline extractive",
             "manual_generation": {
                 "chain": "prompt | model | StrOutputParser",
                 "retrieved_documents": compact_documents(retrieved_documents),

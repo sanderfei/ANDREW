@@ -11,6 +11,7 @@ try:
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
@@ -32,6 +33,7 @@ except ImportError:
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
@@ -77,7 +79,7 @@ def main() -> None:
     else:
         documents = MULTI_QUERY_DOCUMENTS
     question = DEFAULT_QUESTION if options.use_web_source else QUESTION
-    embeddings = build_embeddings(use_live=options.use_live)
+    embeddings = build_embeddings(mode=options.embedding_mode)
     vector_store = build_vector_store(documents, embeddings=embeddings)
     # 小样例每个查询取 2 条，保留一定多样性又避免把所有噪声都送入 RRF。
     retriever = build_retriever(vector_store, k=2)
@@ -90,8 +92,13 @@ def main() -> None:
         "Part 15 - Reciprocal Rank Fusion Re-ranking",
         {
             "official_tutorial": OFFICIAL_RERANK_URL,
-            "runtime_mode": "live GLM query generation" if options.use_live else "offline fixed query variants",
-            "glm_config": zhipu_runtime_config() if options.use_live else None,
+            "embedding": embedding_runtime_config(options.embedding_mode),
+            "query_generation_mode": "online chat model" if options.use_live else "offline fixed query variants",
+            "glm_config": (
+                zhipu_runtime_config()
+                if options.use_live or options.embedding_mode == "glm"
+                else None
+            ),
             "question": question,
             "queries": queries,
             "rankings_before_fusion": [

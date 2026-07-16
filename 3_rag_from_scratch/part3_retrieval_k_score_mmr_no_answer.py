@@ -11,9 +11,9 @@ try:
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         parse_runtime_options,
         print_json,
-        zhipu_runtime_config,
     )
 except ImportError:
     from _common import (
@@ -24,9 +24,9 @@ except ImportError:
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         parse_runtime_options,
         print_json,
-        zhipu_runtime_config,
     )
 
 
@@ -79,7 +79,7 @@ def _scored(vector_store, question: str, k: int) -> list[dict[str, object]]:
 
 def main() -> None:
     options = parse_runtime_options("RAG Part 3 补充：k / score / MMR / no-answer")
-    embeddings = build_embeddings(use_live=options.use_live)
+    embeddings = build_embeddings(mode=options.embedding_mode)
     vector_store = build_vector_store(DOCUMENTS, embeddings=embeddings)
 
     k_comparison = {str(k): _scored(vector_store, QUESTION, k) for k in (1, 2, 4)}
@@ -98,11 +98,10 @@ def main() -> None:
         {
             "official_basis": OFFICIAL_TUTORIAL_URL,
             "current_api_docs": CURRENT_KNOWLEDGE_BASE_DOCS_URL,
-            "runtime_mode": "live GLM embedding-3" if options.use_live else "offline stable hash",
-            "glm_config": zhipu_runtime_config() if options.use_live else None,
+            "embedding": embedding_runtime_config(options.embedding_mode),
             "question": QUESTION,
             "min_score_for_demo": MIN_SCORE,
-            "threshold_warning": "阈值只对当前 embedding/数据集有意义，切换 GLM 后必须重新用评测集标定。",
+            "threshold_warning": "阈值只对当前 embedding/数据集有意义，切换模型后必须重新用评测集标定。",
             "k_comparison": k_comparison,
             "similarity_top3": compact_documents(similarity_retriever.invoke(QUESTION)),
             "mmr_top3": compact_documents(mmr_retriever.invoke(QUESTION)),

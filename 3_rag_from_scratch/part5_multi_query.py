@@ -1,4 +1,4 @@
-"""Part 5：基于官方 Multi Query 课程，用 GLM 改写查询并合并召回。"""
+"""Part 5：基于官方 Multi Query 课程，可选用在线模型改写查询并合并召回。"""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ try:
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         format_documents,
         load_source_documents,
         parse_runtime_options,
@@ -40,6 +41,7 @@ except ImportError:
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         format_documents,
         load_source_documents,
         parse_runtime_options,
@@ -153,7 +155,7 @@ def main() -> None:
     else:
         documents = MULTI_QUERY_DOCUMENTS
     question = DEFAULT_QUESTION if options.use_web_source else QUESTION
-    embeddings = build_embeddings(use_live=options.use_live)
+    embeddings = build_embeddings(mode=options.embedding_mode)
     vector_store = build_vector_store(documents, embeddings=embeddings)
     retriever = build_retriever(vector_store, k=2)
 
@@ -181,8 +183,14 @@ def main() -> None:
         "Part 5 - Multi Query",
         {
             "official_tutorial": OFFICIAL_MULTI_QUERY_URL,
-            "runtime_mode": "live GLM" if options.use_live else "offline fixed query variants",
-            "glm_config": zhipu_runtime_config() if options.use_live else None,
+            "embedding": embedding_runtime_config(options.embedding_mode),
+            "query_generation_mode": "online chat model" if options.use_live else "offline fixed query variants",
+            "answer_generation_mode": "online chat model" if options.use_live else "offline extractive",
+            "glm_config": (
+                zhipu_runtime_config()
+                if options.use_live or options.embedding_mode == "glm"
+                else None
+            ),
             "question": question,
             "generated_queries": queries,
             "single_query_documents": compact_documents(single_query_documents),

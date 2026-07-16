@@ -10,11 +10,11 @@ try:
         build_embeddings,
         build_vector_store,
         count_tokens,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
         split_documents_token_aware,
-        zhipu_runtime_config,
     )
 except ImportError:
     from _common import (
@@ -24,11 +24,11 @@ except ImportError:
         build_embeddings,
         build_vector_store,
         count_tokens,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
         split_documents_token_aware,
-        zhipu_runtime_config,
     )
 
 
@@ -73,7 +73,7 @@ def main() -> None:
         else [LOCAL_LONG_DOCUMENT]
     )
     question = DEFAULT_QUESTION if options.use_web_source else CHUNK_QUESTION
-    embeddings = build_embeddings(use_live=options.use_live)
+    embeddings = build_embeddings(mode=options.embedding_mode)
 
     experiments: list[dict[str, object]] = []
     for config in CHUNK_CONFIGS:
@@ -95,8 +95,7 @@ def main() -> None:
         "Part 2 - Chunking Parameter Comparison",
         {
             "official_basis": OFFICIAL_TUTORIAL_URL,
-            "runtime_mode": "live GLM embedding-3" if options.use_live else "offline stable hash",
-            "glm_config": zhipu_runtime_config() if options.use_live else None,
+            "embedding": embedding_runtime_config(options.embedding_mode),
             "question": question,
             "experiments": experiments,
             "completion_rule": "比较 chunk 数、top-k 命中内容、噪声与 token 成本，不只看一个参数。",

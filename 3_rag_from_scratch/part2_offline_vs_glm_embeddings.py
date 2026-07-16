@@ -1,4 +1,4 @@
-"""Part 2 补充：比较离线词项 embedding 与 GLM embedding-3。"""
+"""Part 2 补充：比较哈希基线、本地 MiniLM 与可选 GLM embedding。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ try:
         Document,
         build_embeddings,
         build_vector_store,
+        embedding_runtime_config,
         parse_runtime_options,
         print_json,
         zhipu_runtime_config,
@@ -18,6 +19,7 @@ except ImportError:
         Document,
         build_embeddings,
         build_vector_store,
+        embedding_runtime_config,
         parse_runtime_options,
         print_json,
         zhipu_runtime_config,
@@ -61,25 +63,43 @@ def _evaluate(embeddings) -> dict[str, object]:
 
 
 def main() -> None:
-    options = parse_runtime_options("RAG Part 2 补充：离线与 GLM embedding 对比")
-    offline_result = _evaluate(build_embeddings(use_live=False))
-    if options.use_live:
-        glm_result: dict[str, object] = _evaluate(build_embeddings(use_live=True))
+    options = parse_runtime_options("RAG Part 2 补充：本地与远程 embedding 对比")
+    stable_hash_result = _evaluate(build_embeddings(mode="hash"))
+    local_result = _evaluate(build_embeddings(mode="local"))
+    if options.embedding_mode == "glm":
+        glm_result: dict[str, object] = _evaluate(build_embeddings(mode="glm"))
     else:
         glm_result = {
             "status": "skipped",
-            "how_to_run": "配置 ZHIPU_API_KEY 后加 --live；token 还需有 embedding-3 权限。",
+            "how_to_run": (
+                "需要远程对比时配置 ZHIPU_API_KEY，并加 --embedding glm；"
+                "token 还需有 embedding-3 权限。"
+            ),
         }
 
     print_json(
-        "Part 2 - Offline vs GLM Embeddings",
+        "Part 2 - Local MiniLM vs Hash / Optional GLM",
         {
             "official_basis": OFFICIAL_TUTORIAL_URL,
             "question": QUESTION,
-            "offline_stable_hash": offline_result,
+            "stable_hash_baseline": {
+                "embedding": embedding_runtime_config("hash"),
+                "result": stable_hash_result,
+            },
+            "local_multilingual_minilm": {
+                "embedding": embedding_runtime_config("local"),
+                "result": local_result,
+            },
             "glm_embedding_3": glm_result,
-            "glm_config": zhipu_runtime_config() if options.use_live else None,
-            "reading": "离线哈希只能利用词项重合；GLM embedding 应该能识别不同表达下的语义相似。",
+            "glm_config": (
+                zhipu_runtime_config()
+                if options.embedding_mode == "glm"
+                else None
+            ),
+            "reading": (
+                "哈希基线主要依赖词项重合；本地 MiniLM 与 GLM 都属于语义模型，"
+                "应更容易识别不同表达下的相近含义。"
+            ),
         },
     )
 

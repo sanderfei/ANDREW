@@ -11,6 +11,7 @@ try:  # 支持 `python 3_rag_from_scratch/part3_retrieval.py` 直接运行。
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
@@ -25,6 +26,7 @@ except ImportError:  # pragma: no cover - 仅 direct-script 入口会走到这�
         build_retriever,
         build_vector_store,
         compact_documents,
+        embedding_runtime_config,
         load_source_documents,
         parse_runtime_options,
         print_json,
@@ -43,7 +45,7 @@ def main() -> None:
         chunk_size=300,
         chunk_overlap=50,
     )
-    embeddings = build_embeddings(use_live=options.use_live)
+    embeddings = build_embeddings(mode=options.embedding_mode)
     vector_store = build_vector_store(chunks, embeddings=embeddings)
 
     # 旧教程的 get_relevant_documents(...) 已改为当前 Runnable API：invoke(...)。
@@ -56,6 +58,7 @@ def main() -> None:
         {
             "official_tutorial": OFFICIAL_TUTORIAL_URL,
             "current_api_docs": CURRENT_KNOWLEDGE_BASE_DOCS_URL,
+            "embedding": embedding_runtime_config(options.embedding_mode),
             "retriever_contract": "retriever.invoke(question) -> list[Document]",
             "search_type": "similarity",
             "k": 1,

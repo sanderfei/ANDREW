@@ -12,6 +12,7 @@ try:
         build_embeddings,
         build_rag_prompt,
         build_vector_store,
+        embedding_runtime_config,
         format_documents,
         load_source_documents,
         parse_runtime_options,
@@ -29,6 +30,7 @@ except ImportError:
         build_embeddings,
         build_rag_prompt,
         build_vector_store,
+        embedding_runtime_config,
         format_documents,
         load_source_documents,
         parse_runtime_options,
@@ -135,18 +137,23 @@ def main() -> None:
         question = QUESTION
 
     chunks = split_documents(source_documents, chunk_size=500, chunk_overlap=80)
-    embeddings = build_embeddings(use_live=options.use_live)
+    embeddings = build_embeddings(mode=options.embedding_mode)
     vector_store = build_vector_store(chunks, embeddings=embeddings)
 
     print_json(
         "Part 4 - Answer With Citations",
         {
             "official_basis": OFFICIAL_TUTORIAL_URL,
-            "runtime_mode": "live GLM" if options.use_live else "offline extractive",
-            "glm_config": zhipu_runtime_config() if options.use_live else None,
+            "embedding": embedding_runtime_config(options.embedding_mode),
+            "generation_mode": "online chat model" if options.use_live else "offline extractive",
+            "glm_config": (
+                zhipu_runtime_config()
+                if options.use_live or options.embedding_mode == "glm"
+                else None
+            ),
             "min_score_for_demo": MIN_SCORE,
             "threshold_warning": (
-                "阈值只对当前 embedding 和数据集有意义；切换到 GLM embedding-3 后，"
+                "阈值只对当前 embedding 和数据集有意义；切换模型后，"
                 "必须使用评测集重新标定。"
             ),
             "known_answer": ask_with_citations(
