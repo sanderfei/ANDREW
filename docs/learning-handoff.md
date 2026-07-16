@@ -109,6 +109,8 @@ context + question -> Prompt -> Model -> str
 
 ## 新电脑继续学习时的启动提示
 
+首次在新电脑运行时，先完成 [新电脑环境搭建](setup-new-machine.md)，验证离线 Part 1 后再使用下面的启动提示。
+
 克隆或更新仓库后，在 Codex 新会话中发送：
 
 ```text
@@ -129,5 +131,5 @@ context + question -> Prompt -> Model -> str
 ## 跨机器边界
 
 - GitHub 同步：代码、`AGENTS.md`、本交接文档。
-- 每台机器单独配置：`.env`、Python 虚拟环境、本地模型缓存、Codex 插件和账号授权。
+- 每台机器单独配置：`.env`、Python 虚拟环境、本地模型缓存、Codex 插件和账号授权；具体步骤见 [新电脑环境搭建](setup-new-machine.md)。
 - 不同步到 Git：`~/.codex/sessions/`、`~/.codex/memories/`、`auth.json`、原始聊天记录。
