@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 1 | [part1_overview.py](part1_overview.py) | Part 1：`Document -> indexing -> retrieval -> generation` |
 | 2 | [part2_indexing.py](part2_indexing.py) | Part 2：token、`embed_query`、`embed_documents`、余弦相似度、切块与入库 |
-| 3 | [part2_chunking_parameter_comparison.py](part2_chunking_parameter_comparison.py) | Part 2 求职扩展：三组 token-aware chunk 参数对比 |
+| 3 | [part2_chunking_parameter_comparison.py](part2_chunking_parameter_comparison.py) | Part 2 求职扩展：五组 token-aware chunk 参数对比 |
 | 4 | [part2_offline_vs_glm_embeddings.py](part2_offline_vs_glm_embeddings.py) | Part 2：哈希词项基线 vs 本地 MiniLM，可选对比 `embedding-3` |
 | 5 | [part3_retrieval.py](part3_retrieval.py) | Part 3：`retriever.invoke(...)` 与 `batch(...)` |
 | 6 | [part3_retrieval_k_score_mmr_no_answer.py](part3_retrieval_k_score_mmr_no_answer.py) | Part 3 求职扩展：`k` / score / MMR / 无答案问题 |

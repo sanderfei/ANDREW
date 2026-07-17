@@ -403,7 +403,9 @@ def embedding_runtime_config(mode: str) -> dict[str, object]:
                 "LOCAL_EMBEDDING_MODEL",
                 DEFAULT_LOCAL_EMBEDDING_MODEL,
             ),
+            # 每段文本最终都会转换成一个包含 384 个浮点数的向量
             "dimension": LocalMiniLMEmbeddings.dimension,
+            # FastEmbed 模型缓存根目录
             "cache_dir": str(
                 Path(
                     env(
@@ -590,6 +592,8 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     return sum(a * b for a, b in zip(left, right)) / (left_norm * right_norm)
 
 
+# 分词器 tokenizer 是模型文字世界和数字世界之间的“编码器/翻译器”，负责把文本切成 token，再转换成模型能计算的数字 ID。
+# cl100k_base：一套固定的“文字如何切分、每个片段对应哪个数字”的规则
 def count_tokens(text: str, encoding_name: str = "cl100k_base") -> int:
     """保留原教程的 token 计数知识点；tiktoken 未安装时给出可操作的提示。"""
 

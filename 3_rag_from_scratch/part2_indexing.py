@@ -44,12 +44,15 @@ def main() -> None:
 
     # 手动调用时：embed_query 给问题，embed_documents 给待写入的文档列表。
     embeddings = build_embeddings(mode=options.embedding_mode)
-    question_vector = embeddings.embed_query(QUESTION)
+    question_vector = embeddings.embed_query(QUESTION)# 一个 384 维向量
+    # embed_documents([document])  =>  list[list[float]] 多个文档对应多个向量
+    # 取第一个文档对应的 384 维向量
     document_vector = embeddings.embed_documents([DOCUMENT])[0]
 
     # 原教程的 indexing 主线：加载文档 -> 切块 -> 写入 vector store。
     source_documents = load_source_documents(options.use_web_source)
     chunks = split_documents(source_documents, chunk_size=300, chunk_overlap=50)
+    # 将每个 chunk 转成 384 维向量
     vector_store = build_vector_store(chunks, embeddings=embeddings)
     matched_documents = vector_store.similarity_search(RETRIEVAL_CHECK_QUESTION, k=2)
 
@@ -61,7 +64,7 @@ def main() -> None:
             "source_mode": "web" if options.use_web_source else "local fixture",
             "embedding": embedding_runtime_config(options.embedding_mode),
             "token_example": {
-                "text": QUESTION,
+                "text": QUESTION,# 这句话按照 cl100k_base 被切成 8 个 token
                 "encoding": "cl100k_base",
                 "token_count": count_tokens(QUESTION),
             },
