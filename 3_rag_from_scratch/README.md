@@ -12,10 +12,10 @@
 | 2 | [part2_indexing.py](part2_indexing.py) | Part 2：token、`embed_query`、`embed_documents`、余弦相似度、切块与入库 |
 | 3 | [part2_chunking_parameter_comparison.py](part2_chunking_parameter_comparison.py) | Part 2 求职扩展：五组 token-aware chunk 参数对比 |
 | 4 | [part2_offline_vs_glm_embeddings.py](part2_offline_vs_glm_embeddings.py) | Part 2：哈希词项基线 vs 本地 MiniLM，可选对比 `embedding-3` |
-| 5 | [part3_retrieval.py](part3_retrieval.py) | Part 3：`retriever.invoke(...)` 与 `batch(...)` |
-| 6 | [part3_retrieval_k_score_mmr_no_answer.py](part3_retrieval_k_score_mmr_no_answer.py) | Part 3 求职扩展：`k` / score / MMR / 无答案问题 |
-| 7 | [part4_generation.py](part4_generation.py) | Part 4：`prompt | model | StrOutputParser` 与固定两步 RAG |
-| 8 | [part4_answer_with_citations.py](part4_answer_with_citations.py) | Part 4 求职扩展：`answer + answerable + citations + retrieval` |
+| 5 | [part3_1_retrieval.py](part3_1_retrieval.py) | Part 3-1：`retriever.invoke(...)` 与 `batch(...)` |
+| 6 | [part3_2_retrieval_k_score_mmr_no_answer.py](part3_2_retrieval_k_score_mmr_no_answer.py) | Part 3-2 求职扩展：`k` / score / MMR / 无答案问题 |
+| 7 | [part4_1_generation.py](part4_1_generation.py) | Part 4-1：`prompt | model | StrOutputParser` 与固定两步 RAG |
+| 8 | [part4_2_answer_with_citations.py](part4_2_answer_with_citations.py) | Part 4-2 求职扩展：`answer + answerable + citations + retrieval` |
 | 9 | [part5_multi_query.py](part5_multi_query.py) | Part 5：生成多个查询，分别检索并保序去重；`--live` 可用在线模型改写 |
 | 10 | [part15_reciprocal_rank_fusion_reranking.py](part15_reciprocal_rank_fusion_reranking.py) | Part 15：对多个排名执行 Reciprocal Rank Fusion |
 
@@ -62,10 +62,10 @@ ZHIPU_EMBEDDING_MODEL=embedding-3
 .venv/bin/python 3_rag_from_scratch/part2_indexing.py
 .venv/bin/python 3_rag_from_scratch/part2_chunking_parameter_comparison.py
 .venv/bin/python 3_rag_from_scratch/part2_offline_vs_glm_embeddings.py
-.venv/bin/python 3_rag_from_scratch/part3_retrieval.py
-.venv/bin/python 3_rag_from_scratch/part3_retrieval_k_score_mmr_no_answer.py
-.venv/bin/python 3_rag_from_scratch/part4_generation.py
-.venv/bin/python 3_rag_from_scratch/part4_answer_with_citations.py
+.venv/bin/python 3_rag_from_scratch/part3_1_retrieval.py
+.venv/bin/python 3_rag_from_scratch/part3_2_retrieval_k_score_mmr_no_answer.py
+.venv/bin/python 3_rag_from_scratch/part4_1_generation.py
+.venv/bin/python 3_rag_from_scratch/part4_2_answer_with_citations.py
 .venv/bin/python 3_rag_from_scratch/part5_multi_query.py
 .venv/bin/python 3_rag_from_scratch/part15_reciprocal_rank_fusion_reranking.py
 ```
@@ -86,7 +86,7 @@ Part 1 / 4 / 5 不加 `--live` 时，回答生成器仍是明确标注的离线�
 cp .env.example .env
 
 .venv/bin/python 3_rag_from_scratch/part1_overview.py --live
-.venv/bin/python 3_rag_from_scratch/part4_answer_with_citations.py --live
+.venv/bin/python 3_rag_from_scratch/part4_2_answer_with_citations.py --live
 .venv/bin/python 3_rag_from_scratch/part5_multi_query.py --live
 .venv/bin/python 3_rag_from_scratch/part15_reciprocal_rank_fusion_reranking.py --live
 ```

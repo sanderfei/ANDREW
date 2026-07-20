@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-try:  # 支持 `python 3_rag_from_scratch/part3_retrieval.py` 直接运行。
+try:  # 支持 `python 3_rag_from_scratch/part3_1_retrieval.py` 直接运行。
     from ._common import (
         CURRENT_KNOWLEDGE_BASE_DOCS_URL,
         DEFAULT_QUESTION,
@@ -70,6 +70,11 @@ def main() -> None:
                     "question": question,
                     "documents": compact_documents(documents),
                 }
+                # 配对加“元组解包”的写法，zip() 会按相同下标配对：然后格式化batch_example输出json
+                # [
+                #     ("问题1", [doc1, doc2]),
+                #     ("问题2", [doc3, doc4]),
+                # ]
                 for question, documents in zip(
                     [DEFAULT_QUESTION, SECOND_QUESTION], batch_documents
                 )

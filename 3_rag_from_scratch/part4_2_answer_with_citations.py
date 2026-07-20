@@ -80,6 +80,11 @@ def _citation(document: Document, score: float) -> dict[str, object]:
     }
 
 
+# candidates（Top-3 全部候选）
+#     ├─ retrieval：全部保留，标记 accepted=true/false
+#     └─ accepted：只保留通过阈值的文档
+#            ├─ 生成模型的 context
+#            └─ citations
 def ask_with_citations(
     vector_store,
     question: str,
@@ -88,11 +93,15 @@ def ask_with_citations(
     min_score: float = MIN_SCORE,
 ) -> dict[str, object]:
     candidates = vector_store.similarity_search_with_score(question, k=3)
+
+    # 只保留通过阈值的文档
     accepted = [
         (document, float(score))
         for document, score in candidates
         if float(score) >= min_score
     ]
+
+    # retrieval：全部保留，标记 accepted=true/false
     retrieval = [
         {
             **_citation(document, float(score)),
@@ -100,6 +109,7 @@ def ask_with_citations(
         }
         for document, score in candidates
     ]
+
     if not accepted:
         return {
             "question": question,

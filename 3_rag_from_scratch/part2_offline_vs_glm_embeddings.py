@@ -57,6 +57,7 @@ def _evaluate(embeddings) -> dict[str, object]:
                 "score": round(float(score), 6),
                 "content": document.page_content,
             }
+            # enumerate 给列表中的每个元素加一个序号：
             for rank, (document, score) in enumerate(matches, start=1)
         ],
     }

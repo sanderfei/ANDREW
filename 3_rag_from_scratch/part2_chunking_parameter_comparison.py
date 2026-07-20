@@ -34,6 +34,9 @@ except ImportError:
 
 CHUNK_QUESTION = "chunk overlap 为什么能减少切块边界的信息丢失？"
 # 两组同尺寸对照用来隔离 overlap 的影响，最后一组观察大 chunk 的噪声。
+# 综合完整性与成本：80/10 最均衡。
+# 优先保留完整因果链：140/30 更好，但上下文更贵。
+# 260/60 的 Top-1 分数最高，但 Top-2 上下文最大，不能因此判定它最好。
 CHUNK_CONFIGS = (
     {"chunk_size": 80, "chunk_overlap": 0},
     {"chunk_size": 80, "chunk_overlap": 10},
@@ -88,6 +91,8 @@ def main() -> None:
 
     experiments: list[dict[str, object]] = []
     for config in CHUNK_CONFIGS:
+        # 函数定义中的单个 * 让后续参数只能按名称传递；调用处的 **config
+        # 则把字典展开成 chunk_size=...、chunk_overlap=... 两个关键字参数。
         chunks = split_documents_token_aware(documents, **config)
         token_counts = [count_tokens(chunk.page_content) for chunk in chunks]
         vector_store = build_vector_store(chunks, embeddings=embeddings)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-try:  # 支持 `python 3_rag_from_scratch/part4_generation.py` 直接运行。
+try:  # 支持 `python 3_rag_from_scratch/part4_1_generation.py` 直接运行。
     from ._common import (
         CURRENT_RETRIEVAL_DOCS_URL,
         DEFAULT_QUESTION,

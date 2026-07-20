@@ -68,6 +68,7 @@ def _scored(vector_store, question: str, k: int) -> list[dict[str, object]]:
             "rank": rank,
             "source": document.metadata["source"],
             "score": round(float(score), 6),
+            # 不是 Embedding 模型或 Retriever 给出的判断，只是本地代码做了一次数字比较。
             "accepted": float(score) >= MIN_SCORE,
             "content": document.page_content,
         }
@@ -76,20 +77,34 @@ def _scored(vector_store, question: str, k: int) -> list[dict[str, object]]:
         )
     ]
 
-
+# similarity 只关心“文档与问题有多相似”；
+# MMR 平衡相关性和多样性，同时关心“与问题相关”和“返回结果之间不要太重复”。
+# 当 k=1 时，MMR 和 Similarity 通常没有明显区别，因为只返回一个文档，还不存在“多个结果互相重复”的问题。
+# MMR 这组结果反而暴露了一个重要风险——多样性权重过高时，会把明显无关的 Docker 文档选进来
+# k 增大
+#   → 找到互补证据的机会增加
+#   → 同时也会带入更多间接相关内容
+#   → 后续 Prompt token 增加
+# 更合理的实际策略通常是：
+#   → 先用相关性阈值排除明显无关候选
+#   → 再在剩余候选中使用 MMR 去重
 def main() -> None:
     options = parse_runtime_options("RAG Part 3 补充：k / score / MMR / no-answer")
     embeddings = build_embeddings(mode=options.embedding_mode)
     vector_store = build_vector_store(DOCUMENTS, embeddings=embeddings)
 
     k_comparison = {str(k): _scored(vector_store, QUESTION, k) for k in (1, 2, 4)}
+    # search_type="similarity"
     similarity_retriever = build_retriever(vector_store, k=3)
+    # 先按相似度找出 6 个候选文档
+    # 使用 MMR 平衡相关性和多样性
+    # 最终返回 3 个文档
     mmr_retriever = build_retriever(
         vector_store,
         k=3,
         search_type="mmr",
         fetch_k=6,
-        lambda_mult=0.5,
+        lambda_mult=0.5,# 越接近 1 越重视相关性，越接近 0 越重视多样性
     )
     no_answer_candidates = _scored(vector_store, NO_ANSWER_QUESTION, 3)
 
