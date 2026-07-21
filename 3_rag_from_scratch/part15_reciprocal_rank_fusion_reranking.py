@@ -47,11 +47,12 @@ except ImportError:
         document_key,
     )
 
-
+# 累加同一文档在不同排名中的 RRF 分数：一种把多组检索排名合并成一组统一排名的算法
+# Σ 1 / (k + rank) 多条查询都把某篇文档排在前面，说明它得到多路检索结果的共同支持，因此融合后的排名应该更高。
 def reciprocal_rank_fusion(
     ranked_document_lists: list[list[Document]],
     *,
-    k: int = 60,
+    k: int = 60,  # k=60 是 RRF 公式中的平滑常数
 ) -> list[tuple[Document, float]]:
     """官方 Part 15 核心公式：同一文档在多个排名中的得分累加。"""
 
@@ -67,7 +68,7 @@ def reciprocal_rank_fusion(
         for key, score in sorted(scores.items(), key=lambda item: item[1], reverse=True)
     ]
 
-
+# RRF（Reciprocal Rank Fusion，倒数排名融合）算法
 def main() -> None:
     options = parse_runtime_options("RAG From Scratch Part 15：RRF Re-ranking")
     if options.use_web_source:
@@ -85,6 +86,13 @@ def main() -> None:
     retriever = build_retriever(vector_store, k=2)
 
     queries = build_query_variants(question, use_live=options.use_live)[:4]
+    # batch 返回的数据格式
+    # ranked_lists = [
+    #   [query1_top1, query1_top2],
+    #   [query2_top1, query2_top2],
+    #   [query3_top1, query3_top2],
+    #   [query4_top1, query4_top2],
+    # ]
     ranked_lists = retriever.batch(queries)
     fused = reciprocal_rank_fusion(ranked_lists, k=60)
 

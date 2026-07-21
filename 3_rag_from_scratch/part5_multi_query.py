@@ -51,36 +51,36 @@ except ImportError:
     )
 
 
-QUESTION = "What is task decomposition for LLM agents?"
+QUESTION = "对于 LLM Agent，什么是任务分解？"
 MULTI_QUERY_PROMPT = ChatPromptTemplate.from_template(
-    """You are an assistant that improves vector retrieval.
-Generate five different search queries for the user question below.
-Keep the original intent, use different wording or perspectives, and output one query per line.
-Do not add explanations or numbering.
+    """你是一名负责提升向量检索效果的助手。
+请针对下面的用户问题生成五种不同的检索查询。
+保持原始意图不变，使用不同的措辞或视角，每行只输出一个查询。
+不要添加解释或编号。
 
-Question: {question}
+问题：{question}
 """
 )
 
 MULTI_QUERY_DOCUMENTS = [
     Document(
-        page_content="Task decomposition breaks a complex task into smaller manageable steps before execution.",
+        page_content="任务分解是在执行前把复杂任务拆分成更小、更易管理的步骤。",
         metadata={"source": "task-decomposition.md", "topic": "decomposition"},
     ),
     Document(
-        page_content="An LLM agent can plan subtasks first, then select a tool for each planned subtask.",
+        page_content="LLM Agent 可以先规划子任务，再为每个已规划的子任务选择合适的工具。",
         metadata={"source": "agent-planning.md", "topic": "planning"},
     ),
     Document(
-        page_content="Breaking a large objective into a sequence of small goals makes autonomous work easier to monitor.",
+        page_content="把一个大型目标拆成一系列小目标，可以让自主工作过程更容易监控。",
         metadata={"source": "agent-goals.md", "topic": "goals"},
     ),
     Document(
-        page_content="Retrieval augmented generation injects external documents into the model context before answering.",
+        page_content="检索增强生成（RAG）会在回答前，把外部文档注入模型的上下文。",
         metadata={"source": "rag-overview.md", "topic": "rag"},
     ),
     Document(
-        page_content="Docker packages an application and its dependencies into a reproducible container image.",
+        page_content="Docker 会把应用程序及其依赖打包成可复现的容器镜像。",
         metadata={"source": "deployment.md", "topic": "deployment"},
     ),
 ]
@@ -109,10 +109,10 @@ def parse_query_lines(text: str, original_question: str) -> list[str]:
 def build_query_variants(question: str, *, use_live: bool) -> list[str]:
     if not use_live:
         offline_variants = """
-How do LLM agents plan subtasks before acting?
-How can an autonomous agent break a large objective into smaller goals?
-What planning strategy divides complex agent work into manageable steps?
-Why should an agent decompose work before selecting tools?
+LLM Agent 在行动前如何规划子任务？
+自主 Agent 如何把一个大型目标拆分成更小的目标？
+哪种规划策略会把复杂的 Agent 工作拆分成易于管理的步骤？
+为什么 Agent 应该在选择工具前先分解任务？
 """
         return parse_query_lines(offline_variants, question)
 
@@ -144,6 +144,17 @@ def unique_union(document_lists: list[list[Document]]) -> list[Document]:
     return unique
 
 
+# question: str
+#   ↓ build_query_variants()第一次调用 Chat Model 生成多个查询表达
+# queries: list[str]
+#   ↓ retriever.map()每个查询分别执行向量相似度搜索
+# per_query_documents: list[list[Document]]
+#   ↓ unique_union()合并并去重 Document
+# merged_documents: list[Document]
+#   ↓ format_documents()
+# context: str 第二次调用 Chat Model
+#   ↓ Prompt → Model → StrOutputParser
+# answer: str
 def main() -> None:
     options = parse_runtime_options("RAG From Scratch Part 5：Multi Query")
     if options.use_web_source:
@@ -159,14 +170,29 @@ def main() -> None:
     vector_store = build_vector_store(documents, embeddings=embeddings)
     retriever = build_retriever(vector_store, k=2)
 
+    # RunnableLambda(...)：把普通 Python 函数包装成 LangChain 的 Runnable。
+    # 包装后可以使用 .invoke()、.batch()、.map() 以及 | 管道组合；即使普通
+    # Python 函数返回固定字符串，invoke() 也会返回该字符串。
+    # invoke(question) 会把 question 传给 lambda 的 value 参数。
     query_generator = RunnableLambda(
         lambda value: build_query_variants(str(value), use_live=options.use_live)
     )
     queries = query_generator.invoke(question)
     # 保留官方 retriever.map() 的数据流，但复用已生成的 queries，
     # 避免 live 模式为了打印查询而额外调用一次 GLM。
+    # question
+    #   ↓ 顺序执行
+    # RunnableLambda(lambda _: queries)
+    #   ↓ 返回 queries: list[str]
+    # retriever.map()
+    #   ├─ query 1 → retriever.invoke(query 1) ┐
+    #   ├─ query 2 → retriever.invoke(query 2) ├─ 默认线程池并发
+    #   ├─ query 3 → retriever.invoke(query 3) │
+    #   └─ query 4 → retriever.invoke(query 4) ┘
+    #   ↓ 等全部查询完成
+    # list[list[Document]] 最后仍按 query 1、query 2 的输入顺序返回。
     per_query_documents = (
-        RunnableLambda(lambda _: queries) | retriever.map()
+        RunnableLambda(lambda _: queries) | retriever.map()  # 外层顺序，内层并发
     ).invoke(question)
     merged_documents = unique_union(per_query_documents)
     single_query_documents = retriever.invoke(question)

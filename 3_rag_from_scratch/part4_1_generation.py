@@ -57,6 +57,7 @@ def main() -> None:
     retriever = build_retriever(vector_store, k=2)
 
     # 先显式展示 Part 3 返回的 list[Document] 如何变为 prompt 的 {context} 文本。
+    # 先手动检索，再调用模型；manual_chain 只包含 Prompt → Model → Parser。
     retrieved_documents = retriever.invoke(DEFAULT_QUESTION)
     prompt = build_rag_prompt()
     manual_chain = prompt | build_chat_model(use_live=options.use_live) | StrOutputParser()
@@ -67,6 +68,7 @@ def main() -> None:
         }
     )
 
+    # rag_answer：Retriever 检索被封装进 Chain。
     # 再复用公共函数组成真正的固定两步 RAG：问题一定先经过 retriever。
     rag_answer = build_rag_chain(retriever, use_live=options.use_live).invoke(
         DEFAULT_QUESTION
