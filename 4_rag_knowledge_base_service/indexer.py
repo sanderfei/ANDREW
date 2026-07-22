@@ -18,12 +18,12 @@ from embeddings import build_embeddings, embedding_identity
 from loaders import LoadedSource, load_sources
 
 
-class IndexConflictError(RuntimeError):
-    """配置指纹变化时，要求调用方明确确认 reset。"""
-
-
 class IndexingError(RuntimeError):
     pass
+
+
+class IndexConflictError(IndexingError):
+    """配置指纹变化时，要求调用方明确确认 reset。"""
 
 
 @dataclass(frozen=True)
@@ -112,6 +112,18 @@ class IncrementalIndexer:
         if not isinstance(payload.get("sources"), dict):
             raise IndexingError("manifest 的 sources 格式无效。")
         return payload
+
+    def manifest_matches_config(self, manifest: dict[str, Any] | None = None) -> bool:
+        active_manifest = manifest if manifest is not None else self.read_manifest()
+        sources = active_manifest.get("sources", {})
+        return not sources or active_manifest.get("index_fingerprint") == self.index_fingerprint
+
+    def ensure_compatible_manifest(self) -> None:
+        if not self.manifest_matches_config():
+            raise IndexConflictError(
+                "当前持久化索引由另一组 chunk/embedding 配置生成；"
+                "请先执行 reindex --reset。"
+            )
 
     def _write_manifest(self, payload: dict[str, Any]) -> None:
         self.settings.runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -263,6 +275,11 @@ class IncrementalIndexer:
         )
 
     def search(self, query: str, *, top_k: int):
-        """当前 Chroma API 会返回 `(Document, relevance_score)`。"""
+        """将 Chroma 的 cosine distance 转成 0..1 relevance score。"""
 
-        return self._store().similarity_search_with_relevance_scores(query, k=top_k)
+        self.ensure_compatible_manifest()
+        matches = self._store().similarity_search_with_score(query, k=top_k)
+        return [
+            (document, max(0.0, min(1.0, 1.0 - float(distance))))
+            for document, distance in matches
+        ]

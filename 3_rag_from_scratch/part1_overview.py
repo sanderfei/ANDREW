@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
-try:  # 支持 `python 3_rag_from_scratch/part1_overview.py` 直接运行。
+# 支持两种启动方式：
+#
+# 1. 包模块方式：
+#    `.venv/bin/python -m 3_rag_from_scratch.part1_overview`
+#    `-m` 表示按“包名.模块名”查找并运行；Python 知道当前模块属于
+#    `3_rag_from_scratch` 包，因此 `._common` 中的 `.` 能表示“当前包”。
+#
+# 2. 直接脚本方式：
+#    `.venv/bin/python 3_rag_from_scratch/part1_overview.py`
+#    此时文件通常没有父包上下文，`from ._common` 会触发 ImportError；
+#    except 再通过 `from _common` 从脚本所在目录加载同一个 `_common.py`。
+#
+# 两段代码导入的名称相同，只是模块查找方式不同；任意一次成功后，后面的
+# Part 1 逻辑都可以使用同一组函数和常量。
+try:
     from ._common import (
         CURRENT_RETRIEVAL_DOCS_URL,
         DEFAULT_QUESTION,

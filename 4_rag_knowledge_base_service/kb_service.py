@@ -16,7 +16,12 @@ from contracts import (
     RetrievalMatch,
     RetrievalTrace,
 )
-from embeddings import build_chat_model, grounding_tokens, technical_tokens
+from embeddings import (
+    build_chat_model,
+    embedding_display_name,
+    grounding_tokens,
+    technical_tokens,
+)
 from indexer import IncrementalIndexer, IndexStats
 
 
@@ -76,11 +81,15 @@ class KnowledgeBaseService:
             manifest = self.indexer.read_manifest()
             sources = manifest["sources"]
             chunk_count = sum(entry.get("chunk_count", 0) for entry in sources.values())
+            index_config_matches = self.indexer.manifest_matches_config(manifest)
             return HealthResponse(
                 status="ok",
                 mode=self.settings.mode,
+                embedding_mode=self.settings.embedding_mode,
+                embedding_model=embedding_display_name(self.settings),
                 collection=self.settings.collection_name,
-                index_ready=bool(sources),
+                index_ready=bool(sources) and index_config_matches,
+                index_config_matches=index_config_matches,
                 source_document_count=len(sources),
                 indexed_chunk_count=chunk_count,
                 index_fingerprint=(
@@ -116,6 +125,7 @@ class KnowledgeBaseService:
                     citations=[],
                     retrieval=self._empty_retrieval(top_k),
                     mode=self.settings.mode,
+                    embedding_mode=self.settings.embedding_mode,
                 )
 
             query_tokens = grounding_tokens(question)
@@ -129,8 +139,8 @@ class KnowledgeBaseService:
                 lexical_overlap = len(query_tokens.intersection(document_tokens)) / max(
                     1, len(query_tokens)
                 )
-                # 哈希 embedding 负责召回，精确 lexical overlap 则压制中文常见字和
-                # 哈希冲突造成的伪相关；生产 embedding 也保留该可解释的安全 gate。
+                # MiniLM/Hash 负责召回；可解释的 lexical gate 继续压制中文常见字、
+                # Hash 冲突或语义相近但实际不可回答的伪相关。
                 relevance_score = 0.25 * vector_score + 0.75 * lexical_overlap
                 technical_match = bool(
                     query_technical_tokens.intersection(document_technical_tokens)
@@ -199,6 +209,7 @@ class KnowledgeBaseService:
                     citations=[],
                     retrieval=retrieval,
                     mode=self.settings.mode,
+                    embedding_mode=self.settings.embedding_mode,
                 )
 
             citations = [
@@ -255,4 +266,5 @@ class KnowledgeBaseService:
                 citations=citations,
                 retrieval=retrieval,
                 mode=self.settings.mode,
+                embedding_mode=self.settings.embedding_mode,
             )

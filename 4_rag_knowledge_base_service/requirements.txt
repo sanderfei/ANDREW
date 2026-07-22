@@ -8,3 +8,6 @@ langchain-chroma>=0.2,<2.0
 chromadb>=1.0,<2.0
 pypdf>=5.0,<7.0
 python-dotenv>=1.0,<2.0
+
+# 默认本地 embedding，与 3_rag_from_scratch 保持一致。
+fastembed>=0.8,<0.9

@@ -42,12 +42,16 @@ def main() -> int:
             encoding="utf-8",
         )
         settings = Settings.from_env(
-            mode="offline", source_dir=source_dir, runtime_dir=root / "runtime"
+            mode="offline",
+            embedding_mode="hash",
+            source_dir=source_dir,
+            runtime_dir=root / "runtime",
         )
         with TestClient(create_app(settings)) as client:
             initial_health = client.get("/health", headers={"X-Request-ID": "smoke-0"})
             assert initial_health.status_code == 200
             assert initial_health.json()["index_ready"] is False
+            assert initial_health.json()["embedding_mode"] == "hash"
             assert initial_health.headers["X-Request-ID"] == "smoke-0"
 
             indexed = client.post("/v1/reindex", json={})

@@ -254,7 +254,7 @@ Codex 登录、插件和外部服务授权不会随 Git 仓库同步，需要在
 
 Superpowers 主要提供 Skills，通常不需要外部账号。Hugging Face 插件包含外部 App，首次使用时可能要求登录；它和本地 MiniLM 的 Python 下载是两套独立功能，跑 RAG demo 不依赖该插件，也不要把 Hugging Face Token 写入项目 `.env`。
 
-新建 Codex 会话后，使用 [学习交接](learning-handoff.md) 中的启动提示继续 Part 2。
+新建 Codex 会话后，使用 [学习交接](learning-handoff.md) 中的启动提示，从文档记录的当前阶段继续。
 
 ## 10. 常见问题
 

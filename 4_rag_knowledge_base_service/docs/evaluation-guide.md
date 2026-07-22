@@ -1,6 +1,8 @@
 # 评测指南
 
-`evaluate.py` 默认在临时目录复制 `data/source`，因此不会污染你的本地 Chroma 数据。它先完整索引，再跑 18 条黄金样本，最后修改和删除一份文档验证增量更新。
+`evaluate.py` 默认在临时目录复制 `data/source`，因此不会污染你的本地 Chroma 数据。它先完整索引，再跑 20 条黄金样本，最后修改和删除一份文档验证增量更新。
+
+学习时运行 `--embedding local`，验证本机 MiniLM 的真实召回；CI 运行 `--embedding hash`，保证无需下载模型也能做确定性契约回归。两种报告不能直接比较绝对 vector score。
 
 ## 当前指标
 
@@ -15,7 +17,9 @@
 报告保存为 JSON：
 
 ```bash
-.venv/bin/python evaluate.py --output /tmp/rag-evaluation.json
+.venv/bin/python 4_rag_knowledge_base_service/evaluate.py \
+  --embedding local \
+  --output /tmp/rag-evaluation.json
 ```
 
 定位顺序应是：先看 `retrieval.matches` 是否召回正确 chunk；再看 `accepted` 与阈值；最后才看 live 模型的生成文本。这样可以区分检索失败、错误引用、拒答错误和生成不忠实。

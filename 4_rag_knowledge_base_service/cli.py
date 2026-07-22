@@ -23,7 +23,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mode",
         choices=("offline", "live"),
-        help="覆盖 RAG_MODE；默认读取环境变量（offline）。",
+        help="回答模式：offline=检索摘录，live=在线 Qwen；默认读取 RAG_MODE。",
+    )
+    parser.add_argument(
+        "--embedding",
+        choices=("local", "hash", "glm"),
+        help="向量模式：默认 local MiniLM；hash 用于教学/CI；glm 调远程 embedding-3。",
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
@@ -46,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    settings = Settings.from_env(mode=args.mode)
+    settings = Settings.from_env(mode=args.mode, embedding_mode=args.embedding)
     service = KnowledgeBaseService(settings)
 
     if args.command == "reindex":

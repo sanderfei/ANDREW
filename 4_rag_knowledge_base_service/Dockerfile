@@ -2,7 +2,8 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    RAG_MODE=offline
+    RAG_MODE=offline \
+    RAG_EMBEDDING_MODE=hash
 
 WORKDIR /app
 

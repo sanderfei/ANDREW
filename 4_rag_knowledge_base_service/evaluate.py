@@ -91,7 +91,9 @@ def _run_update_regression(service: KnowledgeBaseService, source_dir: Path) -> d
     update_stats = service.reindex()
     update_answer = service.ask(
         question="release_channel 当前是什么？",
-        top_k=3,
+        # Hash 基线可能因槽位碰撞把新增片段排到第 4；这里验证的是“更新后的
+        # chunk 已可检索”，用 5 覆盖当前全部来源，避免把召回质量混入增量测试。
+        top_k=5,
         request_id=uuid4().hex,
     )
 
@@ -114,7 +116,7 @@ def _run_update_regression(service: KnowledgeBaseService, source_dir: Path) -> d
     }
 
 
-def run(output: Path) -> int:
+def run(output: Path, *, embedding_mode: str = "local") -> int:
     cases = _load_cases(PROJECT_DIR / "data" / "eval" / "golden_cases.json")
     with tempfile.TemporaryDirectory(prefix="rag-kb-eval-") as temporary:
         temporary_root = Path(temporary)
@@ -122,6 +124,7 @@ def run(output: Path) -> int:
         shutil.copytree(PROJECT_DIR / "data" / "source", source_dir)
         settings = Settings.from_env(
             mode="offline",
+            embedding_mode=embedding_mode,
             source_dir=source_dir,
             runtime_dir=temporary_root / "runtime",
         )
@@ -137,6 +140,7 @@ def run(output: Path) -> int:
     )
     report = {
         "status": "passed" if not failures else "failed",
+        "embedding_mode": embedding_mode,
         "total": len(results),
         "passed": sum(bool(result["passed"]) for result in results),
         "failed": len(failures),
@@ -170,8 +174,14 @@ def main(argv: list[str] | None = None) -> int:
         default=PROJECT_DIR / "reports" / "evaluation.json",
         help="评测报告 JSON 输出位置。",
     )
+    parser.add_argument(
+        "--embedding",
+        choices=("local", "hash"),
+        default="local",
+        help="默认验证本机 MiniLM；CI 可用 hash 做无需模型下载的确定性回归。",
+    )
     args = parser.parse_args(argv)
-    return run(args.output)
+    return run(args.output, embedding_mode=args.embedding)
 
 
 if __name__ == "__main__":

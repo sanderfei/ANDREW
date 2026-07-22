@@ -340,7 +340,46 @@ dict[str, object]
 
 `object` 是 Python 几乎所有类型的共同基类。这里使用它，是因为同一个字典中可能同时放 `int`、`float`、`str`、`list` 等不同类型。
 
-### 3.2 `tuple[str, bytes]` 不是字典
+### 3.2 `Any` 和 `object` 都能接收任意值，但约束不同
+
+```python
+from typing import Any
+
+anything: Any = "hello"
+unknown: object = "hello"
+```
+
+这两个变量在运行时都只是保存原来的字符串对象，区别主要发生在编辑器和静态类型检查器中：
+
+| 类型 | 能否接收任意类型的值 | 读取后能做什么 |
+| --- | --- | --- |
+| `object` | 可以 | 只能直接使用所有对象共有的基本能力；使用字符串等专属方法前要先缩小类型 |
+| `Any` | 可以 | 类型检查器基本放弃检查，允许访问任意属性、调用任意方法、赋给其他类型 |
+
+例如：
+
+```python
+def handle_unknown(value: object) -> None:
+    # value.upper()  # 类型检查器会报错：object 不保证有 upper()
+    if isinstance(value, str):
+        print(value.upper())  # 已确认是 str，可以调用
+
+
+def handle_any(value: Any) -> None:
+    value.upper()             # 类型检查器通常放行
+    value.method_not_exist()  # 即使方法不存在，类型检查器也通常放行
+```
+
+所以 `Any` 不是“所有类型的共同父类”，而是 `typing` 提供的“跳过类型检查”标记；`object` 才是实际存在的内置基类：
+
+```python
+isinstance("hello", object)  # True
+# isinstance("hello", Any)  # 错误：Any 不能这样用于运行时类型判断
+```
+
+选择原则：确实不知道类型、但仍希望类型检查器保护后续操作时使用 `object`；只有在接入动态库、无类型数据或暂时无法准确标注时才使用 `Any`。
+
+### 3.3 `tuple[str, bytes]` 不是字典
 
 项目代码：
 
@@ -379,7 +418,7 @@ tuple[str, bytes]       # 固定两个位置，并分别指定类型
 tuple[Document, ...]    # 任意多个 Document
 ```
 
-### 3.3 `Embeddings | None = None` 要分成两段
+### 3.4 `Embeddings | None = None` 要分成两段
 
 项目代码：
 
@@ -417,7 +456,7 @@ text: str | None = None
 
 表示 `text` 可以是字符串，也可以为空值 `None`，并且默认是 `None`。
 
-### 3.4 `Literal[...]` 是固定值类型
+### 3.5 `Literal[...]` 是固定值类型
 
 项目中见过：
 
@@ -440,7 +479,7 @@ from typing import Literal
 
 编辑器和类型检查器可以据此发现拼写错误，但 Python 通常不会因为标注了 `Literal` 就自动做运行时校验。
 
-### 3.5 类型标注不会自动创建对象
+### 3.6 类型标注不会自动创建对象
 
 ```python
 documents: list[Document]
@@ -1158,7 +1197,53 @@ if part.strip()          # 只保留清理后非空的字符串
 分隔符.join(字符串序列)
 ```
 
-### 5.6 `splitlines()`、`casefold()` 和 `re.sub()` 清理模型输出
+### 5.6 `partition()` 按第一次出现的位置固定切成三部分
+
+```python
+text.partition(separator)
+```
+
+它从左向右寻找分隔符第一次出现的位置，并且始终返回一个包含三个字符串的元组：
+
+```python
+(分隔符前面的内容, 分隔符本身, 分隔符后面的内容)
+```
+
+例如：
+
+```python
+"name=wangfei=admin".partition("=")
+# ("name", "=", "wangfei=admin")
+```
+
+如果没有找到分隔符，返回：
+
+```python
+"name".partition("=")
+# ("name", "", "")
+```
+
+RAG 课件使用它提取标签中间的 context：
+
+```python
+context = message_text.partition("<context>")[2].partition("</context>")[0].strip()
+```
+
+分步写法：
+
+```python
+after_opening = message_text.partition("<context>")[2]
+before_closing = after_opening.partition("</context>")[0]
+context = before_closing.strip()
+```
+
+- 第一个 `[2]` 取得 `<context>` 后面的内容。
+- 第二个 `[0]` 取得 `</context>` 前面的内容。
+- `strip()` 删除最终结果首尾的空白。
+
+与 `split(separator, 1)` 相比，`partition()` 会保留分隔符，并且无论是否找到都固定返回三个元素；`split()` 不保留分隔符，返回列表且长度可能不同。`rpartition()` 的规则相同，但从右侧最后一次出现的位置切分。分隔符不能为空字符串，否则会抛出 `ValueError`。
+
+### 5.7 `splitlines()`、`casefold()` 和 `re.sub()` 清理模型输出
 
 Part 5 会把模型生成的多行查询清理并去重：
 
@@ -1769,6 +1854,68 @@ checkpointer = deps["InMemorySaver"]() if use_memory else None
 
 表示启用内存时创建对象，否则使用 `None`。
 
+RAG 课件中的多行写法：
+
+```python
+active_embeddings = (
+    embeddings
+    if embeddings is not None
+    else build_embeddings(mode=embedding_mode)
+)
+```
+
+仍然是同一个条件表达式，可以从中间的条件开始读：
+
+```text
+如果 embeddings 不是 None
+    就把已有的 embeddings 赋给 active_embeddings
+否则
+    调用 build_embeddings(...)，把它返回的 Embeddings 对象赋给 active_embeddings
+```
+
+它等价于：
+
+```python
+if embeddings is not None:
+    active_embeddings = embeddings
+else:
+    active_embeddings = build_embeddings(mode=embedding_mode)
+```
+
+这里的圆括号只用于把一个长表达式分成多行，不是函数调用，也不是元组。Python 创建元组的关键是逗号，例如 `(embeddings,)`；这里只有括号而没有逗号，所以整个表达式只产生一个值。它也不是匿名函数：匿名函数必须出现 `lambda`，例如 `lambda value: value`。
+
+更一般地，只要一个表达式还位于 `()`、`[]` 或 `{}` 内，Python 就允许在合适的位置直接换行，这叫隐式续行，不需要在行尾添加 `\`：
+
+```python
+queries_documents = (
+    RunnableLambda(
+        lambda _: queries
+    ) | retriever.map()
+).invoke(question)
+```
+
+这里的换行和缩进只影响可读性，不改变表达式的执行结果。它等价于：
+
+```python
+queries_documents = (
+    RunnableLambda(lambda _: queries) | retriever.map()
+).invoke(question)
+```
+
+最外层的 `(...)` 包住完整的 `RunnableLambda(...) | retriever.map()` 表达式，所以最后的 `.invoke(question)` 调用的是整条组合后的 Chain。
+
+`RunnableLambda(...)` 这次只有一个位置参数 `lambda _: queries`，所以不需要用逗号分隔参数。多行函数调用可以选择添加尾逗号：
+
+```python
+RunnableLambda(
+    lambda _: queries,
+)
+```
+
+在函数调用中，这个尾逗号不会把参数变成元组，仍然只传入一个 `lambda` 对象；而脱离函数调用后，`(value,)` 才表示单元素元组。
+
+条件表达式只执行被选中的分支：已有 `embeddings` 时不会调用 `build_embeddings(...)`。两条分支最终都应得到一个实现了 LangChain `Embeddings` 接口的对象，例如 `LocalMiniLMEmbeddings` 或 `StableHashEmbeddings`。
+
 ### 9.2 `isinstance()` 判断对象的运行时类型
 
 ```python
@@ -2144,7 +2291,100 @@ from langchain_openai import ChatOpenAI as ModelClass
 
 `as` 可以在当前文件中使用别名。
 
-### 11.3 函数内部导入是延迟导入
+### 11.3 `from ._common` 与 `from _common` 兼容两种启动方式
+
+RAG Part 1 使用了：
+
+```python
+try:
+    from ._common import build_rag_chain, build_retriever
+except ImportError:  # pragma: no cover
+    from _common import build_rag_chain, build_retriever
+```
+
+两段导入的对象名称相同，但查找模块的方式不同：
+
+```python
+from ._common import ...
+```
+
+开头的 `.` 表示“当前包”，也就是从 `3_rag_from_scratch/_common.py` 做相对导入。它适合模块模式：
+
+```bash
+.venv/bin/python -m 3_rag_from_scratch.part1_overview
+```
+
+这里的 `-m` 是 `module` 的缩写，表示“按照模块名查找，然后把该模块作为主程序执行”。这条命令可以拆成：
+
+```text
+.venv/bin/python                         使用项目虚拟环境中的 Python
+-m                                       按模块名运行
+3_rag_from_scratch                       包名
+part1_overview                           包内模块名
+3_rag_from_scratch.part1_overview        完整模块名
+```
+
+包和模块对应当前文件结构：
+
+```text
+3_rag_from_scratch/           包（包含 __init__.py）
+├── __init__.py
+├── _common.py                3_rag_from_scratch._common 模块
+└── part1_overview.py         3_rag_from_scratch.part1_overview 模块
+```
+
+使用 `-m` 时写的是点分模块名，不是文件路径，所以没有 `/` 和 `.py`：
+
+```bash
+# 模块名
+python -m 3_rag_from_scratch.part1_overview
+
+# 文件路径
+python 3_rag_from_scratch/part1_overview.py
+```
+
+两种方式都会把被执行文件中的 `__name__` 设置为 `"__main__"`，因此都会进入：
+
+```python
+if __name__ == "__main__":
+    main()
+```
+
+关键区别是包上下文：`-m` 运行时 Python 知道当前模块属于 `3_rag_from_scratch`，`__package__` 有包名，所以 `from ._common` 能找到当前包中的 `_common`；直接按文件路径运行时通常没有这个父包上下文。
+
+另一个常见例子是：
+
+```bash
+.venv/bin/python -m pip install package_name
+```
+
+意思是使用当前这个 `.venv/bin/python` 去运行它环境里的 `pip` 模块，可以避免误用系统中另一套 `pip`。
+
+```python
+from _common import ...
+```
+
+没有开头的点，是按顶层模块名查找。直接运行文件时，脚本所在目录会进入 Python 的模块搜索路径，因此它能找到同目录的 `_common.py`：
+
+```bash
+.venv/bin/python 3_rag_from_scratch/part1_overview.py
+```
+
+直接运行单文件时，`part1_overview.py` 没有已知的父包，第一段相对导入会出现类似 `attempted relative import with no known parent package` 的 `ImportError`，随后执行 `except` 中的同目录导入。
+
+之所以把名称完整写两遍，是为了保证无论走哪条导入路径，后续代码都获得完全相同的局部名称：
+
+```text
+模块模式 ─→ from ._common ─┐
+                            ├─→ build_rag_chain、build_retriever ...
+脚本模式 ─→ from _common  ─┘
+```
+
+这不是把模块成功导入两次：第一段成功后不会进入 `except`；第一段失败时才执行第二段。`# pragma: no cover` 是覆盖率工具的提示，不影响 Python 的执行逻辑。
+
+这种写法是学习脚本为了同时支持两种入口所做的兼容处理。正式包通常统一要求使用 `python -m ...` 或安装后的命令入口，从而只保留包内相对导入；此外，宽泛捕获 `ImportError` 也可能把 `_common.py` 内部依赖缺失误认为入口问题，排错时要查看最初异常。
+
+### 11.4 函数内部导入是延迟导入
 
 ```python
 def load_dependencies():
@@ -2158,7 +2398,7 @@ def load_dependencies():
 - 导入失败时给出更清楚的错误。
 - 避免仅仅导入当前文件就立刻加载所有重依赖。
 
-### 11.4 `deps["Document"]` 是从字典取类
+### 11.5 `deps["Document"]` 是从字典取类
 
 ```python
 Document = deps["Document"]

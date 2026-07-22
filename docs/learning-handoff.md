@@ -2,12 +2,12 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-07-20
+> 最后更新：2026-07-22
 
 ## 当前学习主线
 
-- 目录：`3_rag_from_scratch/`
-- 当前阶段：Part 2、Part 3 与 Part 4 已完成；Part 4 在线回答、拒答和 citation 闭环已验证，下一步进入 Part 5 Multi Query。
+- 目录：`4_rag_knowledge_base_service/`
+- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完；目录 4 的本地适配代码和运行环境已准备并验证，下一步从第 5 周“摄取与持久化”开始逐文件学习。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
@@ -22,6 +22,8 @@
 | Retriever | 默认 `search_type="similarity"`、`k=2` |
 | 在线生成模型 | `ep-qwen2.5-72b` |
 | `--live` 的作用 | 只切换在线回答/查询改写，不改变默认本地 Embedding |
+
+目录 4 延续同一原则：`RAG_EMBEDDING_MODE=local` 默认使用上述本地 MiniLM，`RAG_MODE=live` 只切换最终回答生成；Hash 仅用于教学/CI，GLM embedding 必须显式选择。
 
 敏感配置只保存在两台电脑各自的根目录 `.env` 中；`.env` 已被 Git 忽略。本文和 Git 提交中不得出现任何 API Key 或 Token。
 
@@ -165,6 +167,12 @@ list[float]
 - `RAG_TEMPLATE` 明确要求只依据 context 回答，这会降低越界生成；当前代码没有生成后忠实性验证，因此 Prompt 约束不是程序层面的绝对保证。
 - 本地 citation 示例中的 `citations.md`、`grounding.md`、`answerability.md` 是手写 metadata 标签，不是仓库中的真实文件；生产实现还需要真实 URI、document/chunk ID、页码与版本信息。
 
+## 目录 3 完成状态
+
+- 用户已确认 `3_rag_from_scratch` 的后续 Multi Query 与 Reciprocal Rank Fusion / reranking 学习也已完成，目录 3 不再作为下一步。
+- 目录 4 不反向修改目录 3 的课件，而是把已掌握的 indexing、retrieval、answerability、generation 和 citation 契约工程化为持久化知识库服务。
+- 目录 4 的建议顺序是：`loaders.py` → `embeddings.py` → `indexer.py` → `contracts.py` → `kb_service.py` → `app.py` / `cli.py` → `evaluate.py` / `scripts/smoke.py`。
+
 ## 已验证命令
 
 在仓库根目录运行：
@@ -199,19 +207,33 @@ list[float]
 
 # Part 4-2：本地 MiniLM 检索 + 在线 ep-qwen2.5-72b 生成
 .venv/bin/python 3_rag_from_scratch/part4_2_answer_with_citations.py --live
+
+# 目录 4：用本地 MiniLM 完整重建持久化 Chroma 索引
+.venv/bin/python 4_rag_knowledge_base_service/cli.py reindex --reset
+
+# 目录 4：健康检查与离线问答
+.venv/bin/python 4_rag_knowledge_base_service/cli.py health
+.venv/bin/python 4_rag_knowledge_base_service/cli.py ask "本机默认 embedding 使用什么模型，向量维度是多少？"
+
+# 目录 4：本机 MiniLM 黄金集与无需模型下载的 Hash 回归
+.venv/bin/python 4_rag_knowledge_base_service/evaluate.py --embedding local
+.venv/bin/python 4_rag_knowledge_base_service/evaluate.py --embedding hash
+
+# 目录 4：FastAPI 端到端冒烟
+.venv/bin/python 4_rag_knowledge_base_service/scripts/smoke.py
 ```
 
-已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。
+已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答；MiniLM 与 Hash 两套 20 条黄金集均为 20/20，FastAPI smoke 通过，在线 Qwen 回答仍保持 `embedding_mode=local`。
 
 ## 下一步
 
-进入 `3_rag_from_scratch/part5_multi_query.py`，按以下顺序学习：
+进入 `4_rag_knowledge_base_service` 第 5 周“摄取与持久化”，按以下顺序学习：
 
-1. 先运行默认离线模式，区分“生成多个查询”和“每个查询分别执行检索”两层。
-2. 追踪多个查询如何分别进入 Retriever，以及结果如何按首次出现顺序去重。
-3. 再运行 `--live`，观察在线模型改写查询只影响 query generation，不改变默认本地 Embedding。
-4. 对比单查询与 Multi Query 的召回覆盖、重复 chunk 和查询/检索成本，避免只看返回数量。
-5. Part 5 完成后进入 `part15_reciprocal_rank_fusion_reranking.py`，学习如何按排名融合多路检索结果。
+1. 先运行 `cli.py reindex --reset`，对照输出理解 source、Document、chunk、chunk ID、向量和 manifest 的数量关系。
+2. 阅读 `loaders.py`，追踪 Markdown/PDF 如何产生 `Document`，以及 `source`、`source_type`、`page`、`source_sha256` metadata 从哪里来。
+3. 阅读 `embeddings.py`，对比 local MiniLM、Hash 与 GLM 三种 backend，明确 `RAG_MODE` 不控制 embedding。
+4. 阅读 `indexer.py`，追踪 `load_sources -> split_documents -> add_documents -> manifest`，再实际修改一份临时学习文档观察 added / updated / unchanged / removed。
+5. 完成摄取与增量索引后，再进入 `contracts.py` 与 `kb_service.py` 学习 API 问答服务，不提前跳到 Agent/LangGraph。
 
 ## 新电脑继续学习时的启动提示
 
@@ -221,8 +243,8 @@ list[float]
 
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
-不要重复 Part 1 至 Part 4 已完成内容，从“下一步”开始分析
-3_rag_from_scratch/part5_multi_query.py，仍然结合真实代码用中文讲解。
+不要重复 3_rag_from_scratch 已完成内容，从“下一步”开始分析
+4_rag_knowledge_base_service/loaders.py，仍然结合真实代码用中文讲解。
 先分析，不要修改代码。
 ```
 

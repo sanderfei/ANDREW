@@ -50,6 +50,7 @@ class AskResponse(BaseModel):
     citations: list[Citation]
     retrieval: RetrievalTrace
     mode: str
+    embedding_mode: str
 
 
 class ReindexRequest(BaseModel):
@@ -76,8 +77,11 @@ class ReindexResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     mode: str
+    embedding_mode: str
+    embedding_model: str
     collection: str
     index_ready: bool
+    index_config_matches: bool
     source_document_count: int
     indexed_chunk_count: int
     index_fingerprint: str | None = None

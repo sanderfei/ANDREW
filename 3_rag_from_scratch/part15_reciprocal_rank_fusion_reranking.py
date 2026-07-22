@@ -48,7 +48,7 @@ except ImportError:
     )
 
 # 累加同一文档在不同排名中的 RRF 分数：一种把多组检索排名合并成一组统一排名的算法
-# Σ 1 / (k + rank) 多条查询都把某篇文档排在前面，说明它得到多路检索结果的共同支持，因此融合后的排名应该更高。
+# Σ 1 / (k + rank) 读：Sigma 。多条查询都把某篇文档排在前面，说明它得到多路检索结果的共同支持，因此融合后的排名应该更高。
 def reciprocal_rank_fusion(
     ranked_document_lists: list[list[Document]],
     *,
@@ -88,7 +88,7 @@ def main() -> None:
     queries = build_query_variants(question, use_live=options.use_live)[:4]
     # batch 返回的数据格式
     # ranked_lists = [
-    #   [query1_top1, query1_top2],
+    #   [query1_top1, query1_top2], [Documents]
     #   [query2_top1, query2_top2],
     #   [query3_top1, query3_top2],
     #   [query4_top1, query4_top2],

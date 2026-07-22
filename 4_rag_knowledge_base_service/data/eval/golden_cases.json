@@ -120,6 +120,22 @@
     "expected_terms": ["可选"]
   },
   {
+    "id": "local-minilm",
+    "category": "local-runtime",
+    "question": "本机默认 embedding 使用什么模型，向量维度是多少？",
+    "expected_answerable": true,
+    "expected_sources": ["local_runtime.md"],
+    "expected_terms": ["MiniLM-L12-v2"]
+  },
+  {
+    "id": "live-only-generation",
+    "category": "local-runtime",
+    "question": "RAG_MODE=live 会不会把本地 embedding 也切换成远程模型？",
+    "expected_answerable": true,
+    "expected_sources": ["local_runtime.md"],
+    "expected_terms": ["ep-qwen2.5-72b"]
+  },
+  {
     "id": "no-weather",
     "category": "no-answer",
     "question": "今天上海的实时天气是什么？",

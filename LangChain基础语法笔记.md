@@ -177,11 +177,72 @@ message.tool_calls  # 模型提出的工具调用请求
 AIMessage(content="...") → str
 ```
 
+放在 Chain 中时，类型流转是：
+
+```text
+Prompt
+  ↓
+Chat Model
+  ↓
+AIMessage(
+    content="最终回答",
+    response_metadata={...},
+    tool_calls=[...],
+)
+  ↓ StrOutputParser()
+"最终回答"
+  ↑ 对外类型契约为 str
+```
+
+因此下面两段代码作用相同：
+
+```python
+chain = prompt | model | StrOutputParser()
+answer = chain.invoke(payload)
+```
+
+```python
+prompt_value = prompt.invoke(payload)
+model_message = model.invoke(prompt_value)       # AIMessage
+answer = StrOutputParser().invoke(model_message) # str
+```
+
+当前本地 `langchain-core` 的内部过程可以简化为：
+
+```text
+AIMessage
+  → 包装成 ChatGeneration
+  → 读取第一个 Generation 的 .text
+  → StrOutputParser.parse(text)
+  → 原样返回 text
+```
+
+`StrOutputParser.parse()` 本身近似于：
+
+```python
+def parse(self, text: str) -> str:
+    return text
+```
+
+如果左边已经返回 `str`，它也会直接得到相同字符串。因此目录 3 的在线 `ChatOpenAI` 返回 `AIMessage` 时，它负责提取文本；离线 `RunnableLambda(_offline_answer)` 已经返回 `str` 时，它相当于统一输出接口。最终调用方不必区分两种模型，得到的都是 `answer: str`。
+
+精确到当前本地 `langchain-core 1.4.8` 的运行时实现，从 `AIMessage` 提取出的值可能是 `TextAccessor`，它是 `str` 的子类，所以 `isinstance(answer, str)` 仍为 `True`，可以按普通字符串使用；从普通 `str` 输入时则原样返回该字符串。
+
+它不会完成以下工作：
+
+- 不调用模型，也不生成答案。
+- 不检查答案是否正确或忠于 context。
+- 不验证 JSON、Pydantic schema 或 citation。
+- 不保留 `response_metadata`、token usage 等完整 `AIMessage` 信息。
+- 不执行 `tool_calls`；如果模型主要返回工具调用而文本为空，解析结果也可能是空字符串。
+
 它不保证字符串一定是合法 JSON。JSON 链还需要：
 
 ```python
 chain = prompt | model | StrOutputParser() | json.loads
 ```
+
+如果后续需要工具调用或完整模型元数据，就不要立刻接 `StrOutputParser()`，而应先保留和检查原始 `AIMessage`。
 
 ## 5. 控制 Runnable 输入的四种核心语法
 
@@ -303,6 +364,18 @@ per_query_documents = (
     | retriever.map()
 ).invoke(question)
 ```
+
+把 `RunnableLambda` 的参数换行书写也完全等价：
+
+```python
+queries_documents = (
+    RunnableLambda(
+        lambda _: queries
+    ) | retriever.map()
+).invoke(question)
+```
+
+这仍然是同一条 Chain：`RunnableLambda(...)` 先输出 `queries`，再由 `retriever.map()` 对列表中的每个 query 执行检索，最后 `.invoke(question)` 启动整条 Chain。`queries_documents` 作为变量名可以运行，但返回值表示“每个 query 各自对应的一组 Documents”，所以 `per_query_documents` 更能体现其 `list[list[Document]]` 的嵌套结构。改名时，后续所有引用也必须同步修改。
 
 逐步展开：
 

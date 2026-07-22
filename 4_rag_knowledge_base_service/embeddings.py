@@ -1,12 +1,14 @@
-"""离线可复现 embedding 与可选的真实 OpenAI embedding。"""
+"""本地 MiniLM、教学 Hash 与可选 GLM embedding/聊天模型。"""
 
 from __future__ import annotations
 
 import hashlib
 import math
+import os
 import re
+import warnings
 from collections import Counter
-from typing import Iterable
+from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
@@ -99,24 +101,98 @@ class StableHashEmbeddings(Embeddings):
         return self._embed(text)
 
 
+class LocalMiniLMEmbeddings(Embeddings):
+    """复用目录 3 已验证的 FastEmbed + ONNX Runtime 本地模型。"""
+
+    dimension = 384
+
+    def __init__(self, settings: Settings) -> None:
+        self.model_id = settings.local_embedding_model
+        self.cache_dir = settings.local_embedding_cache
+        self.model_path = settings.local_embedding_path
+        self._model: Any | None = None
+
+    def _load_model(self):
+        if self._model is not None:
+            return self._model
+
+        try:
+            from fastembed import TextEmbedding
+        except ImportError as exc:
+            raise RuntimeError(
+                "本地 embedding 需要 fastembed。请先安装本目录 requirements.txt。"
+            ) from exc
+
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=(
+                    r"The model sentence-transformers/"
+                    r"paraphrase-multilingual-MiniLM-L12-v2 now uses mean pooling.*"
+                ),
+                category=UserWarning,
+            )
+            model_kwargs: dict[str, Any] = {}
+            # setup-new-machine.md 会为 ModelScope 的 AVX2 量化模型创建这个软链接。
+            # 传入具体目录后 FastEmbed 不访问 Hugging Face，直接加载本地 ONNX。
+            if (self.model_path / "model_optimized.onnx").is_file():
+                model_kwargs["specific_model_path"] = str(self.model_path)
+            self._model = TextEmbedding(
+                model_name=self.model_id,
+                cache_dir=str(self.cache_dir),
+                threads=min(4, os.cpu_count() or 1),
+                **model_kwargs,
+            )
+        return self._model
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        vectors = self._load_model().passage_embed(texts)
+        return [[float(value) for value in vector] for vector in vectors]
+
+    def embed_query(self, text: str) -> list[float]:
+        vector = next(iter(self._load_model().query_embed(text)))
+        return [float(value) for value in vector]
+
+
 def embedding_identity(settings: Settings) -> str:
-    if not settings.is_live:
+    if settings.embedding_mode == "local":
+        local_variant = (
+            "specific-model-path"
+            if (settings.local_embedding_path / "model_optimized.onnx").is_file()
+            else "fastembed-managed-cache"
+        )
+        return f"fastembed:{settings.local_embedding_model}:{local_variant}"
+    if settings.embedding_mode == "hash":
         return StableHashEmbeddings.model_id
-    return f"openai:{settings.embedding_model}"
+    return f"openai-compatible:{settings.zhipu_base_url}:{settings.embedding_model}"
+
+
+def embedding_display_name(settings: Settings) -> str:
+    if settings.embedding_mode == "local":
+        return settings.local_embedding_model
+    if settings.embedding_mode == "hash":
+        return StableHashEmbeddings.model_id
+    return settings.embedding_model
 
 
 def build_embeddings(settings: Settings) -> Embeddings:
-    if not settings.is_live:
+    if settings.embedding_mode == "local":
+        return LocalMiniLMEmbeddings(settings)
+    if settings.embedding_mode == "hash":
         return StableHashEmbeddings()
 
     from langchain_openai import OpenAIEmbeddings
 
     kwargs: dict[str, object] = {
         "model": settings.embedding_model,
-        "api_key": settings.openai_api_key,
+        "api_key": settings.zhipu_api_key,
+        "base_url": settings.zhipu_base_url,
+        # GLM 是 OpenAI-compatible provider，不使用 OpenAI tokenizer 预切输入。
+        "check_embedding_ctx_length": False,
+        "timeout": settings.timeout_seconds,
+        "max_retries": 2,
     }
-    if settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
     return OpenAIEmbeddings(**kwargs)
 
 
@@ -130,11 +206,10 @@ def build_chat_model(settings: Settings):
 
     kwargs: dict[str, object] = {
         "model": settings.chat_model,
-        "api_key": settings.openai_api_key,
-        "temperature": 0,
+        "api_key": settings.zhipu_api_key,
+        "base_url": settings.zhipu_base_url,
+        "temperature": 0.1,
         "timeout": settings.timeout_seconds,
-        "max_retries": 2,
+        "max_retries": 0,
     }
-    if settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
     return ChatOpenAI(**kwargs)
