@@ -8,9 +8,9 @@
 
 | 想复习的问题 | 对应章节 |
 | --- | --- |
-| `Iterable`、`Sequence`、`tuple`、`object`、`Literal` | 第 1、3 节 |
+| `Iterable`、`Sequence`、`tuple`、`object`、`Literal`、函数参数类型标注 | 第 1、3 节 |
 | `zip()`、`enumerate()`、变量拆包 | 第 2、8 节 |
-| 列表、字典、元组、集合、嵌套列表、索引、切片 | 第 4、5 节 |
+| 列表、字典、元组、`set`、`frozenset`、嵌套列表、索引、切片、`range()` 分批 | 第 4、5 节 |
 | `dict.get()`、`setdefault()`、`pop()`、`items()`、`sorted()` | 第 4 节 |
 | 列表推导式、生成器表达式、`extend()`、双层 `flatten` | 第 6 节 |
 | 默认参数、`*`、`*args`、`**kwargs`、`**config` | 第 7 节 |
@@ -109,9 +109,16 @@ Iterable[Document]（能逐个遍历出 Document）
 常见关系：
 
 ```text
-list、tuple     同时属于 Sequence 和 Iterable
+Iterable（只承诺能够逐项遍历）
+└── Sequence（进一步承诺按位置有序、可取长度、可按下标访问）
+    ├── list
+    ├── tuple
+    ├── str
+    └── range
+
 generator       通常只保证 Iterable，不保证索引和长度
 set             属于 Iterable，但不是 Sequence，因为不按位置索引
+dict            虽然保留插入顺序，但按 key 而不是按位置索引，所以不是 Sequence
 ```
 
 因此，参数标注为 `Iterable[Document]` 时，函数内部不能直接假定下面的操作一定可用：
@@ -128,6 +135,51 @@ list(documents)
 ```
 
 这一步会把列表、元组或生成器等可迭代对象统一转换成列表，再交给文本切分器处理。
+
+可以用操作能力快速记忆：
+
+```python
+# Iterable 只承诺这种操作
+for item in values:
+    ...
+
+# Sequence 还承诺这些操作
+len(values)
+values[0]
+values[1:3]
+```
+
+`Sequence` 也不代表一定可以修改。例如 `tuple` 和 `str` 都是 Sequence，但不能执行
+按位置赋值；`list` 则是可修改的 `MutableSequence`：
+
+```python
+text = "abc"
+text[0]          # "a"，可以读取
+# text[0] = "A"  # 报错，str 不可修改
+
+items = ["a", "b"]
+items[0] = "A"   # 可以，list 可修改
+```
+
+当前索引代码形成了一个直接对照：
+
+```python
+def _delete_ids(self, store, ids: Iterable[str]) -> int:
+    ids_list = list(ids)
+```
+
+`_delete_ids()` 对传入的 `ids` 只要求能够遍历，所以列表、元组、生成器都可以；进入
+函数后再统一转换为列表。
+
+```python
+def _batched(values: list[str] | list[Document], size: int = 100):
+    for start in range(0, len(values), size):
+        yield values[start : start + size]
+```
+
+`_batched()` 需要 `len(values)` 和列表切片，因此不能只根据 `Iterable` 的最低能力来
+编写。概念上，它要求的是“有长度并且支持按位置切片”的 Sequence 能力；当前代码把
+参数进一步限制成了具体的 `list`。
 
 ### 1.4 返回值 `-> list[Document]`
 
@@ -499,6 +551,223 @@ def build_model(model_class: type) -> object:
 ```
 
 它们用于阅读、编辑器提示和静态检查，不代表 Python 会自动初始化或转换对象。
+
+### 3.7 多个函数参数要分别读取各自的类型标注
+
+`4_rag_knowledge_base_service/indexer.py`：
+
+```python
+def _delete_ids(self, store, ids: Iterable[str]) -> int:
+    ids_list = list(ids)
+    for batch in self._batched(ids_list):
+        store.delete(ids=batch)
+    return len(ids_list)
+```
+
+函数参数之间使用逗号分隔，每个参数的类型标注只属于它自己：
+
+```text
+self                 第 1 个参数，没有显式类型标注
+store                第 2 个参数，没有显式类型标注
+ids: Iterable[str]   第 3 个参数，标注为 Iterable[str]
+-> int               函数返回值标注为 int
+```
+
+所以 `store` 和 `ids` 不是同一种类型，`ids` 后面的 `: Iterable[str]` 不会向左作用到
+`store`。下面这个简单例子也是同样的规则：
+
+```python
+def example(left, right: str) -> int:
+    ...
+```
+
+它只表示 `right` 应该是 `str`；`left` 没有类型标注。
+
+沿着项目真实调用位置看：
+
+```python
+store = self._store()
+deleted_chunks = self._delete_ids(store, delete_ids)
+```
+
+两者的实际形态是：
+
+| 参数 | 当前项目传入的对象 |
+| --- | --- |
+| `store` | `_store()` 创建或连接的 `langchain_chroma.Chroma` 对象 |
+| `ids` | `delete_ids`，当前是 `list[str]` |
+
+`Iterable[str]` 是能力约束，不是一种与 `Chroma` 相同的实际容器。它表示遍历 `ids`
+时，每次应当得到一个字符串：
+
+```python
+for chunk_id in ids:
+    print(chunk_id)  # chunk_id 应当是 str
+```
+
+因此列表、元组和生成器都可以满足这个参数约定：
+
+```python
+["id-1", "id-2"]                 # list[str]
+("id-1", "id-2")                 # tuple[str, str]
+(value for value in ["id-1"])    # 产生 str 的生成器
+```
+
+函数内部先统一转换：
+
+```python
+ids_list = list(ids)
+```
+
+得到 `list[str]`，随后 `_batched()` 每次产生一小批 ID，最终调用的是 Chroma 对象的：
+
+```python
+store.delete(ids=batch)
+```
+
+这里还要区分两个完全不同的 `ids`：
+
+```text
+_delete_ids(..., ids=某个可迭代对象)
+                   ↑ 函数参数名
+
+store.delete(ids=batch)
+             ↑ Chroma.delete() 的关键字参数名
+```
+
+它们名字相同是因为都表达“文档 ID”，但处在两个不同函数调用层级。
+
+### 3.8 参数可以不标注类型，但对象的运行时类型并没有隐藏
+
+纯 Python 函数允许省略所有参数和返回值的类型标注：
+
+```python
+def process(left, right):
+    return left + right
+```
+
+也允许只标注一部分：
+
+```python
+def process(left, right: str):
+    return str(left) + right
+```
+
+还可以全部标注：
+
+```python
+def process(left: str, right: str) -> str:
+    return left + right
+```
+
+这三种写法都是合法 Python。位置参数、关键字参数、`*args` 和 `**kwargs` 在语法层面
+也都可以不写类型标注。
+
+不过，“没有类型标注”不等于“对象没有类型”或“类型被隐藏”。Python 的变量名保存
+的是对象引用，真正传入的每个对象始终有自己的运行时类型：
+
+```python
+def show(value):
+    print(type(value))
+
+show(10)       # <class 'int'>
+show("hello")  # <class 'str'>
+show([])       # <class 'list'>
+```
+
+同一个参数名可以在不同调用中指向不同类型的对象：
+
+```text
+第一次调用：value -> int 对象
+第二次调用：value -> str 对象
+第三次调用：value -> list 对象
+```
+
+所以更准确的表述是：
+
+> 参数没有声明固定类型，但传入对象仍然具有具体运行时类型。
+
+#### Python 根据实际操作判断对象能不能用
+
+项目方法：
+
+```python
+def _delete_ids(self, store, ids: Iterable[str]) -> int:
+    ...
+    store.delete(ids=batch)
+```
+
+虽然 `store` 没有标注为 `Chroma`，但代码要求它在运行时至少提供可调用的
+`.delete(ids=...)` 方法。只要对象提供所需能力，这行代码就能继续执行，这种风格通常
+称为“鸭子类型”：
+
+```text
+不先检查它名义上属于哪个类
+    ↓
+直接使用当前逻辑需要的方法
+    ↓
+方法存在且调用兼容，就可以工作
+```
+
+如果错误地传入整数：
+
+```python
+self._delete_ids(123, ["id-1"])
+```
+
+函数调用时不会因为缺少类型标注而立即拦截，但运行到：
+
+```python
+store.delete(ids=batch)
+```
+
+就会抛出 `AttributeError`，因为 `int` 没有 `.delete()` 方法。
+
+如果 `ids` 传入不可迭代的整数：
+
+```python
+self._delete_ids(store, 123)
+```
+
+即使源代码标注了 `ids: Iterable[str]`，普通 Python 默认也不会在进入函数时自动校验；
+运行到 `list(ids)` 时才会因为整数不可迭代而抛出 `TypeError`。
+
+#### 无标注、`Any` 和明确标注的区别
+
+```python
+def first(store):            # 没写明预期类型
+    ...
+
+def second(store: Any):      # 明确告诉类型检查器跳过严格检查
+    ...
+
+def third(store: Chroma):    # 明确说明预期是 Chroma
+    ...
+```
+
+| 写法 | 代码表达的意思 | Python 是否自动运行时校验 |
+| --- | --- | --- |
+| `store` | 没有提供类型信息 | 否 |
+| `store: Any` | 明确放弃该值的大部分静态检查 | 否 |
+| `store: Chroma` | 预期传入 `Chroma`，便于阅读和静态检查 | 默认仍然不校验 |
+
+因此，类型标注主要改善编辑器补全、静态检查和代码可读性，而不是让 Python 参数
+获得一个强制的固定类型。
+
+#### 语法允许省略，不代表所有框架场景都适合省略
+
+普通内部辅助函数可以不写标注，但有些框架会主动读取标注，例如 FastAPI、Pydantic
+可能使用它们进行请求解析、数据校验或接口文档生成。在这类位置省略标注，可能改变
+框架行为。
+
+当前 `_delete_ids()` 是普通内部辅助方法，`store` 的实际对象来源又可以沿着：
+
+```python
+store = self._store()
+```
+
+推断为 Chroma，所以省略标注不会阻止代码运行，只是让编辑器和读代码的人少了一条
+直接的类型信息。
 
 ## 4. 列表、字典、元组、集合、索引和属性
 
@@ -1070,6 +1339,375 @@ values[:9]  # 不会报错，返回全部五项
 
 它不会修改原列表。切片语法相同，但具体切的是字符、字节还是列表元素，取决于被切片对象的类型。
 
+### 4.14 `range(start, stop, step)`、列表分片与分批生成器
+
+`4_rag_knowledge_base_service/indexer.py`：
+
+```python
+@staticmethod
+def _batched(values: list[str] | list[Document], size: int = 100):
+    for start in range(0, len(values), size):
+        yield values[start : start + size]
+```
+
+它的用途是把一个大列表按 `size` 个元素一批，逐批交给调用方。
+
+#### `range(...)` 返回什么类型
+
+```python
+numbers = range(0, 10, 2)
+
+print(type(numbers))
+# <class 'range'>
+```
+
+`range` 不是 Python 遍历关键字。下面这行代码应当拆成三部分：
+
+```python
+for start in range(0, 10, 2):
+    ...
+```
+
+```text
+for、in              Python 关键字，负责循环语法
+start                每轮接收元素的变量名
+range(0, 10, 2)      普通调用表达式，返回一个 range 对象
+```
+
+`for` 并不依赖 `range`，它可以遍历任何 Iterable：
+
+```python
+for value in ["a", "b"]:       # 遍历 list
+    ...
+
+for value in ("a", "b"):       # 遍历 tuple
+    ...
+
+for value in range(0, 10, 2):  # 遍历 range
+    ...
+```
+
+`range` 是内置类型名，因此技术上甚至可以被重新赋值覆盖；`for`、`in` 是关键字，
+不能被当成普通变量名。实际代码不要覆盖 `range`：
+
+```python
+range = "错误示例"
+# range(3)  # 此时会报错，因为 range 名称已经指向字符串
+```
+
+所以 `range(...)` 返回的是 Python 内置的 `range` 对象，不是 `list`，也不是生成器。
+它是一个不可修改的 Sequence，支持：
+
+```python
+len(numbers)   # 5
+numbers[0]     # 0
+numbers[2]     # 4
+numbers[1:4]   # range(2, 8, 2)，切片结果仍然是 range
+```
+
+它保存自己的生成规则：
+
+```python
+numbers.start  # 0
+numbers.stop   # 10
+numbers.step   # 2
+```
+
+并不会先创建：
+
+```python
+[0, 2, 4, 6, 8]
+```
+
+需要具体列表时才显式转换：
+
+```python
+list(numbers)
+# [0, 2, 4, 6, 8]
+```
+
+因此，即使范围非常大，`range` 对象本身也只需要记录起点、终点和步长，而不是保存
+全部整数：
+
+```python
+large_range = range(0, 1_000_000_000)
+```
+
+`for` 遍历时会从 `range` 对象取得迭代器，再逐个计算下一项：
+
+```python
+iterator = iter(numbers)
+
+print(type(iterator))
+# <class 'range_iterator'>
+```
+
+所以要区分：
+
+| 表达式 | 类型 |
+| --- | --- |
+| `range(0, 10, 2)` | `range`，不可修改的 Sequence |
+| `iter(range(0, 10, 2))` | `range_iterator`，迭代器 |
+| `list(range(0, 10, 2))` | `list[int]` |
+
+#### `range(0, len(values), size)` 的三个参数
+
+```python
+range(start, stop, step)
+```
+
+| 参数 | 当前值 | 含义 |
+| --- | --- | --- |
+| `start` | `0` | 第一个循环值，从 0 开始 |
+| `stop` | `len(values)` | 到这里停止，但不包含这个值 |
+| `step` | `size` | 每次给循环变量增加多少 |
+
+所以：
+
+```python
+for start in range(0, len(values), size):
+```
+
+确实可以近似理解为其他语言中的：
+
+```text
+for (start = 0; start < len(values); start += size)
+```
+
+例如列表有 250 项、`size=100`：
+
+```python
+list(range(0, 250, 100))
+# [0, 100, 200]
+```
+
+`start` 不会取到 300，因为它已经超过停止值 250；也不会取到 250，因为 `range()` 的
+`stop` 不包含在结果中。
+
+#### `values[start : start + size]` 是列表切片
+
+列表切片的完整形式是：
+
+```python
+values[开始索引 : 结束索引]
+```
+
+开始索引包含，结束索引不包含。假设：
+
+```python
+values = list(range(250))
+size = 100
+```
+
+每轮结果是：
+
+| `start` | 切片 | 实际索引 | 本批数量 |
+| ---: | --- | --- | ---: |
+| `0` | `values[0:100]` | 0～99 | 100 |
+| `100` | `values[100:200]` | 100～199 | 100 |
+| `200` | `values[200:300]` | 200～249 | 50 |
+
+最后一次的 `start + size` 是 300，超过列表长度 250，但列表切片不会报错，只会取得
+剩余元素。
+
+#### `yield` 每次产出一批并暂停
+
+```python
+yield values[start : start + size]
+```
+
+执行过程是：
+
+```text
+切出当前小列表
+    ↓
+yield 把小列表交给调用方
+    ↓
+_batched() 暂停
+    ↓
+调用方请求下一批
+    ↓
+恢复 for 循环，start 增加 size
+```
+
+用普通控制流程近似展开：
+
+```python
+start = 0
+
+while start < len(values):
+    batch = values[start : start + size]
+    yield batch
+    start += size
+```
+
+因为函数中出现了 `yield`，调用 `_batched()` 时得到的是生成器，不会立刻把所有批次
+都创建出来：
+
+```python
+batches = IncrementalIndexer._batched(["a", "b", "c", "d", "e"], size=2)
+
+print(type(batches))
+# <class 'generator'>
+```
+
+逐项遍历时，每一项才是一个一维列表：
+
+```python
+for batch in batches:
+    print(batch)
+
+# ["a", "b"]
+# ["c", "d"]
+# ["e"]
+```
+
+如果显式收集为列表：
+
+```python
+all_batches = list(
+    IncrementalIndexer._batched(["a", "b", "c", "d", "e"], size=2)
+)
+
+# [["a", "b"], ["c", "d"], ["e"]]
+```
+
+这时 `all_batches` 才是二维列表：
+
+```text
+外层 list：所有批次
+内层 list：每一个批次中的元素
+```
+
+因此要区分：
+
+| 表达式 | 数据形态 |
+| --- | --- |
+| `_batched(values)` | 生成器对象 |
+| 每次 `yield` 的值 | 一个一维小列表 |
+| `list(_batched(values))` | 由多个小列表组成的二维列表 |
+
+项目没有先收集成二维列表，而是直接逐批消费：
+
+```python
+for batch in self._batched(ids_list):
+    store.delete(ids=batch)
+```
+
+添加 Chroma 文档时，则分别切分 `documents` 和 `chunk_ids`，再用 `zip()` 对齐同一批：
+
+```python
+for documents, ids in zip(
+    self._batched(source.documents),
+    self._batched(source.chunk_ids),
+):
+    store.add_documents(documents=documents, ids=ids)
+```
+
+默认 `size=100`，所以每次最多向 Chroma 提交 100 个文档及其对应的 100 个 ID；最后
+一批可以少于 100 个。
+
+`@staticmethod` 表示这个辅助方法不使用实例状态，因此参数中没有 `self`。当前代码
+始终使用正整数 100；如果把 `size` 设置成 0，`range()` 会抛出 `ValueError`。
+
+### 4.15 `set.difference()` 与不可修改的 `frozenset`
+
+当前项目中：
+
+```python
+ANSWERABILITY_STOP_TOKENS = frozenset(
+    {
+        "知识",
+        "识库",
+        "文档",
+        "问题",
+        "什么",
+    }
+)
+
+return lexical_tokens(text).difference(ANSWERABILITY_STOP_TOKENS)
+```
+
+#### `set.difference()` 计算集合差集
+
+```python
+left.difference(right)
+```
+
+读作：
+
+> 返回只在 `left` 中、但不在 `right` 中的元素。
+
+例如：
+
+```python
+tokens = {"知识", "识库", "使用", "向量"}
+stop_tokens = frozenset({"知识", "识库"})
+
+result = tokens.difference(stop_tokens)
+
+print(result)
+# {"使用", "向量"}
+```
+
+它不会修改原集合：
+
+```python
+print(tokens)
+# {"知识", "识库", "使用", "向量"}
+```
+
+下面两种写法在这里等价：
+
+```python
+tokens.difference(stop_tokens)
+tokens - stop_tokens
+```
+
+如果需要直接修改普通 `set`，对应方法是 `difference_update()`；但当前项目需要保留
+原集合，因此使用返回新集合的 `difference()`。
+
+#### `frozenset` 是不可修改的集合
+
+是的，`frozenset` 可以理解为“冻结的 `set`”：
+
+```python
+normal_set = {"知识", "文档"}
+frozen_set = frozenset({"知识", "文档"})
+```
+
+两者都支持：
+
+```python
+"知识" in frozen_set
+len(frozen_set)
+frozen_set.difference({"知识"})
+frozen_set.intersection({"知识"})
+```
+
+但是只有普通 `set` 支持原地修改：
+
+```python
+normal_set.add("问题")       # 可以
+normal_set.remove("知识")    # 可以
+
+frozen_set.add("问题")       # 报错：frozenset 没有 add()
+frozen_set.remove("知识")    # 报错：frozenset 没有 remove()
+```
+
+当前项目把停用词定义成 `frozenset`，表示这组模块级配置只供查询，不应该在业务运行
+过程中被意外增加或删除。
+
+返回值类型取决于调用 `difference()` 的左侧对象：
+
+```python
+set({"a", "b"}).difference(frozenset({"a"}))
+# {"b"}，类型是 set
+
+frozenset({"a", "b"}).difference({"a"})
+# frozenset({"b"})，类型是 frozenset
+```
+
 ## 5. 字符串：文档字符串、切片、换行、拆分、规范化和正则清理
 
 ### 5.1 单独出现的三引号字符串可能是文档字符串
@@ -1295,6 +1933,433 @@ _clean_query("- 如何切块？")     # "如何切块？"
 | `A\|B` | 匹配 A 或 B |
 
 最后再调用 `.strip()`，删除清理编号后遗留的首尾空白。
+
+### 5.8 `re.compile()`、正则 Pattern 对象与全大写常量名
+
+项目代码：
+
+```python
+ASCII_TOKEN_PATTERN = re.compile(r"[a-z0-9_./-]+")
+CJK_RUN_PATTERN = re.compile(r"[\u4e00-\u9fff]+")
+```
+
+这两行既和正则表达式有关，也使用了常量风格的变量名，二者并不冲突：
+
+```text
+正则字符串
+    ↓ re.compile(...)
+re.Pattern 对象
+    ↓ 赋值给模块级全大写变量
+可复用的正则模式常量
+```
+
+`re.compile(...)` 现在只是创建正则模式对象，还没有拿具体文本执行匹配：
+
+```python
+pattern = re.compile(r"[a-z]+")
+
+print(type(pattern))
+# <class 're.Pattern'>
+```
+
+真正处理文本发生在调用模式对象的方法时：
+
+```python
+matches = pattern.findall("rag 2026 python")
+# ["rag", "python"]
+```
+
+因此项目代码的执行阶段是：
+
+```python
+# 模块被导入时执行一次：创建 Pattern 对象
+ASCII_TOKEN_PATTERN = re.compile(r"[a-z0-9_./-]+")
+CJK_RUN_PATTERN = re.compile(r"[\u4e00-\u9fff]+")
+
+# lexical_tokens() 每次被调用时：使用 Pattern 对象处理具体文本
+tokens = set(ASCII_TOKEN_PATTERN.findall(normalized))
+chinese_runs = CJK_RUN_PATTERN.findall(normalized)
+```
+
+两种写法的效果可以理解为相同：
+
+```python
+# 直接把正则字符串传给 re.findall()
+matches = re.findall(r"[a-z]+", text)
+
+# 先编译并保存，再调用 Pattern.findall()
+WORD_PATTERN = re.compile(r"[a-z]+")
+matches = WORD_PATTERN.findall(text)
+```
+
+当同一个模式会被多次使用时，第二种写法能集中定义规则，也能直接通过变量名说明
+规则的用途。
+
+#### `ASCII_TOKEN_PATTERN` 的规则
+
+```python
+r"[a-z0-9_./-]+"
+```
+
+| 正则片段 | 含义 |
+| --- | --- |
+| `r"..."` | Python 原始字符串，便于书写正则中的反斜杠 |
+| `[...]` | 字符集合，其中任意一个字符都可以匹配 |
+| `a-z` | 一个小写英文字母 |
+| `0-9` | 一个数字 |
+| `_` | 下划线 |
+| `.` | 点；在字符集合内部表示普通点字符 |
+| `/` | 斜杠 |
+| `-` | 连字符；放在字符集合末尾时表示普通连字符 |
+| `+` | 前面的字符集合连续出现一次或多次 |
+
+项目会先执行：
+
+```python
+normalized = text.lower()
+```
+
+所以输入中的大写英文会先变成小写，再由该模式匹配。
+
+#### `CJK_RUN_PATTERN` 的规则
+
+```python
+r"[\u4e00-\u9fff]+"
+```
+
+| 正则片段 | 含义 |
+| --- | --- |
+| `\u4e00-\u9fff` | 常用 CJK 汉字的 Unicode 范围 |
+| `[...]` | 匹配范围中的一个汉字 |
+| `+` | 匹配一个或多个连续汉字 |
+
+例如：
+
+```python
+text = "RAG_service/v1 用中文检索-2026！"
+normalized = text.lower()
+
+ASCII_TOKEN_PATTERN.findall(normalized)
+# ["rag_service/v1", "-2026"]
+
+CJK_RUN_PATTERN.findall(normalized)
+# ["用中文检索"]
+```
+
+这两个模式分别提取英文/数字类词项和连续中文片段。项目随后还会把连续中文片段
+切成二字词：
+
+```python
+"用中文检索"
+→ "用中", "中文", "文检", "检索"
+```
+
+变量名写成全大写：
+
+```python
+ASCII_TOKEN_PATTERN
+CJK_RUN_PATTERN
+```
+
+表示开发者约定“这个模块级变量定义后按常量使用，不要在业务过程中重新赋值”。
+但 Python 没有真正的常量关键字，下面的代码在语法上仍然允许：
+
+```python
+ASCII_TOKEN_PATTERN = "changed"
+```
+
+因此“常量”描述的是变量的使用约定；`re.Pattern` 描述的是变量当前保存的对象
+类型。
+
+### 5.9 `lexical_tokens()`：英文整段提取，中文相邻双字切分
+
+项目中的函数：
+
+```python
+def lexical_tokens(text: str) -> set[str]:
+    normalized = text.lower()
+    tokens = set(ASCII_TOKEN_PATTERN.findall(normalized))
+    for run in CJK_RUN_PATTERN.findall(normalized):
+        tokens.update(run[index : index + 2] for index in range(len(run) - 1))
+    return tokens
+```
+
+可以读作：
+
+> 接收一个字符串 `text`，先统一转成小写；提取英文、数字和路径类词项；
+> 再把每段连续中文按相邻两个字切分；用集合去重后返回。
+
+以这段文本为例：
+
+```python
+text = "RAG_service/v1 使用知识库知识"
+```
+
+每一步的值和类型是：
+
+```python
+normalized = text.lower()
+# "rag_service/v1 使用知识库知识"
+# 类型：str
+
+ASCII_TOKEN_PATTERN.findall(normalized)
+# ["rag_service/v1"]
+# 类型：list[str]
+
+tokens = set(ASCII_TOKEN_PATTERN.findall(normalized))
+# {"rag_service/v1"}
+# 类型：set[str]
+
+CJK_RUN_PATTERN.findall(normalized)
+# ["使用知识库知识"]
+# 类型：list[str]
+```
+
+这里的 `run` 是 `for` 循环变量，不是 Python 关键字：
+
+```python
+for run in CJK_RUN_PATTERN.findall(normalized):
+    ...
+```
+
+可以读作：
+
+> 遍历找到的每一段连续中文，每次把当前中文字符串暂时赋值给变量 `run`。
+
+例如：
+
+```python
+normalized = "中文 RAG 知识库"
+CJK_RUN_PATTERN.findall(normalized)
+# ["中文", "知识库"]
+
+for run in CJK_RUN_PATTERN.findall(normalized):
+    print(run, type(run))
+
+# 第一轮：run == "中文"，类型是 str
+# 第二轮：run == "知识库"，类型是 str
+```
+
+变量名 `run` 在这里表示“一段连续出现的字符”（a run of characters）。它只是开发者
+选择的普通变量名，也可以改写成更直观的 `chinese_text`：
+
+```python
+for chinese_text in CJK_RUN_PATTERN.findall(normalized):
+    tokens.update(
+        chinese_text[index : index + 2]
+        for index in range(len(chinese_text) - 1)
+    )
+```
+
+对于连续中文 `"使用知识库知识"`：
+
+```python
+len(run)
+# 7
+
+range(len(run) - 1)
+# 相当于依次产生 0、1、2、3、4、5
+
+run[0:2]  # "使用"
+run[1:3]  # "用知"
+run[2:4]  # "知识"
+run[3:5]  # "识库"
+run[4:6]  # "库知"
+run[5:7]  # "知识"
+```
+
+这里是一个“宽度为 2、每次向右移动 1 个字符”的滑动窗口。生成器表达式：
+
+```python
+run[index : index + 2] for index in range(len(run) - 1)
+```
+
+展开成普通 Python 循环就是：
+
+```python
+two_character_tokens = []
+for index in range(len(run) - 1):
+    token = run[index : index + 2]
+    two_character_tokens.append(token)
+
+tokens.update(two_character_tokens)
+```
+
+`set.update(...)` 会把多个元素加入原集合并自动去重。因此上例最终得到的集合等价于：
+
+```python
+{
+    "rag_service/v1",
+    "使用",
+    "用知",
+    "知识",
+    "识库",
+    "库知",
+}
+```
+
+#### 它在当前项目中的作用
+
+`lexical_tokens()` 不是为了得到自然语言学意义上的准确分词，而是把文本转换成一组
+可以直接比较、去重和稳定哈希的简单特征。
+
+例如问题和知识库文档分别是：
+
+```python
+question = "知识库使用什么向量数据库？"
+document = "当前知识库使用 Chroma 向量数据库。"
+```
+
+去掉项目定义的高频停用词后，实际得到的部分词项是：
+
+```python
+query_tokens
+# {"使用", "向量", "库使", "量数", "据库", ...}
+
+document_tokens
+# {"chroma", "使用", "向量", "库使", "量数", "据库", ...}
+
+query_tokens.intersection(document_tokens)
+# {"使用", "向量", "库使", "量数", "据库"}
+```
+
+项目用交集计算问题词项被文档覆盖的比例：
+
+```python
+lexical_overlap = len(query_tokens.intersection(document_tokens)) / max(
+    1, len(query_tokens)
+)
+# 这组输入实际得到约 0.7143
+```
+
+因此它有两个下游用途：
+
+1. `StableHashEmbeddings._embed()` 把每个唯一词项稳定哈希到一个向量槽位，构造
+   无需模型和 API Key 的离线教学向量。
+2. `KBService.ask()` 比较问题和候选文档的词项交集，辅助过滤“向量看起来相似，
+   但文档实际不能回答问题”的结果。
+
+注意：
+
+- `set` 不保证展示顺序，所以实际打印顺序可能不同。
+- 重复出现的 `"知识"` 最终只保留一份。
+- 一段中文只有一个字时，`len(run) - 1` 等于 `0`，不会产生双字词项。
+- 这是项目为了离线检索写的简单词项规则，不是大模型或 embedding 模型自带的 tokenizer。
+
+### 5.10 `technical_tokens()`：筛选 API 名、字段名和英文词项
+
+当前项目中的函数：
+
+```python
+def technical_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in ASCII_TOKEN_PATTERN.findall(text.lower())
+        if len(token) >= 3 and any(character.isalnum() for character in token)
+    }
+```
+
+它可以读作：
+
+> 把文本转成小写并提取 ASCII 词项；只保留长度至少为 3，而且至少包含一个
+> 字母或数字的词项；最后用集合去重并返回。
+
+例如：
+
+```python
+text = "字段 tenant_id 使用 API /api/v1/ask，--- 和 id"
+
+ASCII_TOKEN_PATTERN.findall(text.lower())
+# ["tenant_id", "api", "/api/v1/ask", "---", "id"]
+
+technical_tokens(text)
+# {"tenant_id", "api", "/api/v1/ask"}
+```
+
+过滤过程如下：
+
+| 候选词项 | `len(token) >= 3` | 至少有一个字母或数字 | 是否保留 |
+| --- | --- | --- | --- |
+| `"tenant_id"` | 是 | 是 | 保留 |
+| `"api"` | 是 | 是 | 保留 |
+| `"/api/v1/ask"` | 是 | 是 | 保留 |
+| `"---"` | 是 | 否 | 丢弃 |
+| `"id"` | 否 | 是 | 丢弃 |
+
+#### `any(...)` 的作用
+
+```python
+any(character.isalnum() for character in token)
+```
+
+读作：
+
+> 逐个检查 `token` 中的字符，只要至少一个字符是字母或数字，就返回 `True`。
+
+例如：
+
+```python
+any(character.isalnum() for character in "---")
+# False
+
+any(character.isalnum() for character in "/api/")
+# True，因为其中的 a、p、i 是字母
+```
+
+整个集合推导式展开成普通 Python 循环是：
+
+```python
+result: set[str] = set()
+
+for token in ASCII_TOKEN_PATTERN.findall(text.lower()):
+    long_enough = len(token) >= 3
+    contains_letter_or_number = any(
+        character.isalnum()
+        for character in token
+    )
+
+    if long_enough and contains_letter_or_number:
+        result.add(token)
+
+return result
+```
+
+#### 它在知识库问答中的作用
+
+例如问题是：
+
+```python
+question = "tenant_id 字段在哪里？"
+```
+
+问题的技术词项是：
+
+```python
+query_technical_tokens = {"tenant_id"}
+```
+
+两个候选文档：
+
+```python
+document_a = "请求必须包含 tenant_id"
+document_b = "请求必须包含 area_id"
+```
+
+比较结果：
+
+```python
+{"tenant_id"}.intersection({"tenant_id"})
+# {"tenant_id"}，转换成 bool 后是 True
+
+{"tenant_id"}.intersection({"area_id"})
+# set()，转换成 bool 后是 False
+```
+
+因此，当问题中存在技术词项时，当前项目要求候选文档至少精确命中其中一个技术词项。
+这能避免把 `tenant_id` 的问题错误匹配到只介绍 `area_id` 的文档。
+
+这里的“技术词项”只是项目定义的启发式规则：所有符合条件的英文词项都有可能被
+保留，它并不真正理解某个英文词是不是技术术语。
 
 ## 6. 列表推导式与生成器表达式
 
@@ -1943,11 +3008,29 @@ hasattr(args_schema, "model_json_schema")
 
 表示检查 `args_schema` 是否有名为 `model_json_schema` 的属性或方法，返回布尔值。
 
-### 9.4 `getattr()` 安全读取属性
+### 9.4 `getattr()` 根据名字读取属性
+
+`getattr()` 是 Python 的内置函数，不是某个对象专有的方法。它的常用形式是：
+
+```python
+getattr(对象, "属性名", 默认值)
+```
+
+读作：
+
+> 从这个对象上，取出名字为指定字符串的属性；如果属性不存在，就返回默认值。
 
 ```python
 content = getattr(message, "content", "")
 ```
+
+这里三个参数分别是：
+
+| 参数 | 含义 |
+| --- | --- |
+| `message` | 要查找属性的对象 |
+| `"content"` | 要读取的属性名，必须是字符串 |
+| `""` | 属性不存在时返回的默认值 |
 
 等价思路：
 
@@ -1958,7 +3041,32 @@ else:
     content = ""
 ```
 
-第三个参数 `""` 是属性不存在时的默认值。
+如果属性名是固定的，下面两种写法效果相同：
+
+```python
+message.content
+getattr(message, "content")
+```
+
+`getattr()` 特别适合属性名保存在变量里的情况：
+
+```python
+field_name = "content"
+value = getattr(message, field_name, "")
+```
+
+如果不写第三个参数，而且属性不存在，Python 会抛出 `AttributeError`：
+
+```python
+getattr(message, "missing_field")  # AttributeError
+```
+
+它也能取出方法，但只是返回方法对象，不会自动执行：
+
+```python
+method = getattr(text, "upper")
+result = method()  # 现在才调用方法
+```
 
 ### 9.5 空容器和空字符串会被当作 False
 
@@ -2005,6 +3113,49 @@ content = getattr(message, "content", "") or ""
 ```
 
 如果属性不存在、为 `None` 或为空字符串，最终统一得到空字符串。
+
+当前项目还有一个利用 `or` 短路的判断：
+
+```python
+sources = active_manifest.get("sources", {})
+
+return (
+    not sources
+    or active_manifest.get("index_fingerprint")
+    == self.index_fingerprint
+)
+```
+
+如果 `sources == {}`：
+
+```python
+not sources
+# True
+```
+
+`or` 左侧已经是 `True`，Python 不再计算右侧，整个表达式直接返回 `True`。只有
+`sources` 非空、`not sources` 为 `False` 时，才继续比较两个 fingerprint。
+
+可以展开成普通 `if`：
+
+```python
+if not sources:
+    return True
+
+return (
+    active_manifest.get("index_fingerprint")
+    == self.index_fingerprint
+)
+```
+
+方法前一行：
+
+```python
+active_manifest = manifest if manifest is not None else self.read_manifest()
+```
+
+是条件表达式，表示显式传入了 `manifest` 就直接使用；参数是 `None` 时才调用
+`read_manifest()` 读取本地文件。
 
 ### 9.7 `continue` 跳过本次循环剩余代码
 
@@ -2131,6 +3282,459 @@ function = decorator(function)
 ```
 
 项目中的 `@tool(...)` 也是 Python 装饰器语法，只是具体增强逻辑由 LangChain 提供。
+
+#### `IndexStats`：用 dataclass 表示一次索引的统计结果
+
+当前项目定义：
+
+```python
+@dataclass(frozen=True)
+class IndexStats:
+    reset: bool
+    scanned_files: int
+    added_files: int
+    updated_files: int
+    unchanged_files: int
+    removed_files: int
+    indexed_chunks: int
+    deleted_chunks: int
+    total_indexed_chunks: int
+    index_fingerprint: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+```
+
+`IndexStats` 不保存 Chroma 中的文档和向量。它只是一次 `reindex()` 执行结束后返回的
+统计结果对象：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `reset` | `bool` | 本次是否按 `reset=True` 重建索引 |
+| `scanned_files` | `int` | 本次扫描到的受支持来源文件数 |
+| `added_files` | `int` | 新增来源文件数 |
+| `updated_files` | `int` | 内容发生变化并重新索引的已有文件数 |
+| `unchanged_files` | `int` | 与 manifest 相比没有变化的文件数 |
+| `removed_files` | `int` | 已从来源目录删除的文件数 |
+| `indexed_chunks` | `int` | 本次实际新增或重新写入 Chroma 的 chunk 数 |
+| `deleted_chunks` | `int` | 本次从 Chroma 删除的旧 chunk 数 |
+| `total_indexed_chunks` | `int` | 本次执行结束后整个知识库的 chunk 总数 |
+| `index_fingerprint` | `str` | chunk 参数、Embedding 身份和 collection 的配置指纹 |
+
+例如：
+
+```python
+stats = IndexStats(
+    reset=False,
+    scanned_files=5,
+    added_files=1,
+    updated_files=1,
+    unchanged_files=3,
+    removed_files=0,
+    indexed_chunks=2,
+    deleted_chunks=1,
+    total_indexed_chunks=6,
+    index_fingerprint="16fff5586f9f9b4a372b",
+)
+```
+
+这些字段都没有定义默认值，因此创建对象时少传任何一个字段都会报错：
+
+```python
+IndexStats(
+    reset=False,
+    scanned_files=5,
+)
+# TypeError：缺少其他必需参数
+```
+
+#### `asdict()` 是 dataclasses 模块函数
+
+项目导入的是：
+
+```python
+from dataclasses import asdict, dataclass
+```
+
+所以：
+
+```python
+asdict(self)
+```
+
+表示把当前 dataclass 实例转换成一个新的字典。它不是 `IndexStats` 自带的方法，下面
+这样调用才是原始形式：
+
+```python
+payload = asdict(stats)
+```
+
+结果是：
+
+```python
+{
+    "reset": False,
+    "scanned_files": 5,
+    "added_files": 1,
+    "updated_files": 1,
+    "unchanged_files": 3,
+    "removed_files": 0,
+    "indexed_chunks": 2,
+    "deleted_chunks": 1,
+    "total_indexed_chunks": 6,
+    "index_fingerprint": "16fff5586f9f9b4a372b",
+}
+```
+
+项目为了让调用方使用更直观，另外包装了一个实例方法：
+
+```python
+def to_dict(self) -> dict[str, Any]:
+    return asdict(self)
+```
+
+因此：
+
+```python
+stats.to_dict()
+```
+
+内部实际执行的仍然是：
+
+```python
+asdict(stats)
+```
+
+`asdict()` 还会递归转换嵌套的 dataclass；普通类实例不能直接传给它。
+
+转换成字典后，CLI 可以交给 `json.dumps()` 输出 JSON，FastAPI 也可以通过：
+
+```python
+ReindexResponse(request_id=request_id, **stats.to_dict())
+```
+
+把字典中的统计字段展开为 `ReindexResponse` 的关键字参数。
+
+#### `ChunkedSource`：保存一个来源文件的全部切块结果
+
+当前项目定义：
+
+```python
+@dataclass(frozen=True)
+class ChunkedSource:
+    source: str
+    source_sha256: str
+    documents: list[Document]
+    chunk_ids: list[str]
+```
+
+`ChunkedSource` 是项目自己定义的 dataclass，不是 Chroma 对象，也不是 LangChain
+提供的类型。它表示：
+
+> 一个来源文件完成切块和 chunk ID 生成以后得到的中间结果。
+
+名称可以拆成：
+
+```text
+Chunked = 已经完成切块的
+Source  = 一个来源文件
+```
+
+各字段含义：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `source` | `str` | 来源文件相对于知识库目录的路径 |
+| `source_sha256` | `str` | 整个来源文件的 SHA-256，用于判断文件内容是否变化 |
+| `documents` | `list[Document]` | 切分并补充 metadata 后的 chunk Document 列表 |
+| `chunk_ids` | `list[str]` | 与 `documents` 按相同顺序一一对应的稳定 chunk ID |
+
+一个来源文件可能产生多个 chunk：
+
+```text
+rag_basics.md
+    ↓ Loader
+LoadedSource（原始 Document）
+    ↓ RecursiveCharacterTextSplitter
+ChunkedSource
+├── documents[0] ↔ chunk_ids[0]
+├── documents[1] ↔ chunk_ids[1]
+└── documents[2] ↔ chunk_ids[2]
+```
+
+这里最重要的隐含约束是：
+
+```python
+len(chunked_source.documents) == len(chunked_source.chunk_ids)
+
+chunked_source.documents[index].metadata["chunk_id"] \
+    == chunked_source.chunk_ids[index]
+```
+
+当前代码在同一个循环中同时追加 `Document` 和 ID，所以能够保持这个对应关系：
+
+```python
+documents.append(Document(page_content=content, metadata=metadata))
+chunk_ids.append(chunk_id)
+```
+
+它有两个主要下游用途：
+
+1. 写入 Chroma：
+
+   ```python
+   store.add_documents(
+       documents=source.documents,
+       ids=source.chunk_ids,
+   )
+   ```
+
+2. 写入增量索引 manifest：
+
+   ```python
+   {
+       "sha256": source.source_sha256,
+       "chunk_count": len(source.chunk_ids),
+       "chunk_ids": source.chunk_ids,
+   }
+   ```
+
+因此 `ChunkedSource` 本身不执行切块，也不执行向量计算；真正切块发生在
+`_chunk_source()` 中。它只把切块完成后的相关数据打包在一起，方便后续同时写
+Chroma 和 manifest。
+
+`frozen=True` 只能阻止给字段重新赋值：
+
+```python
+chunked_source.source = "other.md"
+# FrozenInstanceError
+```
+
+但 `documents` 和 `chunk_ids` 本身仍然是可变列表；语法上依旧能够执行
+`append()`。因此这里的“不修改列表内容”仍然依靠项目代码约定。
+
+#### `settings: Settings`：配置类、参数变量和实例属性
+
+当前项目代码：
+
+```python
+class IncrementalIndexer:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self._embeddings = build_embeddings(settings)
+```
+
+需要先区分三个名称：
+
+| 名称 | 含义 |
+| --- | --- |
+| `Settings` | 项目定义的配置类，类名首字母大写且使用复数 |
+| `settings` | 调用 `__init__()` 时接收配置对象的参数变量 |
+| `self.settings` | 当前 `IncrementalIndexer` 实例保存配置对象的属性 |
+
+```python
+settings: Settings
+```
+
+读作：
+
+> 参数名是 `settings`，按照类型标注，调用方应该传入一个 `Settings` 实例。
+
+冒号后面的 `Settings` 只是类型标注，不会在这里创建配置，也不会自动把字典转换成
+`Settings`。项目真正创建和解析配置的位置是：
+
+```python
+settings = Settings.from_env()
+indexer = IncrementalIndexer(settings)
+```
+
+执行：
+
+```python
+self.settings = settings
+```
+
+只是把同一个对象引用保存到实例属性中，没有复制对象，也没有重新读取环境变量：
+
+```python
+indexer.settings is settings
+# True
+```
+
+`__init__` 是实例初始化方法。调用：
+
+```python
+IncrementalIndexer(settings)
+```
+
+时 Python 自动创建实例并调用：
+
+```python
+IncrementalIndexer.__init__(new_instance, settings)
+```
+
+`__init__()` 负责初始化已有的新实例，正常情况下返回 `None`。
+
+#### `Settings` 是 frozen dataclass
+
+当前项目中的 `Settings` 是普通 Python dataclass，不是 Pydantic `BaseSettings`：
+
+```python
+@dataclass(frozen=True)
+class Settings:
+    mode: Literal["offline", "live"]
+    embedding_mode: Literal["local", "hash", "glm"]
+    source_dir: Path
+    runtime_dir: Path
+    ...
+```
+
+`@dataclass` 自动生成接收这些字段的 `__init__()`；`frozen=True` 表示对象创建后不应
+重新给字段赋值：
+
+```python
+settings.mode = "live"
+# FrozenInstanceError
+```
+
+主要字段可以分为：
+
+| 分类 | 字段 | 作用 |
+| --- | --- | --- |
+| 运行模式 | `mode` | `offline` 使用本地摘录回答；`live` 调用聊天模型生成 |
+| 向量模式 | `embedding_mode` | 选择 `local`、`hash` 或 `glm` Embedding |
+| 来源和运行目录 | `source_dir`、`runtime_dir` | 知识来源目录与持久化运行目录 |
+| Chroma | `collection_name` | Chroma collection 名称 |
+| 切块 | `chunk_size`、`chunk_overlap` | chunk 大小和重叠长度 |
+| 检索 | `default_top_k` | 默认召回候选数量 |
+| 拒答门槛 | `min_relevance_score`、`min_lexical_overlap` | 候选文档最低相关度要求 |
+| 上下文 | `max_context_chars` | 最终交给回答阶段的上下文字符上限 |
+| 超时 | `timeout_seconds` | 在线模型请求超时 |
+| 在线模型 | `zhipu_api_key`、`zhipu_base_url`、`chat_model` | 在线聊天模型配置 |
+| 远程向量模型 | `embedding_model` | `glm` 模式使用的 Embedding 模型名 |
+| 本地向量模型 | `local_embedding_model`、`local_embedding_cache`、`local_embedding_path` | 本地模型身份、缓存和文件路径 |
+| 追踪 | `langsmith_tracing` | 是否启用 LangSmith tracing |
+
+不要直接把完整 `settings` 对象写入日志或文档。dataclass 自动生成的 `repr` 默认会展示
+所有字段，其中包括 `zhipu_api_key`。需要排查配置时，应只打印允许公开的字段，或者把
+密钥替换成是否已配置的布尔值。
+
+此外还有三个计算属性，它们不是额外存储的字段：
+
+```python
+settings.manifest_path
+# settings.runtime_dir / "index_manifest.json"
+
+settings.chroma_dir
+# settings.runtime_dir / "chroma"
+
+settings.is_live
+# settings.mode == "live"
+```
+
+#### `Settings.from_env()` 才负责解析配置
+
+`from_env()` 是类方法，执行顺序是：
+
+```text
+读取已有系统环境变量
+    ↓
+根目录 .env 补充缺失值
+    ↓
+目录 4 的 .env 再补充仍然缺失的值
+    ↓
+读取并转换 str / int / float / bool / Path
+    ↓
+校验模式、API Key 条件和切块参数
+    ↓
+cls(...) 创建 Settings 实例
+```
+
+调用方也可以显式覆盖部分配置：
+
+```python
+Settings.from_env(
+    mode="offline",
+    embedding_mode="hash",
+    runtime_dir=temporary_runtime_dir,
+)
+```
+
+项目会执行的主要校验包括：
+
+- `mode` 只能是 `offline` 或 `live`。
+- `embedding_mode` 只能是 `local`、`hash` 或 `glm`。
+- `live` 和 `glm` 模式要求配置 API Key。
+- 必须满足 `chunk_size > chunk_overlap >= 0`。
+
+因此下面的完整传递过程是：
+
+```text
+Settings.from_env()
+    ↓ 返回 Settings 实例
+settings
+    ↓ 传给 KnowledgeBaseService
+service.settings
+    ↓ 同一个对象继续传给 IncrementalIndexer
+indexer.settings
+    ↓ build_embeddings(settings) / _store() / reindex() / search()
+```
+
+#### `@property`：`index_fingerprint` 是读取时计算的属性
+
+当前项目代码：
+
+```python
+@property
+def index_fingerprint(self) -> str:
+    payload = {
+        "chunk_size": self.settings.chunk_size,
+        "chunk_overlap": self.settings.chunk_overlap,
+        "embedding": embedding_identity(self.settings),
+        "collection": self.settings.collection_name,
+    }
+    return _sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    )[:20]
+```
+
+`@property` 会让一个无参数实例方法使用起来像普通属性：
+
+```python
+fingerprint = indexer.index_fingerprint
+```
+
+上面这行访问属性时，Python 实际调用概念上接近：
+
+```python
+fingerprint = type(indexer).index_fingerprint.fget(indexer)
+```
+
+调用方不写括号：
+
+```python
+indexer.index_fingerprint    # 正确
+indexer.index_fingerprint()  # 错误：前一次访问已经得到 str
+```
+
+它没有在 `__init__()` 中执行：
+
+```python
+self.index_fingerprint = ...
+```
+
+也没有缓存计算结果。每次读取 `indexer.index_fingerprint` 都会根据当前索引构建配置
+重新计算并返回一个 `str`。
+
+当 `_empty_manifest()` 执行：
+
+```python
+{
+    "index_fingerprint": self.index_fingerprint,
+}
+```
+
+时，右侧先触发 property 计算，得到的字符串随后才作为普通 value 放进新字典。
 
 ### 10.4 `对象.属性 = 值` 是属性赋值
 
@@ -2398,6 +4002,18 @@ def load_dependencies():
 - 导入失败时给出更清楚的错误。
 - 避免仅仅导入当前文件就立刻加载所有重依赖。
 
+当前知识库项目也使用了函数内部导入：
+
+```python
+def _store(self):
+    from langchain_chroma import Chroma
+    ...
+```
+
+只有调用 `_store()` 时，当前函数才需要获得 `Chroma` 这个名称。每次调用都会执行到
+这条 `import` 语句，但 Python 通常会从 `sys.modules` 模块缓存中复用已经导入的模块，
+不会每次都重新加载整个 `langchain_chroma` 包。
+
 ### 11.5 `deps["Document"]` 是从字典取类
 
 ```python
@@ -2472,7 +4088,372 @@ Path("/tmp") / "data.txt"  # 正确，得到 Path
 
 跨系统路径优先使用 `Path`。
 
-### 12.3 `sys.path.insert(0, path)` 调整模块搜索顺序
+### 12.3 `Path.read_text()` 读取文本时的参数
+
+项目代码：
+
+```python
+text = path.read_text(encoding="utf-8", errors="replace").strip()
+```
+
+假设 `path` 当前是：
+
+```python
+Path("4_rag_knowledge_base_service/data/source/rag_basics.md")
+```
+
+这一行读作：
+
+> 让 `path` 这个 `Path` 对象用 UTF-8 编码读取文件；遇到不能按 UTF-8
+> 解码的字节时，用替代字符代替；读取完成后，再删除文本首尾的空白字符。
+
+当前项目 Python 环境中的方法签名是：
+
+```python
+Path.read_text(self, encoding=None, errors=None)
+```
+
+项目代码里的参数对应关系：
+
+| 参数 | 实际值 | 作用 |
+| --- | --- | --- |
+| `self` | `path` | 要读取的路径对象；写成 `path.read_text(...)` 时由 Python 自动传入 |
+| `encoding` | `"utf-8"` | 指定用 UTF-8 把文件字节解码成 `str` |
+| `errors` | `"replace"` | 遇到非法 UTF-8 字节时，用 Unicode 替代字符 `�` 代替，而不是抛出 `UnicodeDecodeError` |
+
+`errors` 表示“解码发生错误时采用什么处理策略”。文件在磁盘上保存的是
+`bytes`；Python 按 `encoding="utf-8"` 把这些字节转换成 `str`。如果某段字节
+不符合 UTF-8 规则，`errors="replace"` 就让 Python 用 `�` 占住出错位置并继续
+读取。
+
+例如：
+
+```python
+raw = b"hello \xff world"
+
+text = raw.decode("utf-8", errors="replace")
+print(text)
+```
+
+输出：
+
+```text
+hello � world
+```
+
+其中 `\xff` 不是合法的 UTF-8 起始字节，所以被替换成了 `�`。常见策略的区别：
+
+| 写法 | 遇到非法字节时的结果 |
+| --- | --- |
+| `errors="strict"` | 立即抛出 `UnicodeDecodeError` |
+| `errors="replace"` | 用 `�` 替换出错部分，然后继续解码 |
+| `errors="ignore"` | 直接丢弃出错部分，然后继续解码 |
+
+`replace` 的优点是一个异常字符不会中断整个文件的读取；代价是被替换位置的
+原始文字已经丢失。如果整个文件实际使用 GBK 等其他编码，却错误地指定为
+UTF-8，结果中可能出现很多 `�`，此时应该改正 `encoding`，而不是把 `replace`
+当成编码转换。
+
+所以方法调用也可以从理解语法的角度写成：
+
+```python
+text = Path.read_text(
+    path,
+    encoding="utf-8",
+    errors="replace",
+).strip()
+```
+
+平时应优先使用原来的 `path.read_text(...)` 写法。上面的展开只是为了说明
+点号左边的对象会作为 `self` 自动传给实例方法。
+
+`encoding="utf-8"` 和 `errors="replace"` 都使用了“关键字参数”：
+
+```python
+参数名=参数值
+```
+
+因此阅读代码时可以直接看出每个值的用途，不需要只靠参数位置判断。
+
+`read_text(...)` 大致等价于：
+
+```python
+with path.open(
+    mode="r",
+    encoding="utf-8",
+    errors="replace",
+) as file:
+    original_text = file.read()
+
+text = original_text.strip()
+```
+
+执行顺序是：
+
+1. `path.read_text(...)` 打开文件、读取文本并关闭文件。
+2. 它返回一个新的 `str` 字符串。
+3. 再对返回的字符串调用 `.strip()`。
+4. `.strip()` 返回删除了首尾空格、换行符、制表符等空白字符的新字符串。
+5. 最终把这个新字符串赋给变量 `text`。
+
+需要特别区分：
+
+- `.strip()` 不是 `read_text()` 的参数，而是对读取结果进行的下一次方法调用。
+- `.strip()` 只清理字符串首尾，不会删除正文内部的空格或换行。
+- `errors="replace"` 只处理“字节无法按指定编码解码”的问题；文件不存在、
+  没有读取权限等问题仍然会抛出相应异常。
+- 如果使用默认的 `errors=None`，文本读取通常采用严格解码；遇到非法 UTF-8
+  字节会抛出 `UnicodeDecodeError`。
+
+### 12.4 `Path.mkdir(parents=True, exist_ok=True)` 创建目录
+
+当前项目代码：
+
+```python
+self.settings.chroma_dir.mkdir(parents=True, exist_ok=True)
+```
+
+这里 `self.settings.chroma_dir` 是一个 `Path` 对象。这行可以读作：
+
+> 创建 Chroma 持久化目录；缺少的父目录也一起创建；如果目录已经存在则继续执行。
+
+两个参数分别表示：
+
+| 参数 | 含义 |
+| --- | --- |
+| `parents=True` | 父目录不存在时递归创建父目录 |
+| `exist_ok=True` | 目标目录已经存在时不抛出 `FileExistsError` |
+
+例如：
+
+```python
+path = Path("runtime/chroma")
+result = path.mkdir(parents=True, exist_ok=True)
+
+print(result)
+# None
+```
+
+`mkdir()` 负责产生目录创建这一文件系统副作用，正常完成时返回 `None`。它不会清空
+已经存在的目录，也不会删除其中的 Chroma 数据。
+
+`exist_ok=True` 只表示“目录已经存在可以接受”。如果目标路径已经是普通文件、父目录
+没有写权限或磁盘发生错误，仍然会抛出相应异常。
+
+项目随后执行：
+
+```python
+persist_directory = str(self.settings.chroma_dir)
+```
+
+这是把 `Path` 对象转换成 Chroma 构造函数接收的路径字符串；它不会再次创建目录。
+
+### 12.5 `Path.rglob("*")` 递归查找目录内容
+
+项目代码：
+
+```python
+for path in sorted(source_dir.rglob("*")):
+```
+
+其中：
+
+```python
+source_dir.rglob("*")
+```
+
+读作：
+
+> 从 `source_dir` 目录开始，递归查找它下面所有层级中名称符合 `"*"`
+> 的项目。
+
+各部分含义：
+
+| 部分 | 含义 |
+| --- | --- |
+| `source_dir` | 一个 `Path` 目录对象，也是搜索起点 |
+| `rglob(...)` | recursive glob，按照通配模式递归查找 |
+| `"*"` | 通配模式，表示任意名称 |
+
+例如有如下目录：
+
+```text
+source/
+├── a.md
+├── image.png
+└── notes/
+    └── b.md
+```
+
+那么：
+
+```python
+paths = source_dir.rglob("*")
+```
+
+迭代 `paths` 时，可以得到这些 `Path` 对象：
+
+```text
+source/a.md
+source/image.png
+source/notes
+source/notes/b.md
+```
+
+需要注意：
+
+- 它查找的是 `source_dir` 的后代，不包含 `source_dir` 自己。
+- 结果既可能包含文件，也可能包含目录。
+- 它返回的是惰性迭代器，在当前项目 Python 环境中实际类型为 `generator`，
+  不是已经装好全部结果的 `list`。
+- 每次迭代得到的元素都是 `Path` 对象。
+
+可以这样观察惰性迭代：
+
+```python
+paths = source_dir.rglob("*")  # 此时得到 generator
+
+for path in paths:
+    print(path)                # 迭代时逐个得到 Path
+```
+
+`glob()` 与 `rglob()` 的区别：
+
+```python
+source_dir.glob("*")       # 只匹配当前目录的直接子项
+source_dir.rglob("*")      # 递归匹配所有层级中的子项
+source_dir.rglob("*.md")   # 递归匹配所有层级中的 Markdown 文件名
+```
+
+在完整项目代码中，数据流是：
+
+```python
+found_paths = source_dir.rglob("*")  # generator[Path]
+sorted_paths = sorted(found_paths)   # 消耗 generator，得到排序后的 list[Path]
+
+for path in sorted_paths:
+    if not path.is_file() or path.suffix.lower() not in SUPPORTED_SUFFIXES:
+        continue
+```
+
+因为 `"*"` 也会找到目录和不支持的文件，所以后面的条件继续筛选：
+
+- `path.is_file()`：只保留普通文件，排除目录。
+- `path.suffix.lower()`：取得小写扩展名。
+- `SUPPORTED_SUFFIXES`：只允许 `.md`、`.markdown` 和 `.pdf`。
+- `continue`：当前项目不符合条件时，直接进入下一轮循环。
+
+### 12.6 `relative_to().as_posix()` 生成相对路径字符串
+
+项目代码：
+
+```python
+source = path.relative_to(source_dir).as_posix()
+```
+
+这里的 `source` 不是 Python 关键字，只是作者定义的变量名。在这个知识库项目中，
+它表示“来源文件标识”，也就是当前文档来自知识库中的哪个文件。
+
+`path` 和 `source` 的用途不同：
+
+| 变量 | 示例值 | 类型 | 用途 |
+| --- | --- | --- | --- |
+| `path` | `Path("/project/data/source/manual/setup.md")` | `Path` | 访问磁盘上的真实文件 |
+| `source` | `"manual/setup.md"` | `str` | 保存到 metadata、索引和引用结果中的稳定来源标识 |
+
+这条链式调用分两步执行。假设：
+
+```python
+source_dir = Path("/project/data/source")
+path = Path("/project/data/source/manual/setup.md")
+```
+
+第一步：
+
+```python
+relative_path = path.relative_to(source_dir)
+```
+
+得到：
+
+```python
+Path("manual/setup.md")
+```
+
+`relative_to(source_dir)` 的意思是：
+
+> 以 `source_dir` 为起点，计算 `path` 位于它下面的相对路径。
+
+可以从理解效果的角度把它看成删除共同的目录前缀：
+
+```text
+完整路径：/project/data/source/manual/setup.md
+起点目录：/project/data/source
+相对结果：                    manual/setup.md
+```
+
+但它不是普通的字符串替换，而是按照路径层级计算。如果 `path` 不在
+`source_dir` 里面，`relative_to()` 会抛出 `ValueError`。
+
+第二步：
+
+```python
+source = relative_path.as_posix()
+```
+
+得到：
+
+```python
+"manual/setup.md"
+```
+
+`as_posix()` 做两件容易混淆的事：
+
+- 把 `Path` 转成 `str`。
+- 使用 POSIX 风格的 `/` 作为路径分隔符。
+
+例如在 Windows 上，普通路径字符串可能是：
+
+```text
+manual\setup.md
+```
+
+调用 `as_posix()` 后统一为：
+
+```text
+manual/setup.md
+```
+
+所以原代码可以拆成：
+
+```python
+relative_path = path.relative_to(source_dir)  # Path
+source = relative_path.as_posix()             # str
+```
+
+当前项目中的实际示例：
+
+```python
+source_dir = Path("4_rag_knowledge_base_service/data/source")
+path = source_dir / "rag_basics.md"
+
+relative_path = path.relative_to(source_dir)
+source = relative_path.as_posix()
+```
+
+中间值和类型：
+
+```text
+relative_path = PosixPath("rag_basics.md")  # Path
+source = "rag_basics.md"                    # str
+```
+
+项目不直接把机器上的绝对路径作为 `source`，是因为绝对路径会随着电脑、项目
+安装位置或容器挂载位置变化；相对于知识库根目录的 `"rag_basics.md"` 更稳定。
+这个值随后会进入 `Document.metadata["source"]`，并用于索引 manifest、稳定
+chunk ID、检索记录和最终 citation。
+
+### 12.7 `sys.path.insert(0, path)` 调整模块搜索顺序
 
 ```python
 if VENV_SITE_PACKAGES.exists():
@@ -2709,7 +4690,162 @@ yield conn，把 conn 交给 as conn
 
 普通包含 `yield` 的函数是生成器；加上 `@contextmanager` 后，`contextlib` 会把这种“前置处理 → yield → 后置处理”的生成器协议适配成 `with` 所需的上下文管理器协议。
 
-### 14.3 三引号也可以表示多行普通字符串
+### 14.3 `mkstemp()`、`fdopen()` 与临时文件原子替换
+
+`4_rag_knowledge_base_service/indexer.py`：
+
+```python
+def _write_manifest(self, payload: dict[str, Any]) -> None:
+    self.settings.runtime_dir.mkdir(parents=True, exist_ok=True)
+    fd, temporary_path = tempfile.mkstemp(
+        prefix=".index_manifest.", suffix=".tmp", dir=self.settings.runtime_dir
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.replace(temporary_path, self.settings.manifest_path)
+    finally:
+        if os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+```
+
+这不是普通的“直接打开正式文件并覆盖”，而是：
+
+```text
+创建并打开临时文件
+    ↓
+把 manifest JSON 写入临时文件
+    ↓
+关闭临时文件
+    ↓
+用完整临时文件替换正式 manifest
+    ↓
+发生异常时删除遗留的临时文件
+```
+
+#### `fd, temporary_path` 是返回值拆包
+
+```python
+fd, temporary_path = tempfile.mkstemp(...)
+```
+
+等价于：
+
+```python
+result = tempfile.mkstemp(...)
+fd = result[0]
+temporary_path = result[1]
+```
+
+两个值分别是：
+
+| 变量 | 典型类型 | 含义 |
+| --- | --- | --- |
+| `fd` | `int` | 已经打开的操作系统文件描述符，例如 `3`、`4` |
+| `temporary_path` | `str` | 这个临时文件的路径 |
+
+`fd` 不是文件锁，也不是文件内容。它是操作系统用来标识当前已打开文件的整数句柄。
+`mkstemp()` 已经同时完成了“安全创建临时文件”和“打开文件”，所以不能再只根据
+`temporary_path` 重复打开而忘记关闭 `fd`。
+
+`os.fdopen(fd, ...)` 把这个底层整数描述符包装成 Python 文件对象：
+
+```python
+handle = os.fdopen(fd, "w", encoding="utf-8")
+```
+
+其中：
+
+- `"w"`：按文本写入模式使用；
+- `encoding="utf-8"`：把 Python 字符串编码成 UTF-8 字节；
+- `handle`：具有 `.write()`、`.close()` 等方法的文本文件对象。
+
+#### 这里的 `with` 负责关闭文件
+
+```python
+with os.fdopen(fd, "w", encoding="utf-8") as handle:
+    ...
+```
+
+进入 `with` 后，`handle` 指向文件对象；离开代码块时会自动执行关闭逻辑。无论正常
+结束，还是 `json.dump()` 抛出异常，文件对象都会被关闭，写入缓冲也会在关闭过程中
+刷新。
+
+它可以近似理解为：
+
+```python
+handle = os.fdopen(fd, "w", encoding="utf-8")
+try:
+    ...
+finally:
+    handle.close()
+```
+
+#### `json.dump()` 直接把 JSON 写入文件对象
+
+```python
+json.dump(
+    payload,
+    handle,
+    ensure_ascii=False,
+    indent=2,
+    sort_keys=True,
+)
+```
+
+参数含义：
+
+| 参数 | 含义 |
+| --- | --- |
+| `payload` | 要序列化的 Python 对象；这里是 `dict` |
+| `handle` | JSON 的写入目标文件对象 |
+| `ensure_ascii=False` | 中文直接写成中文，不转换成 `\u4e2d` 形式 |
+| `indent=2` | 使用两个空格缩进，便于人阅读 |
+| `sort_keys=True` | 按字典键排序，让文件输出顺序稳定 |
+
+`json.dump()` 中的 `dump` 没有 `s`，表示直接写入文件；`json.dumps()` 末尾的 `s`
+可以理解为 string，它返回 JSON 字符串：
+
+```python
+json.dump(payload, handle)  # 返回 None，JSON 写入 handle
+json_text = json.dumps(payload)  # 返回 str
+```
+
+`handle.write("\n")` 再给 JSON 文件末尾补一个换行，方便终端查看和版本管理。
+
+#### `replace` 提交结果，`unlink` 清理残留文件
+
+```python
+os.replace(temporary_path, self.settings.manifest_path)
+```
+
+写入完整并关闭文件后，再用临时文件替换正式 manifest。临时文件和正式文件在同一个
+目录中，因此正常情况下替换是原子的：其他读取者通常只会看到旧的完整文件或新的
+完整文件，不会看到只写了一半的 JSON。
+
+```python
+finally:
+    if os.path.exists(temporary_path):
+        os.unlink(temporary_path)
+```
+
+`finally` 无论前面成功还是抛出异常都会执行。`os.unlink(path)` 表示删除这个文件路径，
+近似于：
+
+```python
+os.remove(path)
+```
+
+它不是关闭文件，也不是解除文件锁。文件描述符由前面的 `with` 关闭；这里负责删除
+写入失败后可能遗留的 `.tmp` 文件。替换成功时，临时路径已经被移动成正式路径，
+`os.path.exists(temporary_path)` 通常为 `False`，不会误删正式 manifest。
+
+这套写法可以概括成：
+
+> 先完整写临时文件，成功后一次性替换正式文件；失败则清理临时文件。
+
+### 14.4 三引号也可以表示多行普通字符串
 
 ```python
 sql = """
@@ -2720,7 +4856,7 @@ INSERT INTO Genre VALUES (...);
 
 当它被赋值给变量或作为函数参数时，就是普通的多行字符串，不是文档字符串。
 
-### 14.4 注册函数时不要提前调用
+### 14.5 注册函数时不要提前调用
 
 ```python
 atexit.register(database_path.unlink, missing_ok=True)

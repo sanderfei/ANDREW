@@ -34,8 +34,8 @@ def _markdown_title(text: str, fallback: str) -> str:
             return stripped.lstrip("#").strip() or fallback
     return fallback
 
-
 def _load_markdown(path: Path, source: str, source_sha256: str) -> list[Document]:
+    # 文件字节无法按照 encoding="utf-8" 解码时，用替代字符 � 代替错误部分，然后继续读取。
     text = path.read_text(encoding="utf-8", errors="replace").strip()
     if not text:
         return []
@@ -93,6 +93,8 @@ def load_sources(source_dir: Path) -> list[LoadedSource]:
     for path in sorted(source_dir.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_SUFFIXES:
             continue
+        # 使路径变成“相对路径”的是 relative_to()；as_posix() 只负责转换为 / 风格的字符串。
+        # 项目使用相对路径作为 source
         source = path.relative_to(source_dir).as_posix()
         raw = path.read_bytes()
         digest = _sha256(raw)

@@ -2,26 +2,27 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-07-22
+> 最后更新：2026-07-24
 
 ## 当前学习主线
 
 - 目录：`4_rag_knowledge_base_service/`
-- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完；目录 4 的本地适配代码和运行环境已准备并验证，下一步从第 5 周“摄取与持久化”开始逐文件学习。
+- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完；目录 4 第 5 周“摄取与持久化”的 `config.py`、`loaders.py`、`embeddings.py`、`indexer.py` 核心流程已经逐文件学习，下一步先用临时数据观察完整增量状态，再进入第 6 周 `contracts.py` 与 `kb_service.py`。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
 
-| 环节 | 当前实现 |
-| --- | --- |
-| 文档来源 | 主课件默认使用 `_common.py` 内置的 4 个 `Document`；chunking 对比使用内置的 1773-token 长文；`--web-source` 才读取网页 |
-| 文本切块 | `RecursiveCharacterTextSplitter`；Part 2 Indexing 使用 `300/50`，chunking 对比使用 token-aware 的 `80/0`、`80/10`、`140/0`、`140/30`、`260/60` |
-| Embedding | 本地 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` |
-| 向量维度 | 384 |
-| 向量库 | `InMemoryVectorStore`，进程退出后数据消失 |
-| Retriever | 默认 `search_type="similarity"`、`k=2` |
-| 在线生成模型 | `ep-qwen2.5-72b` |
-| `--live` 的作用 | 只切换在线回答/查询改写，不改变默认本地 Embedding |
+| 环节 | 目录 3 课件 | 目录 4 知识库服务 |
+| --- | --- | --- |
+| 文档来源 | `_common.py` 内置 Documents；`--web-source` 才读取网页 | 递归读取 `data/source/` 中的 Markdown/PDF |
+| 文本切块 | Part 2 使用 `300/50`；对比实验使用五组 token-aware 参数 | `RecursiveCharacterTextSplitter` 默认字符参数 `800/120`，保留 `start_index` |
+| Embedding | 默认本地多语言 MiniLM | `local` MiniLM、教学 `hash`、可选远程 `glm` |
+| 向量维度 | 本地 MiniLM 为 384 | 本地 MiniLM 与 Hash 均为 384 |
+| 向量库 | `InMemoryVectorStore`，进程退出后消失 | 持久化 Chroma，默认位于 `runtime/chroma` |
+| 增量账本 | 无 | `runtime/index_manifest.json` 保存配置指纹、来源 hash 和 chunk IDs |
+| Retriever | 默认 `search_type="similarity"`、`k=2` | Chroma cosine 检索，默认 `top_k=4` |
+| 回答模式 | 离线抽取或 `--live` 在线生成 | `RAG_MODE=offline/live`，与 Embedding 模式独立 |
+| 在线生成模型 | `ep-qwen2.5-72b` | `ep-qwen2.5-72b` |
 
 目录 4 延续同一原则：`RAG_EMBEDDING_MODE=local` 默认使用上述本地 MiniLM，`RAG_MODE=live` 只切换最终回答生成；Hash 仅用于教学/CI，GLM embedding 必须显式选择。
 
@@ -167,6 +168,33 @@ list[float]
 - `RAG_TEMPLATE` 明确要求只依据 context 回答，这会降低越界生成；当前代码没有生成后忠实性验证，因此 Prompt 约束不是程序层面的绝对保证。
 - 本地 citation 示例中的 `citations.md`、`grounding.md`、`answerability.md` 是手写 metadata 标签，不是仓库中的真实文件；生产实现还需要真实 URI、document/chunk ID、页码与版本信息。
 
+## 目录 4 第 5 周已掌握
+
+### 配置、来源加载与 Embedding
+
+- `Settings.from_env()` 统一解析回答模式、Embedding 模式、来源/运行目录、Chroma collection、切块参数、召回阈值和模型配置；类型标注用于说明约定，不会自动创建或强制转换对象。
+- `RAG_MODE=offline/live` 只控制最终回答；`RAG_EMBEDDING_MODE=local/hash/glm` 独立控制建库和查询向量，切换 Embedding 后需要重建索引。
+- `load_sources()` 先完整读取所有支持的来源再返回：非空 Markdown 文件产生一个原始 `Document`，PDF 按有可提取文本的页面产生 Documents；`source` 使用相对 POSIX 路径，文件字节 SHA-256 用于增量比较。
+- `lexical_tokens()` 同时提取英文技术词项和中文相邻双字词；`grounding_tokens()` 去除高频停用词；`technical_tokens()` 识别 API 名和英文术语。`min_relevance_score` 是综合得分门槛，`min_lexical_overlap` 是问题有效词项被候选覆盖的比例门槛。
+
+### Chroma、manifest 与增量索引
+
+- 一个 Chroma 记录对应一个切分后的 `Document` chunk，保存稳定 ID、原文、metadata 和 Embedding；collection 是 Chroma 内部的一组逻辑记录。
+- `ChunkedSource` 保存一个来源切块后的 Documents 与 chunk IDs；`IncrementalIndexer` 负责切块、比较、增删、manifest 更新和搜索；`IndexStats` 只是一次 `reindex()` 的统计报告。
+- `index_manifest.json` 是项目维护的控制账本，Chroma 是实际向量数据仓库；两者通过相同 `chunk_id` 对应，必须作为一组持久化状态维护。
+- `index_fingerprint` 只覆盖 `chunk_size`、`chunk_overlap`、Embedding 身份和 collection 名称，不是全部来源内容的总指纹；各来源内容变化由 `sources[name]["sha256"]` 单独判断。
+- `manifest_matches_config()` 在 `sources` 为空时视为兼容；已有来源时比较旧 fingerprint 与当前动态计算值。配置不兼容时 `ensure_compatible_manifest()` 抛出 `IndexConflictError`，要求 `reindex --reset`。
+- `_write_manifest()` 使用 `mkstemp -> json.dump -> with 关闭文件 -> os.replace` 原子替换正式 manifest；`finally` 中的 `unlink` 只清理失败后残留的临时文件，不负责关闭文件锁。
+- `_batched()` 用 `range(0, len(values), size)` 和列表切片逐批 `yield`；本身返回生成器，每次产生一个小列表。`_delete_ids()` 与 `_add_source_chunks()` 默认最多按 100 条一批操作 Chroma。
+- `reindex()` 先得到当前 `loaded_sources` 和 `chunked_sources`，再与旧 manifest 的 `old_sources` 比较，识别新增、更新、未变化和删除来源；随后删除旧 Chroma chunk、写入变化后的新 chunk、原子写入完整新 manifest，最后返回 `IndexStats`。未变化来源不会重复生成 Embedding。
+
+### 本阶段补充的 Python 基础
+
+- 已区分 `set.difference()`、不可修改的 `frozenset`、`re.Pattern.findall()`、字典推导式和 dataclass `asdict()`。
+- 已掌握 `mkstemp()` 返回的文件描述符与临时路径、`os.fdopen()`、`with` 自动关闭、`json.dump()` 与 `json.dumps()`、`os.replace()` 和 `os.unlink()` 的职责。
+- 已区分 `Iterable`、`Sequence`、`list`、生成器和 `range`：`for`/`in` 才是循环关键字，`range(...)` 返回不可修改的 `range` Sequence。
+- Python 参数允许省略类型标注；参数名没有固定类型，但传入对象始终有实际运行时类型。当前未标注的 `store` 实际由 `_store()` 返回 Chroma 对象。
+
 ## 目录 3 完成状态
 
 - 用户已确认 `3_rag_from_scratch` 的后续 Multi Query 与 Reciprocal Rank Fusion / reranking 学习也已完成，目录 3 不再作为下一步。
@@ -221,19 +249,25 @@ list[float]
 
 # 目录 4：FastAPI 端到端冒烟
 .venv/bin/python 4_rag_knowledge_base_service/scripts/smoke.py
+
+# 当前目录 4 Python 文件编译检查
+.venv/bin/python -m compileall -q 4_rag_knowledge_base_service
+
+# 提交前检查补丁格式
+git diff --check
 ```
 
-已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答；MiniLM 与 Hash 两套 20 条黄金集均为 20/20，FastAPI smoke 通过，在线 Qwen 回答仍保持 `embedding_mode=local`。
+已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答；MiniLM 与 Hash 两套 20 条黄金集均为 20/20，在线 Qwen 回答仍保持 `embedding_mode=local`。2026-07-24 提交前再次验证目录 4 全量编译通过、Hash 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过。
 
 ## 下一步
 
-进入 `4_rag_knowledge_base_service` 第 5 周“摄取与持久化”，按以下顺序学习：
+继续 `4_rag_knowledge_base_service`，不要重复已经完成的 `config.py`、`loaders.py`、`embeddings.py` 和 `indexer.py` 概念讲解：
 
-1. 先运行 `cli.py reindex --reset`，对照输出理解 source、Document、chunk、chunk ID、向量和 manifest 的数量关系。
-2. 阅读 `loaders.py`，追踪 Markdown/PDF 如何产生 `Document`，以及 `source`、`source_type`、`page`、`source_sha256` metadata 从哪里来。
-3. 阅读 `embeddings.py`，对比 local MiniLM、Hash 与 GLM 三种 backend，明确 `RAG_MODE` 不控制 embedding。
-4. 阅读 `indexer.py`，追踪 `load_sources -> split_documents -> add_documents -> manifest`，再实际修改一份临时学习文档观察 added / updated / unchanged / removed。
-5. 完成摄取与增量索引后，再进入 `contracts.py` 与 `kb_service.py` 学习 API 问答服务，不提前跳到 Agent/LangGraph。
+1. 先用临时 `source_dir` 和 `runtime_dir` 手动观察一次新增、未变化、内容更新和来源删除，逐次对照 `IndexStats`、新 manifest 与 Chroma；主知识库数据不作为实验对象。
+2. 进入第 6 周 `contracts.py`，学习请求/响应对象、字段校验、citation/retrieval 数据契约和 dataclass/Pydantic 边界。
+3. 阅读 `kb_service.py`，追踪 Chroma 候选如何经过向量分数、词面覆盖、技术词检查和 answerability gate，最后形成 accepted Documents、拒答、context、answer 与 citations。
+4. 阅读 `app.py` / `cli.py`，对照 HTTP、CLI 如何复用同一个 `KnowledgeBaseService`，以及 request ID、异常映射和 `reindex(reset=...)` 的入口。
+5. 第 6 周完成后再进入 `evaluate.py`、`scripts/smoke.py` 和交付流程，不提前跳到 Agent/LangGraph。
 
 ## 新电脑继续学习时的启动提示
 
@@ -243,8 +277,8 @@ list[float]
 
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
-不要重复 3_rag_from_scratch 已完成内容，从“下一步”开始分析
-4_rag_knowledge_base_service/loaders.py，仍然结合真实代码用中文讲解。
+不要重复 3_rag_from_scratch 以及目录 4 已完成的 config/loaders/embeddings/indexer
+概念讲解，从“下一步”的临时增量实验开始，然后分析 contracts.py。
 先分析，不要修改代码。
 ```
 

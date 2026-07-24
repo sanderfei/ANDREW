@@ -58,26 +58,26 @@ def _resolve_project_path(raw: str, default: Path) -> Path:
 class Settings:
     """所有可变配置均从环境变量或显式测试参数而来。"""
 
-    mode: Literal["offline", "live"]
-    embedding_mode: Literal["local", "hash", "glm"]
-    source_dir: Path
-    runtime_dir: Path
-    collection_name: str
-    chunk_size: int
-    chunk_overlap: int
-    default_top_k: int
-    min_relevance_score: float
-    min_lexical_overlap: float
-    max_context_chars: int
-    timeout_seconds: int
-    zhipu_api_key: str | None
-    zhipu_base_url: str
-    chat_model: str
-    embedding_model: str
-    local_embedding_model: str
-    local_embedding_cache: Path
-    local_embedding_path: Path
-    langsmith_tracing: bool
+    mode: Literal["offline", "live"]  # 回答模式：本地摘录或在线模型生成。
+    embedding_mode: Literal["local", "hash", "glm"]  # 向量模式。
+    source_dir: Path  # Markdown/PDF 知识来源目录。
+    runtime_dir: Path  # Chroma 和索引 manifest 的运行目录。
+    collection_name: str  # Chroma collection 名称。
+    chunk_size: int  # 每个 chunk 的最大字符数。
+    chunk_overlap: int  # 相邻 chunk 的重叠字符数。
+    default_top_k: int  # 默认召回的候选文档数量。
+    min_relevance_score: float  # 综合相关度下限：25% 向量分数 + 75% 词面重合度。
+    min_lexical_overlap: float  # 问题有效词项被候选文档覆盖的最低比例。
+    max_context_chars: int  # 最终回答上下文的最大字符数。
+    timeout_seconds: int  # 在线模型请求的超时秒数。
+    zhipu_api_key: str | None  # 在线模型 API Key；离线模式可以为空。
+    zhipu_base_url: str  # 智谱兼容 OpenAI API 的基础地址。
+    chat_model: str  # live 模式使用的聊天模型名称。
+    embedding_model: str  # glm 模式使用的远程 Embedding 模型名称。
+    local_embedding_model: str  # local 模式使用的本地 Embedding 模型名称。
+    local_embedding_cache: Path  # 本地 Embedding 模型缓存目录。
+    local_embedding_path: Path  # 本地 Embedding 模型文件目录。
+    langsmith_tracing: bool  # 是否启用 LangSmith 链路追踪。
 
     @property
     def manifest_path(self) -> Path:

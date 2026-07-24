@@ -458,6 +458,110 @@ Loader 通常完成：
 
 它不负责向量化或生成回答。
 
+#### 7.1.1 当前知识库 Loader 中 Markdown 与 PDF 的 Document 粒度
+
+[`4_rag_knowledge_base_service/loaders.py`](4_rag_knowledge_base_service/loaders.py)
+负责递归查找知识库目录中的 `.md`、`.markdown` 和 `.pdf` 文件，并将文件内容
+转换为 LangChain `Document`。Markdown 和 PDF 在“加载阶段”的粒度不同。
+
+Markdown 的核心代码：
+
+```python
+text = path.read_text(encoding="utf-8", errors="replace").strip()
+if not text:
+    return []
+
+return [
+    Document(
+        page_content=text,
+        metadata={
+            "source": source,
+            "source_type": "markdown",
+            "title": _markdown_title(text, path.stem),
+            "source_sha256": source_sha256,
+        },
+    )
+]
+```
+
+一个 Markdown 文件没有按页遍历：
+
+```text
+1 个非空 Markdown 文件
+    ↓
+1 个 Document，page_content 是整个文件正文
+```
+
+空 Markdown 文件清理首尾空白后会返回 `[]`。
+
+PDF 的核心代码：
+
+```python
+documents: list[Document] = []
+
+for page_number, page in enumerate(reader.pages, start=1):
+    text = (page.extract_text() or "").strip()
+    if not text:
+        continue
+    documents.append(
+        Document(
+            page_content=text,
+            metadata={
+                "source": source,
+                "source_type": "pdf",
+                "page": page_number,
+            },
+        )
+    )
+```
+
+PDF 会遍历页面：
+
+```text
+1 个 PDF 文件
+    ↓
+第 1 个有文本页面 → 1 个 Document
+第 2 个有文本页面 → 1 个 Document
+空白或提取不到文字的页面 → 跳过
+...
+```
+
+因此一个 10 页 PDF，如果 9 页能够提取到非空文字，加载结果就是
+`list[Document]`，长度为 `9`，不是整个 PDF 只生成一个 `Document`。纯扫描
+图片页面如果没有可提取文本，也可能被这里跳过，因为当前 Loader 没有做 OCR。
+
+加载结果还不是最终写入向量库的 chunk。每个来源文件先被包装为：
+
+```python
+LoadedSource(
+    source=source,
+    source_sha256=digest,
+    documents=documents,
+)
+```
+
+随后 `indexer.py` 再执行：
+
+```python
+raw_chunks = splitter.split_documents(loaded.documents)
+```
+
+完整层次是：
+
+```text
+文件夹
+  ↓ loaders.py
+每个 Markdown：0 或 1 个原始 Document
+每个 PDF：0 到多个按页的原始 Document
+  ↓ RecursiveCharacterTextSplitter
+多个 chunk Document
+  ↓ Embedding / VectorStore
+向量索引
+```
+
+切块时会复制原始 metadata，所以从 PDF 页面切出的 chunk 仍然保留 `page`；
+Markdown chunk 没有 `page`，但仍保留 `source`、`title` 和 `source_type`。
+
 ### 7.2 `RecursiveCharacterTextSplitter`
 
 ```python
@@ -558,7 +662,714 @@ vector_store = InMemoryVectorStore.from_documents(
 
 `InMemoryVectorStore` 只在当前进程内保存数据。
 
-### 7.5 搜索与 Retriever
+### 7.5 Chroma 持久化向量索引
+
+`Chroma` 是向量数据库，也实现了 LangChain 的 `VectorStore` 接口。当前项目通过：
+
+```python
+from langchain_chroma import Chroma
+
+store = Chroma(
+    collection_name="andrew_rag_knowledge_base",
+    embedding_function=embeddings,
+    persist_directory="runtime/chroma",
+    collection_metadata={"hnsw:space": "cosine"},
+)
+```
+
+可以先把“Chroma 索引”理解为：
+
+> 把每个文档 chunk 转换成向量，并保存 chunk ID、原文、metadata 和向量；
+> 同时建立能够按向量距离快速寻找相似 chunk 的近邻检索结构。
+
+它不是聊天模型，也不是 Embedding 模型。三者职责不同：
+
+```text
+Embedding 模型：文本 → 向量
+Chroma 索引：保存向量及其对应资料，并按相似度查找
+聊天模型：读取召回的资料并组织最终答案
+```
+
+#### 写入索引
+
+当前 `4_rag_knowledge_base_service/indexer.py` 的写入过程是：
+
+```text
+Markdown / PDF
+    ↓ Loader
+Document
+    ↓ RecursiveCharacterTextSplitter
+Document chunk
+    ↓ embed_documents
+384 维文档向量
+    ↓ Chroma.add_documents
+ID + 原文 + metadata + 向量
+```
+
+#### 一个 chunk 就是一个 `Document` 吗
+
+在当前 LangChain 代码的表示方式中：
+
+> 每个切分后的 chunk 都用一个 `Document` 对象承载，但不是每个 `Document`
+> 都一定已经是 chunk。
+
+Loader 首先产生表示整篇 Markdown 或单个 PDF 页面的原始 `Document`，Splitter 再把
+一个原始 `Document` 切成零到多个新的 chunk `Document`：
+
+```text
+一个原始 Document
+├── chunk Document 0
+├── chunk Document 1
+└── chunk Document 2
+```
+
+类型变化看起来仍然是：
+
+```python
+loaded.documents
+# list[Document]，这里装的是原始文档或 PDF 页面
+
+raw_chunks = splitter.split_documents(loaded.documents)
+# list[Document]，这里每个 Document 已经表示一个 chunk
+```
+
+`Document` 是承载数据的对象类型；`chunk` 描述的是这份 `Document` 内容在处理流程中
+扮演的角色。切块后的 `Document.page_content` 保存当前片段，`metadata` 继续保存
+`source`、`page` 等来源信息，并增加 `start_index`、`chunk_id` 等索引信息。
+
+当前项目向 Chroma 写入时，一个 chunk `Document` 对应一个稳定 chunk ID 和一条向量
+记录。
+
+例如一个 chunk 在逻辑上可以理解为：
+
+```python
+{
+    "id": "a5344d...",
+    "document": "# 本机模型与运行开关 ...",
+    "metadata": {
+        "source": "local_runtime.md",
+        "source_type": "markdown",
+        "start_index": 0,
+        "chunk_id": "a5344d...",
+    },
+    "embedding": [0.012, -0.034, ...],  # 当前本地模型是 384 维
+}
+```
+
+`add_documents()` 接收的是 `Document` 和 ID。Chroma 会通过构造时传入的
+`embedding_function` 隐式调用 `embed_documents()`，所以调用方不需要先手工把
+每个向量传给 `add_documents()`。
+
+#### 查询索引
+
+```python
+matches = store.similarity_search_with_score(question, k=top_k)
+```
+
+内部流程是：
+
+```text
+question: str
+    ↓ 同一个 embedding_function.embed_query()
+查询向量
+    ↓ Chroma 余弦近邻搜索
+最接近的 k 个文档向量
+    ↓ 根据向量找到对应记录
+list[tuple[Document, distance]]
+```
+
+“索引”的价值在于不需要拿查询向量与所有文档向量逐条做完整扫描。Chroma 会维护
+面向近邻搜索的数据结构；本项目通过 `{"hnsw:space": "cosine"}` 指定使用余弦距离。
+
+#### `collection`、Chroma 索引和 manifest 的区别
+
+| 名称 | 当前项目中的含义 |
+| --- | --- |
+| collection | Chroma 内的逻辑数据集合，名称为 `andrew_rag_knowledge_base` |
+| Chroma 索引 | 用于保存和搜索 chunk 原文、metadata、ID 与向量的数据及近邻结构 |
+| `runtime/chroma` | Chroma 数据的本地持久化目录，进程退出后仍然存在 |
+| `index_manifest.json` | 项目自己维护的增量同步账本，记录来源 hash 和 chunk IDs，不保存向量 |
+| `index_fingerprint` | chunk 参数、embedding 身份和 collection 名称的配置指纹 |
+
+这里的 `index_fingerprint` 不是“当前全部索引数据的内容指纹”。它更准确的含义是：
+
+> 这批 Chroma 向量是按照哪一套索引构建配置生成的。
+
+它由 `@property` 即时计算，没有在 `__init__()` 中单独赋值：
+
+```python
+@property
+def index_fingerprint(self) -> str:
+    payload = {
+        "chunk_size": self.settings.chunk_size,
+        "chunk_overlap": self.settings.chunk_overlap,
+        "embedding": embedding_identity(self.settings),
+        "collection": self.settings.collection_name,
+    }
+    return _sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    )[:20]
+```
+
+manifest 使用两层信息分别描述“构建方式”和“数据内容”：
+
+```text
+index_manifest.json
+├── index_fingerprint     索引构建配置是否兼容
+└── sources
+    ├── A.md
+    │   ├── sha256        A.md 内容是否变化
+    │   └── chunk_ids     A.md 当前对应哪些 Chroma 记录
+    └── B.md
+        ├── sha256
+        └── chunk_ids
+```
+
+可以把两者理解成“控制账本”和“实际数据仓库”：
+
+```text
+index_manifest.json（项目控制账本）
+    source_sha256 + chunk_ids
+                    │
+                    │ chunk_id 一一对应
+                    ▼
+Chroma（实际向量数据仓库）
+    id + 原文 + metadata + embedding
+```
+
+| 内容 | `index_manifest.json` | Chroma |
+| --- | --- | --- |
+| 来源文件 SHA-256 | 保存，用于判断文件变化 | metadata 中也可能保留，但不负责增量比较 |
+| chunk IDs | 按来源文件分组保存 | 作为每条向量记录的 ID |
+| chunk 原文 | 不保存 | 保存 |
+| chunk metadata | 不完整保存 | 保存完整 metadata |
+| 384 维向量 | 不保存 | 保存 |
+| 近邻搜索结构 | 不保存 | 保存 |
+
+Chroma 本身不知道项目的 `index_manifest.json`。manifest 也不会自动读取或修改 Chroma；
+两者由 `IncrementalIndexer.reindex()` 协调：
+
+```text
+读取旧 manifest
+    ↓ 比较当前来源 SHA-256
+找出新增、修改、删除的来源
+    ↓
+根据旧 manifest 的 chunk_ids 删除 Chroma 旧记录
+    ↓
+用相同的稳定 chunk_ids 向 Chroma 写入新 Documents
+    ↓
+最后写入新的 manifest
+```
+
+查询时职责不同：
+
+```text
+manifest → 检查是否已有来源、构建配置是否兼容
+Chroma   → 真正执行向量搜索并返回 Document 和距离
+```
+
+因此这两个目录或文件应该作为一组持久化状态维护。手工只删除或修改其中一边，可能造成
+manifest 记录的 chunk 与 Chroma 实际记录不一致。
+
+#### `sources` 与 `manifest_matches_config()`
+
+manifest 中的 `sources` 不是 Settings 配置参数，而是“已经纳入索引的来源文件状态表”：
+
+```python
+"sources": {
+    "rag_basics.md": {
+        "sha256": "64e334...",
+        "chunk_count": 1,
+        "chunk_ids": ["00e78a..."],
+    }
+}
+```
+
+其类型是：
+
+```python
+dict[str, dict[str, Any]]
+```
+
+key 是来源相对路径，value 保存该来源的内容 hash、chunk 数量和 Chroma IDs。
+
+配置兼容方法：
+
+```python
+def manifest_matches_config(
+    self,
+    manifest: dict[str, Any] | None = None,
+) -> bool:
+    active_manifest = (
+        manifest
+        if manifest is not None
+        else self.read_manifest()
+    )
+    sources = active_manifest.get("sources", {})
+    return (
+        not sources
+        or active_manifest.get("index_fingerprint")
+        == self.index_fingerprint
+    )
+```
+
+第一行有两条来源分支：
+
+```text
+显式传入 manifest 字典 → 直接检查传入字典
+manifest 参数为 None   → read_manifest() 读取本地文件
+```
+
+最后一行使用 `or` 短路，准确逻辑是：
+
+| `sources` | manifest 指纹 | 返回值 |
+| --- | --- | --- |
+| 缺失或 `{}` | 任意值，包括缺失或错误 | `True` |
+| 非空 | 等于当前 `self.index_fingerprint` | `True` |
+| 非空 | 缺失或不等于当前指纹 | `False` |
+
+这个表描述的是方法拿到 `active_manifest` 之后的表达式结果。如果
+`manifest=None`、需要读取本地文件，`read_manifest()` 会先验证 `sources` 必须存在且
+为字典；本地 JSON 缺少 `sources` 时会直接抛出 `IndexingError`。只有调用方显式传入
+一个未经 `read_manifest()` 校验的字典时，缺失 `sources` 才会被 `.get(..., {})`
+当成空字典。
+
+因此并不是“没有 sources 时再比较指纹”，而是恰好相反：
+
+```text
+没有已索引来源 → 没有旧向量会发生配置冲突 → 直接兼容
+已有索引来源   → 必须确认旧向量与当前构建配置兼容
+```
+
+这里返回 `True` 只表示“配置没有冲突”，不表示“索引已准备好”。健康检查还会额外判断：
+
+```python
+index_ready = bool(sources) and index_config_matches
+```
+
+所以空 `sources` 时：
+
+```text
+manifest_matches_config() == True
+index_ready               == False
+```
+
+`ensure_compatible_manifest()` 只是把上面的布尔结果转换成“正常继续或抛异常”：
+
+```python
+def ensure_compatible_manifest(self) -> None:
+    if not self.manifest_matches_config():
+        raise IndexConflictError(
+            "当前持久化索引由另一组 chunk/embedding 配置生成；"
+            "请先执行 reindex --reset。"
+        )
+```
+
+正常情况没有显式 `return`，因此返回：
+
+```python
+None
+```
+
+三种主要结果是：
+
+| manifest 状态 | 结果 |
+| --- | --- |
+| `sources` 为空 | 没有旧向量冲突，正常返回 `None` |
+| `sources` 非空且指纹相同 | 同一套构建配置，正常返回 `None` |
+| `sources` 非空且指纹不同 | 抛出 `IndexConflictError` |
+
+这里的“当前配置”不是写死在 Python 文件里的固定值，而是本次进程从 Settings 得到的值。
+以下变化都可能让当前指纹与上一次写入 manifest 的指纹不同：
+
+- `.env` 或系统环境变量中的 chunk 参数发生变化。
+- CLI 改用另一种 Embedding 模式。
+- 本地 Embedding 模型身份或加载变体发生变化。
+- Chroma collection 名称发生变化。
+- 从其他环境复制了由不同配置生成的 manifest。
+- 手工修改了 manifest 中的 fingerprint。
+
+它只检查索引构建配置兼容性，不检查：
+
+- Markdown/PDF 内容有没有变化；这由每个来源的 SHA-256 比较负责。
+- manifest 中的 chunk IDs 是否真的全部存在于 Chroma。
+- Chroma 是否被手工删除或损坏。
+- 空 `sources` 是否已经可以查询；健康检查另用 `index_ready` 判断。
+
+另外，`manifest=None` 时会先调用 `read_manifest()`。如果本地 JSON 无法读取、
+`format_version` 不兼容或 `sources` 格式错误，可能先抛出 `IndexingError`，而不是
+走到 fingerprint 不一致的 `IndexConflictError`。
+
+不同变化对应的记录位置：
+
+| 变化 | `index_fingerprint` | `sources` |
+| --- | --- | --- |
+| 修改、新增或删除来源文件 | 通常不变 | 来源 SHA-256 和 chunk IDs 变化 |
+| 修改 `chunk_size` / `chunk_overlap` | 变化 | 要求完整重建 |
+| 更换 Embedding 实现或模型身份 | 变化 | 要求完整重建 |
+| 更换 Chroma collection | 变化 | 要求完整重建 |
+| 修改 `top_k`、拒答门槛或聊天模型 | 不变 | 不影响已存向量，无需重建 |
+
+因此当前增量同步不需要“每次数据改变就生成一个全局数据指纹”：它会逐个比较
+`sources[name]["sha256"]`，从而准确知道哪些文件要新增、更新、跳过或删除。
+
+如果未来需要表示整个知识库的单一版本号，例如用于 ETag、跨节点缓存或审计，可以额外
+增加 `data_fingerprint`，对排序后的 `{source: sha256}` 再做一次哈希；若还要同时覆盖
+构建配置，则可以生成包含 `index_fingerprint + data_fingerprint` 的
+`snapshot_fingerprint`。当前代码没有这两个字段。
+
+不能使用一种 Embedding 建库，再随意换另一种 Embedding 查询。不同模型生成的向量
+坐标含义可能不同，维度也可能不同。因此当前项目在 chunk 参数、Embedding 或
+collection 发生变化时，会要求执行 `reindex --reset` 重建索引。
+
+#### `IncrementalIndexer`：增量索引的执行与协调对象
+
+`IncrementalIndexer` 是当前项目自己定义的普通业务类，不是 dataclass，也不是
+LangChain 或 Chroma 自带的类：
+
+```python
+class IncrementalIndexer:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self._embeddings = build_embeddings(settings)
+```
+
+这里的 `settings: Settings` 表示调用方应该传入已经创建好的 `Settings` 配置实例。
+`IncrementalIndexer.__init__()` 不负责读取 `.env`；真正的配置解析发生在服务创建之前：
+
+```python
+settings = Settings.from_env()
+service = KnowledgeBaseService(settings)
+# KnowledgeBaseService 内部继续执行 IncrementalIndexer(settings)
+```
+
+同一个配置对象会被保存并向下传递：
+
+```text
+settings
+  ├── service.settings
+  └── service.indexer.settings
+```
+
+`IncrementalIndexer` 会使用其中不同字段完成不同工作：
+
+| Settings 字段 | 使用位置 |
+| --- | --- |
+| `embedding_mode` 及模型字段 | `build_embeddings(settings)` 选择 Embedding 实现 |
+| `chunk_size`、`chunk_overlap` | `_chunk_source()` 创建文本切分器 |
+| `runtime_dir` / `chroma_dir` | 读取 manifest、连接本地 Chroma |
+| `collection_name` | 选择 Chroma collection，并参与索引指纹 |
+
+它与前面两个数据对象的关系是：
+
+| 对象 | 职责 |
+| --- | --- |
+| `ChunkedSource` | 保存一个来源文件完成切块后的 Documents 和 chunk IDs |
+| `IndexStats` | 保存一次 `reindex()` 完成后的统计结果 |
+| `IncrementalIndexer` | 真正执行切块、差异比较、Chroma 增删、manifest 更新和搜索 |
+
+主数据流是：
+
+```text
+Settings
+   ↓
+IncrementalIndexer
+   ├── reindex()
+   │     LoadedSource
+   │         ↓ 切块和生成稳定 ID
+   │     ChunkedSource
+   │         ↓
+   │     Chroma + index_manifest.json
+   │         ↓
+   │     IndexStats
+   │
+   └── search()
+         question
+             ↓ Chroma 相似度搜索
+         list[tuple[Document, relevance_score]]
+```
+
+##### `_store()` 创建或连接 Chroma VectorStore
+
+当前方法：
+
+```python
+def _store(self):
+    from langchain_chroma import Chroma
+
+    self.settings.chroma_dir.mkdir(parents=True, exist_ok=True)
+    return Chroma(
+        collection_name=self.settings.collection_name,
+        embedding_function=self._embeddings,
+        persist_directory=str(self.settings.chroma_dir),
+        collection_metadata={"hnsw:space": "cosine"},
+    )
+```
+
+执行顺序是：
+
+1. 在函数内部导入 LangChain 的 Chroma VectorStore 包装类。
+2. 确保本地 Chroma 持久化目录存在；已有目录不会被清空。
+3. 使用该目录创建 `PersistentClient`。
+4. 按 `collection_name` 获取已有 collection；不存在时自动创建。
+5. 把当前 Embeddings 对象保存在 Chroma 包装器中。
+6. 返回一个 `langchain_chroma.vectorstores.Chroma` 对象。
+
+参数含义：
+
+| 参数 | 当前项目中的作用 |
+| --- | --- |
+| `collection_name` | 选择逻辑 collection，默认是 `andrew_rag_knowledge_base` |
+| `embedding_function` | 绑定当前 Embeddings 实例，供写入和查询时转换向量 |
+| `persist_directory` | 使用本地持久化客户端，数据保存到 `runtime/chroma` |
+| `collection_metadata` | 设置向量近邻索引使用 cosine 距离 |
+
+构造 Chroma 对象时不会立刻把所有来源文件重新向量化。真正写入时：
+
+```python
+store.add_documents(documents=documents, ids=ids)
+```
+
+LangChain Chroma 包装器才会调用：
+
+```python
+self._embeddings.embed_documents(texts)
+```
+
+真正查询时：
+
+```python
+store.similarity_search_with_score(query, k=top_k)
+```
+
+包装器才会调用：
+
+```python
+self._embeddings.embed_query(query)
+```
+
+当前安装版本在构造过程中使用 `get_or_create_collection()`，所以 `_store()` 同时适用于
+第一次创建和后续重新连接。重复调用 `_store()` 会返回不同的 Python 包装对象，但它们
+连接的是同一持久化目录和同名 collection，不会因此创建多份向量数据。
+
+当前本地实测返回对象和连接状态为：
+
+```text
+返回类型：langchain_chroma.vectorstores.Chroma
+collection：andrew_rag_knowledge_base
+Embedding：LocalMiniLMEmbeddings
+当前记录数：5
+距离规则：cosine
+```
+
+##### `reindex()` 中“当前快照、旧账本、Chroma 和返回统计”的关系
+
+当前方法开头：
+
+```python
+loaded_sources = load_sources(self.settings.source_dir)
+chunked_sources = {
+    source.source: self._chunk_source(source) for source in loaded_sources
+}
+old_manifest = self.read_manifest()
+old_sources: dict[str, dict[str, Any]] = old_manifest["sources"]
+```
+
+这些变量可以分成两组：
+
+| 变量 | 数据来源 | 表示什么 |
+| --- | --- | --- |
+| `loaded_sources` | 当前 `source_dir` 磁盘文件 | 本次扫描并读取到的 `list[LoadedSource]` |
+| `chunked_sources` | 本次 `_chunk_source()` 结果 | 当前期望索引状态，类型为 `dict[str, ChunkedSource]` |
+| `old_manifest` | 上次成功写下的 `index_manifest.json` | 旧索引控制账本 |
+| `old_sources` | `old_manifest["sources"]` | 上次记录的来源 hash、chunk 数量和 chunk IDs |
+
+因此“当前”和“旧”的主线理解是正确的，但要注意两点：
+
+1. `chunked_sources` 此时只是内存中的 chunk Documents 和稳定 IDs，还没有生成
+   Embedding，也没有写入 Chroma；
+2. `old_sources` 来自 manifest 账本，并不是重新查询 Chroma 得到的实际旧记录。
+
+字典推导式：
+
+```python
+chunked_sources = {
+    source.source: self._chunk_source(source)
+    for source in loaded_sources
+}
+```
+
+可以展开为：
+
+```python
+chunked_sources = {}
+for source in loaded_sources:
+    chunked_sources[source.source] = self._chunk_source(source)
+```
+
+它形成的结构类似：
+
+```text
+{
+    "A.md": ChunkedSource(A 的 hash、Documents、chunk IDs),
+    "B.pdf": ChunkedSource(B 的 hash、Documents、chunk IDs),
+}
+```
+
+完成当前文件的加载和切块以后，方法才计算差异：
+
+```text
+current_names  = 当前 chunked_sources 的来源名称
+previous_names = 旧 manifest 的来源名称
+
+changed_names
+    = 当前新增的来源
+    + source_sha256 与旧 manifest 不同的来源
+
+removed_names
+    = 旧 manifest 中有、当前目录中已经没有的来源
+
+unchanged
+    = 当前存在且 source_sha256 与旧记录相同的来源
+```
+
+随后才处理 Chroma：
+
+```text
+changed + removed 的旧 chunk IDs
+    ↓
+_delete_ids()
+    ↓
+从 Chroma 删除旧记录
+
+changed 对应的当前 ChunkedSource
+    ↓
+_add_source_chunks()
+    ↓ Chroma 调用 Embedding
+生成向量并写入新的 Document、metadata、ID 和 embedding
+```
+
+没有变化的来源不会重新 Embedding，也不会重新写入 Chroma。
+
+Chroma 更新完成后，代码根据全部当前 `chunked_sources` 创建完整的新 manifest，而不是
+只把变化部分写进去：
+
+```python
+new_manifest["sources"] = {
+    name: self._manifest_source_entry(source)
+    for name, source in sorted(chunked_sources.items())
+}
+self._write_manifest(new_manifest)
+```
+
+只有执行到最后，方法才返回一次性的统计报告：
+
+```python
+return IndexStats(...)
+```
+
+`IndexStats` 表示“本次 `reindex()` 做了什么以及新 manifest 期望的总 chunk 数”，不
+保存 Document 或向量，也不是以后继续用于新旧比较的账本；以后比较仍然读取
+`index_manifest.json`。
+
+还有两个统计口径细节：
+
+- `total_indexed_chunks` 是汇总新 manifest 中的 `chunk_count`，不是重新调用 Chroma
+  查询实际记录数；
+- `_delete_ids()` 返回提交删除的 ID 数量，因此 `deleted_chunks` 表示本次按账本处理
+  的旧 ID 数量，不是额外进行一次 Chroma 全量审计后的结果。
+
+完整成功路径是：
+
+```text
+当前文件
+  ↓ load_sources()
+LoadedSource
+  ↓ _chunk_source()
+当前 chunked_sources
+  ↕ 与旧 manifest.sources 对比
+changed / removed / unchanged
+  ↓
+删除 Chroma 旧 chunk
+  ↓
+写入 Chroma 新 chunk 和向量
+  ↓
+原子写入完整新 manifest
+  ↓
+返回 IndexStats
+```
+
+如果中途抛出异常，方法不会返回 `IndexStats`。
+
+##### 为什么叫 Incremental
+
+`Incremental` 表示“增量的”。普通情况下，它不会每次都重新向量化全部文件，而是
+使用当前来源文件与旧 manifest 做比较：
+
+```text
+新文件                 → 生成 chunk 并写入 Chroma
+内容 hash 改变的文件   → 删除旧 chunk，再写入新 chunk
+没有变化的文件         → 跳过，不重新计算向量
+已经删除的来源文件     → 根据旧 chunk IDs 从 Chroma 删除
+```
+
+例如旧 manifest 和当前来源分别是：
+
+```text
+旧 manifest              当前来源
+A.md：hash-old           A.md：hash-new
+B.md：hash-b             B.md：hash-b
+C.md：hash-c             D.md：hash-d
+```
+
+比较后得到：
+
+```text
+changed_names = ["A.md", "D.md"]  # A 修改，D 新增
+removed_names = ["C.md"]          # C 已删除
+B.md                              # 未变化，跳过
+```
+
+然后执行：
+
+```text
+删除 A.md 和 C.md 的旧 chunk IDs
+写入 A.md 和 D.md 的新 chunk Documents
+重写最新 manifest
+返回本次 IndexStats
+```
+
+##### 主要方法分工
+
+| 方法 | 作用 |
+| --- | --- |
+| `index_fingerprint` | 根据切块参数、Embedding 身份和 collection 生成配置指纹 |
+| `_store()` | 创建或打开持久化 Chroma collection |
+| `read_manifest()` | 读取并验证 `index_manifest.json` |
+| `manifest_matches_config()` | 判断持久化索引配置是否与当前配置一致 |
+| `_chunk_source()` | 把一个 `LoadedSource` 转成 `ChunkedSource` |
+| `_delete_ids()` | 分批删除 Chroma 中的旧 chunk IDs |
+| `_add_source_chunks()` | 分批把 chunk Documents 和 IDs 写入 Chroma |
+| `reindex()` | 协调整个增量同步流程并返回 `IndexStats` |
+| `search()` | 使用 Chroma 查询候选 Documents 并转换距离分数 |
+
+当 `reset=True` 时，它会删除旧 manifest 记录的全部 chunk，并把当前所有来源重新切块、
+向量化和写入。这是完整重建，不再是只处理变化文件。
+
+`IncrementalIndexer` 对象由 `KnowledgeBaseService` 创建和持有：
+
+```python
+self.indexer = IncrementalIndexer(settings)
+```
+
+API 和 CLI 不直接操作 Chroma，而是通过服务层调用：
+
+```python
+self.indexer.reindex(reset=reset)
+self.indexer.search(question, top_k=top_k)
+```
+
+### 7.6 搜索与 Retriever
 
 只返回文档：
 
@@ -578,6 +1389,95 @@ matches = vector_store.similarity_search_with_score(
 ```
 
 当前 InMemoryVectorStore 的 score 是相似度，不是“答案正确概率”。
+
+#### 当前知识库服务的两个相关度门槛
+
+当前服务需要区分三个分数：
+
+| 名称 | 来源 | 含义 |
+| --- | --- | --- |
+| `vector_score` | Chroma 向量搜索 | 查询向量与文档向量的接近程度 |
+| `lexical_overlap` | 项目自己的词项集合计算 | 问题有效词项被文档覆盖的比例 |
+| `relevance_score` | 项目加权计算 | 25% `vector_score` + 75% `lexical_overlap` |
+
+代码：
+
+```python
+lexical_overlap = len(
+    query_tokens.intersection(document_tokens)
+) / max(1, len(query_tokens))
+
+relevance_score = (
+    0.25 * vector_score
+    + 0.75 * lexical_overlap
+)
+```
+
+`lexical_overlap` 的分母只是问题词项数量，因此它读作：
+
+> 问题中的有效词项，有多大比例也出现在当前候选文档中。
+
+它不是 Jaccard 相似度，因为没有除以双方词项的并集数量。
+
+例如：
+
+```python
+question = "知识库使用什么向量数据库？"
+document = "当前知识库使用 Chroma 向量数据库。"
+```
+
+经过 `grounding_tokens()` 并排除高频停用词后：
+
+```python
+query_tokens
+# 7 个词项
+
+query_tokens.intersection(document_tokens)
+# {"使用", "向量", "库使", "据库", "量数"}，共 5 个
+
+lexical_overlap
+# 5 / 7 ≈ 0.7143
+```
+
+两个配置分别限制：
+
+```python
+relevance_score >= min_relevance_score
+lexical_overlap >= min_lexical_overlap
+```
+
+默认值是：
+
+```text
+min_relevance_score = 0.10
+min_lexical_overlap = 0.12
+```
+
+之所以保留第二个独立门槛，是为了给词面证据设置硬下限。例如：
+
+```text
+vector_score    = 0.80
+lexical_overlap = 0.05
+relevance_score = 0.25 × 0.80 + 0.75 × 0.05
+                = 0.2375
+```
+
+此时：
+
+```text
+0.2375 >= 0.10  → 综合分数通过
+0.05   >= 0.12  → 词面证据不通过
+```
+
+所以候选文档仍然被拒绝。这能拦住“向量语义看起来相近，但文档没有覆盖问题中关键
+词项”的伪相关结果。
+
+因此配置名可以准确理解为：
+
+```text
+min_relevance_score  = 最低综合分数门槛
+min_lexical_overlap  = 最低问题词项覆盖率门槛
+```
 
 包装成 Retriever：
 

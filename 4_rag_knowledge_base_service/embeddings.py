@@ -14,8 +14,9 @@ from langchain_core.embeddings import Embeddings
 
 from config import Settings
 
-
+# 匹配连续的：小写英文字母、数字、
 ASCII_TOKEN_PATTERN = re.compile(r"[a-z0-9_./-]+")
+# 匹配一个或多个连续的常用汉字。
 CJK_RUN_PATTERN = re.compile(r"[\u4e00-\u9fff]+")
 
 # 这些二字词在教学知识库几乎处处出现，不能单独构成“有答案”的证据。
@@ -58,6 +59,7 @@ def lexical_tokens(text: str) -> set[str]:
 def grounding_tokens(text: str) -> set[str]:
     """用于 answerability gate 的词项，排除高频泛化词。"""
 
+    # difference 保留 left 中存在、但 right 中不存在的元素。
     return lexical_tokens(text).difference(ANSWERABILITY_STOP_TOKENS)
 
 
