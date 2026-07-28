@@ -39,6 +39,9 @@ DOCUMENT = "My favorite pet is a cat."
 RETRIEVAL_CHECK_QUESTION = "What is Task Decomposition?"
 
 
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# .venv/bin/python 3_rag_from_scratch/part2_indexing.py --live --embedding local
+# 本课只有索引与检索验证，没有回答生成阶段；--live 不会触发聊天模型。
 def main() -> None:
     options = parse_runtime_options("RAG From Scratch Part 2：Indexing")
 

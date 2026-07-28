@@ -137,6 +137,8 @@ def ask_with_citations(
     }
 
 
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# .venv/bin/python 3_rag_from_scratch/part4_2_answer_with_citations.py --live --embedding local
 def main() -> None:
     options = parse_runtime_options("RAG Part 4 补充：answer + citations")
     if options.use_web_source:

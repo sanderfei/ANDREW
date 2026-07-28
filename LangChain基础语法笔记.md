@@ -781,6 +781,82 @@ list[tuple[Document, distance]]
 “索引”的价值在于不需要拿查询向量与所有文档向量逐条做完整扫描。Chroma 会维护
 面向近邻搜索的数据结构；本项目通过 `{"hnsw:space": "cosine"}` 指定使用余弦距离。
 
+#### 为什么把 `distance` 转成 `relevance score`
+
+当前 `langchain-chroma` 的 `similarity_search_with_score()` 返回：
+
+```python
+list[tuple[Document, distance]]
+```
+
+这里第二项是距离：
+
+```text
+distance 越小  -> 两个向量越接近
+distance 越大  -> 两个向量越远
+```
+
+但业务层使用的 `vector_score`、门槛判断和加权分数采用相反方向：
+
+```text
+score 越大 -> 越相关
+score 越小 -> 越不相关
+```
+
+本项目把 Chroma collection 配置为 cosine distance。余弦距离和余弦相似度的关系是：
+
+```text
+cosine_distance   = 1 - cosine_similarity
+cosine_similarity = 1 - cosine_distance
+```
+
+因此搜索方法执行：
+
+```python
+matches = self._store().similarity_search_with_score(query, k=top_k)
+
+return [
+    (document, max(0.0, min(1.0, 1.0 - float(distance))))
+    for document, distance in matches
+]
+```
+
+例如：
+
+| Chroma `distance` | `1 - distance` | 转换后的含义 |
+| ---: | ---: | --- |
+| `0.0` | `1.0` | 向量最接近 |
+| `0.2` | `0.8` | 比较相关 |
+| `0.8` | `0.2` | 相关性较低 |
+| `1.3` | `-0.3` | 方向相反，最终钳制为 `0.0` |
+
+最外层：
+
+```python
+max(0.0, min(1.0, score))
+```
+
+把结果限制在 `0.0..1.0`：
+
+```text
+score > 1.0 -> 1.0
+0 <= score <= 1.0 -> 保持原值
+score < 0.0 -> 0.0
+```
+
+所以这里的数据流是：
+
+```text
+Chroma distance（越小越相似）
+    ↓ 1 - distance
+cosine similarity（越大越相似）
+    ↓ max/min
+0..1 vector_score
+```
+
+这个 `vector_score` 表示向量接近程度，不是答案正确概率。服务层还会把它与
+`lexical_overlap` 加权生成最终 `relevance_score`，再用于候选接受和拒答判断。
+
 #### `collection`、Chroma 索引和 manifest 的区别
 
 | 名称 | 当前项目中的含义 |
@@ -1584,6 +1660,178 @@ candidates
        ├─ 生成模型 context
        └─ citations
 ```
+
+目录 4 的 `KnowledgeBaseService.ask()` 把这套关系进一步拆成了几个明确的中间值：
+
+```text
+retrieved
+  = Chroma 返回的 Top-K (Document, vector_score)
+  ↓ 为每条结果计算 lexical_overlap、relevance_score、technical_match
+candidates
+  = 计算完成但尚未过滤的全部 Top-K 候选
+  ├─ matches
+  │    = 全部候选的检索审计记录，通过与否保存在 accepted 字段
+  └─ accepted_pairs
+       = 只保留通过全部 gate 的候选，并按 relevance_score 降序排列
+       ├─ citations = accepted_pairs[:3] 转换得到
+       ├─ offline answer = 前两条 citation.quote
+       └─ live context = 按顺序加入 accepted_pairs，受最大字符数限制
+```
+
+因此每条 `Citation` 一定来自 `accepted_pairs`，但两者数量不保证相同：
+`citations` 最多取前三条。`Citation.quote` 是从对应 `Document.page_content`
+中截取的相关窗口，不是完整正文；`matches.content_preview` 则是候选正文的
+开头预览，两者用途不同。
+
+这里与目录 3 的严格 citation 契约存在差异。目录 3 使用同一份
+`accepted Documents` 同时构建 context 和 citations：
+
+```text
+context document IDs == citation document IDs == accepted document IDs
+```
+
+目录 4 当前则分别处理：
+
+```text
+citation document IDs = accepted_pairs 的前三条
+live context IDs       = accepted_pairs 中受 max_context_chars 限制的前缀
+offline answer IDs     = citation 的前两条
+```
+
+所以它只能保证这些数据都来源于 `accepted_pairs`，不能保证三组 ID 严格相等。
+当 accepted 候选超过三条或 context 被字符上限截断时，模型可能看到没有 citation
+的文档；反过来，某条 citation 对应的正文也可能没有完整进入 live context。
+若要求严格一致，应先确定实际使用的 `used_pairs`，再从同一份 `used_pairs`
+同时构建 context、answer 和 citations。
+
+实际生产系统不一定要求“所有 context 文档都必须各返回一条 citation”。更常见的
+契约是：
+
+```text
+citation document IDs ⊆ 实际进入模型的 context document IDs
+答案中的被引用片段 → 明确关联到其中一个或多个 citation document IDs
+```
+
+context 可以包含模型最终没有采用的候选，因此 citation 可以是 context 的子集；
+但 citation 不能指向没有进入实际上下文的来源，答案若使用某份上下文证据也不应
+缺少相应引用。目录 3 使用集合完全相等，是在没有“答案片段 → chunk ID”结构化
+输出和引用校验时最简单、安全的教学实现。目录 4 当前仍由
+`StrOutputParser()` 只返回普通字符串，无法确认模型实际使用了哪些 chunk，因此
+现阶段继续采用同一份 `used_pairs` 构建 context 和 citations 更可靠；以后若改成
+结构化引用输出并校验 chunk ID，citations 才适合成为 context 的受验证子集。
+
+#### 为什么推荐模型返回 `cited_chunk_ids`
+
+给模型的每段最终上下文应带有稳定 ID：
+
+```text
+[chunk_id=chunk-a source=rag.md]
+第一段证据……
+
+[chunk_id=chunk-b source=runtime.md]
+第二段证据……
+```
+
+模型只返回答案文本时：
+
+```python
+answer: str
+```
+
+程序只能知道哪些 chunk 进入过 Prompt，不能知道模型实际采用了哪些 chunk。推荐让
+模型返回受约束的结构：
+
+```python
+class GroundedAnswer(BaseModel):
+    answer: str
+    cited_chunk_ids: list[str]
+```
+
+例如：
+
+```python
+GroundedAnswer(
+    answer="Chroma 数据保存在 runtime/chroma。",
+    cited_chunk_ids=["chunk-b"],
+)
+```
+
+程序必须把模型返回的 ID 当作待校验数据，而不是直接信任：
+
+```python
+context_by_id = {
+    evidence.chunk_id: evidence
+    for evidence in used_evidence
+}
+
+unknown_ids = set(result.cited_chunk_ids).difference(context_by_id)
+if unknown_ids:
+    raise ValueError("模型返回了不在本次 context 中的 chunk_id")
+
+citations = [
+    build_citation(context_by_id[chunk_id])
+    for chunk_id in result.cited_chunk_ids
+]
+```
+
+这样设计有三个原因：
+
+1. 模型只负责声明“答案使用了哪些证据 ID”，不能自由编造 `source`、`quote` 和分数。
+2. 程序能验证 `cited_chunk_ids` 是实际 context IDs 的子集，阻止引用越界。
+3. Citation 仍由本地可信的 `Document.metadata` 和实际进入 Prompt 的文本构建。
+
+`answer + cited_chunk_ids` 提供的是答案级来源映射。如果还需要精确到每句话，应让
+模型返回 `claims`，每个 claim 分别包含正文和 `cited_chunk_ids`，或返回答案文本
+区间与 chunk ID 的映射，再逐项校验引用内容是否真的支持该 claim。
+
+#### `evaluate.py`：黄金集评测与增量索引回归
+
+目录 4 的 `evaluate.py` 是直接调用真实 `KnowledgeBaseService`、Chroma 和文件系统
+的集成回归脚本，不是只测试单个函数的单元测试：
+
+```text
+读取 golden_cases.json
+  ↓
+创建 TemporaryDirectory
+  ↓
+复制 data/source 到临时 source
+  ↓
+根据 --mode 选择 offline/live，创建独立临时 runtime
+  ↓
+完整 reindex
+  ↓
+逐条 service.ask() 检查 20 条黄金样本
+  ↓
+修改临时 service_operations.md → reindex → 验证新内容可检索
+  ↓
+删除该临时文件 → reindex → 验证 manifest 已清理
+  ↓
+离开 with，自动删除整个临时目录
+  ↓
+写 evaluation.json；成功退出 0，失败退出 1
+```
+
+默认参数是 `--embedding local --mode live`：本机 MiniLM 负责建库和查询向量，
+通过 answerability gate 的问题会调用在线聊天模型生成答案；无答案问题仍在生成前
+拒答。CI 显式使用 `--embedding hash --mode offline`，保持确定性且不需要 API Key。
+
+每条黄金样本可以检查：
+
+- `answerable` 是否符合预期；
+- citations 是否包含全部 `expected_sources`；
+- 拒答时 citations 是否为空；
+- citations 是否命中 `forbidden_sources`；
+- 离线摘录答案是否包含全部 `expected_terms`。
+
+其中 `expected_sources.issubset(citations)` 只要求正确来源出现在 citations 中，允许
+额外来源。若要严格拦截错误引用，需要在黄金样本中填写 `forbidden_sources`，或者
+改为校验 citation 集合完全相等；当前 20 条样本尚未使用 `forbidden_sources`。
+live 模式会真实触发模型生成。由于正确回答可能把 `manifest` 改写成“清单”或把
+`request_id` 改写成“请求 ID”，不能继续把“答案逐字包含术语”当作硬条件。当前规则
+是：指定术语必须存在于实际 citation 证据中，answer 必须非空；answer 没有逐字复述
+术语时只记录 warning。offline 模式仍对确定性摘录执行逐字硬断言。这仍不等于完成
+生成答案的语义正确性或忠实性评测。脚本也不验证答案句子到 citation 的映射、HTTP
+路由或并发锁；API 端到端行为由 `scripts/smoke.py` 负责另一层验证。
 
 ## 9. Multi Query 与 RRF
 

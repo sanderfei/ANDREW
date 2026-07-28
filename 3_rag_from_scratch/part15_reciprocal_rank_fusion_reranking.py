@@ -69,6 +69,8 @@ def reciprocal_rank_fusion(
     ]
 
 # RRF（Reciprocal Rank Fusion，倒数排名融合）算法
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# .venv/bin/python 3_rag_from_scratch/part15_reciprocal_rank_fusion_reranking.py --live --embedding local
 def main() -> None:
     options = parse_runtime_options("RAG From Scratch Part 15：RRF Re-ranking")
     if options.use_web_source:

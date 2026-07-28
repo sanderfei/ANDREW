@@ -96,14 +96,18 @@ Live 模式仍使用固定两步链 `retrieval -> context -> prompt -> model -> 
 ```bash
 .venv/bin/python 4_rag_knowledge_base_service/scripts/smoke.py
 
-# 验证本机默认 MiniLM（推荐学习时运行）
-.venv/bin/python 4_rag_knowledge_base_service/evaluate.py --embedding local
+# 本地 MiniLM 检索 + 在线聊天模型回答（默认组合，推荐学习时运行）
+.venv/bin/python 4_rag_knowledge_base_service/evaluate.py \
+  --embedding local \
+  --mode live
 
-# 无需下载模型的确定性 Hash 回归（CI 使用）
-.venv/bin/python 4_rag_knowledge_base_service/evaluate.py --embedding hash
+# 无需下载模型或调用聊天模型的确定性 Hash 回归（CI 使用）
+.venv/bin/python 4_rag_knowledge_base_service/evaluate.py \
+  --embedding hash \
+  --mode offline
 ```
 
-`data/eval/golden_cases.json` 有 20 条离线黄金样本，覆盖命中、相近问法、拒答、引用、本机模型配置和服务运维知识；`evaluate.py` 还会在临时目录验证文档更新和删除的增量回归。报告默认写入被忽略的 `reports/evaluation.json`。
+`data/eval/golden_cases.json` 有 20 条黄金样本，覆盖命中、相近问法、拒答、引用、本机模型配置和服务运维知识。默认 `local + live`：索引与查询使用本机 MiniLM，通过 gate 的问题调用聊天模型生成答案；无答案问题仍在生成前拒答。CI 显式使用 `hash + offline`，避免模型下载和外部请求。`evaluate.py` 还会在临时目录验证文档更新和删除的增量回归，报告默认写入被忽略的 `reports/evaluation.json`。
 
 ## Docker
 

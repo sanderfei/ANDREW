@@ -49,6 +49,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# 增量建索引：
+# .venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local reindex
+# 完整重建索引：
+# .venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local reindex --reset
+# 检索并调用在线模型回答：
+# .venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local ask "知识库使用什么向量模型？" --top-k 4
+# 查看索引状态：
+# .venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local health
+# 启动 FastAPI 服务：
+# .venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local serve --host 0.0.0.0 --port 8000
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     settings = Settings.from_env(mode=args.mode, embedding_mode=args.embedding)

@@ -70,6 +70,9 @@ except ImportError:  # pragma: no cover - 仅 direct-script 入口会走到这�
 # 交给模型回答
 #    ↓
 # 得到字符串答案
+#
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# .venv/bin/python 3_rag_from_scratch/part1_overview.py --live --embedding local
 def main() -> None:
     options = parse_runtime_options("RAG From Scratch Part 1：完整最小 RAG")
 

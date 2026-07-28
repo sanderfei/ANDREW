@@ -155,6 +155,8 @@ def unique_union(document_lists: list[list[Document]]) -> list[Document]:
 # context: str 第二次调用 Chat Model
 #   ↓ Prompt → Model → StrOutputParser
 # answer: str
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# .venv/bin/python 3_rag_from_scratch/part5_multi_query.py --live --embedding local
 def main() -> None:
     options = parse_runtime_options("RAG From Scratch Part 5：Multi Query")
     if options.use_web_source:

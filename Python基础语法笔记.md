@@ -1,8 +1,10 @@
 # Python 基础语法笔记
 
-这份笔记汇总在 `andrew` 项目当前会话和其他历史会话中问过的 Python 基础语法问题。重复问题已经合并，示例优先使用项目里的真实代码。
+这份笔记汇总已经学习过的 Python 基础语法问题。重复问题已经合并，示例使用简化的
+通用代码。
 
-涉及 LangChain 专有 API 的内容放在根目录的 `LangChain基础语法笔记.md`；本文件重点解释这些代码背后的 Python 语法、类型和执行规则。
+涉及 LangChain 专有 API 的内容放在根目录的 `LangChain基础语法笔记.md`；本文件只记录
+通用 Python 语法、类型和执行规则，不记录某个项目函数的完整业务逻辑。
 
 ## 阅读导航
 
@@ -16,49 +18,43 @@
 | 默认参数、`*`、`*args`、`**kwargs`、`**config` | 第 7 节 |
 | `argparse`、`action="store_true"`、`choices`、`default` | 第 7 节 |
 | 三元条件表达式、`isinstance`、`hasattr`、`getattr` | 第 9 节 |
-| `__init__`、`self`、`_embed`、`@dataclass`、`@classmethod`、`default_factory` | 第 10 节 |
-| `import`、包层级、`deps["Document"]` | 第 11 节 |
+| `__init__`、`self`、属性、`@property`、`@dataclass`、`@classmethod`、`default_factory` | 第 10 节 |
+| `import`、包层级、类或函数作为字典的值 | 第 11 节 |
 | `Path`、`__file__`、路径 `/` 拼接 | 第 12 节 |
 | `splitlines()`、`casefold()`、`re.sub()` | 第 5 节 |
 | `async`、`await`、`gather`、`yield`、`async for`、同步/异步方法边界 | 第 13 节 |
-| `with`、`@contextmanager`、回调注册、属性赋值 | 第 14 节 |
+| `with`、`@contextmanager`、回调注册 | 第 14 节 |
 | 终端与 Python REPL 为什么不能混用 | 第 15 节 |
 | Python 字典与 JSON 的区别 | 第 16 节 |
 
-## 1. `Iterable[Document]` 是什么
-
-项目代码位置：`3_rag_from_scratch/_common.py`。
+## 1. `Iterable[T]` 是什么
 
 ```python
-def split_documents(
-    documents: Iterable[Document],
-    *,
-    chunk_size: int = 300,
-    chunk_overlap: int = 50,
-) -> list[Document]:
-    return splitter.split_documents(list(documents))
+def collect(values: Iterable[str]) -> list[str]:
+    return list(values)
 ```
 
 ### 1.1 怎么读
 
 ```python
-documents: Iterable[Document]
+values: Iterable[str]
 ```
 
 读作：
 
-> 参数 `documents` 接受一个可迭代对象，遍历它时，每次应该得到一个 `Document` 对象。
+> 参数 `values` 接受一个可迭代对象，遍历它时，每次应该得到一个字符串。
 
 这里各部分的含义是：
 
 | 代码 | 含义 |
 | --- | --- |
-| `documents` | 参数名 |
+| `values` | 参数名 |
 | `:` | 后面是类型标注 |
 | `Iterable` | 可迭代对象类型 |
-| `[Document]` | 迭代时产生的元素应该是 `Document` |
+| `[str]` | 迭代时产生的元素应该是字符串 |
 
-`Iterable` 不是 Python 关键字，也不是元组，更不是某一种固定的数据结构。它是一个用于类型标注的可迭代类型，表示“这个对象能够被遍历”。本项目从 `typing` 导入：
+`Iterable` 不是 Python 关键字，也不是某一种固定的数据结构。它是用于类型标注的
+可迭代类型，表示“这个对象能够被遍历”：
 
 ```python
 from typing import Iterable
@@ -66,34 +62,34 @@ from typing import Iterable
 
 在其他代码中也经常会看到 `from collections.abc import Iterable`。
 
-### 1.2 哪些对象属于 `Iterable[Document]`
+### 1.2 哪些对象属于 `Iterable[str]`
 
-只要对象能够被 `for` 遍历，并且其中的元素是 `Document`，就可以传给这个参数，例如：
+只要对象能够被 `for` 遍历，并且其中的元素是字符串，就可以传给这个参数：
 
 ```python
 # 列表
-documents = [doc1, doc2]
+values = ["a", "b"]
 
 # 元组
-documents = (doc1, doc2)
+values = ("a", "b")
 
 # 生成器
-documents = (doc for doc in source_documents)
+values = (value for value in ["a", "b"])
 ```
 
 它们都可以这样遍历：
 
 ```python
-for document in documents:
-    print(document)
+for value in values:
+    print(value)
 ```
 
 关系可以简单理解为：
 
 ```text
-Iterable[Document]（能逐个遍历出 Document）
-├── list[Document]
-├── tuple[Document, ...]
+Iterable[str]（能逐个遍历出 str）
+├── list[str]
+├── tuple[str, ...]
 ├── generator
 └── 其他实现了可迭代协议的对象
 ```
@@ -102,9 +98,9 @@ Iterable[Document]（能逐个遍历出 Document）
 
 | 类型 | 保证能遍历 | 保证有顺序 | 保证支持索引 | 是否是具体容器 |
 | --- | --- | --- | --- | --- |
-| `Iterable[Document]` | 是 | 否 | 否 | 否，是一种能力约束 |
-| `Sequence[Document]` | 是 | 是 | 是 | 否，是一种更严格的能力约束 |
-| `tuple[Document, ...]` | 是 | 是 | 是 | 是，明确要求元组 |
+| `Iterable[str]` | 是 | 否 | 否 | 否，是一种能力约束 |
+| `Sequence[str]` | 是 | 是 | 是 | 否，是一种更严格的能力约束 |
+| `tuple[str, ...]` | 是 | 是 | 是 | 是，明确要求元组 |
 
 常见关系：
 
@@ -121,20 +117,20 @@ set             属于 Iterable，但不是 Sequence，因为不按位置索引
 dict            虽然保留插入顺序，但按 key 而不是按位置索引，所以不是 Sequence
 ```
 
-因此，参数标注为 `Iterable[Document]` 时，函数内部不能直接假定下面的操作一定可用：
+因此，参数标注为 `Iterable[str]` 时，函数内部不能直接假定下面的操作一定可用：
 
 ```python
-documents[0]  # 不一定支持索引
-len(documents)  # 不一定支持获取长度
+values[0]    # 不一定支持索引
+len(values)  # 不一定支持获取长度
 ```
 
-项目中先执行了：
+可以先转换成列表：
 
 ```python
-list(documents)
+items = list(values)
 ```
 
-这一步会把列表、元组或生成器等可迭代对象统一转换成列表，再交给文本切分器处理。
+这会把列表、元组或生成器等可迭代对象统一转换成列表。
 
 可以用操作能力快速记忆：
 
@@ -161,51 +157,19 @@ items = ["a", "b"]
 items[0] = "A"   # 可以，list 可修改
 ```
 
-当前索引代码形成了一个直接对照：
-
-```python
-def _delete_ids(self, store, ids: Iterable[str]) -> int:
-    ids_list = list(ids)
-```
-
-`_delete_ids()` 对传入的 `ids` 只要求能够遍历，所以列表、元组、生成器都可以；进入
-函数后再统一转换为列表。
-
-```python
-def _batched(values: list[str] | list[Document], size: int = 100):
-    for start in range(0, len(values), size):
-        yield values[start : start + size]
-```
-
-`_batched()` 需要 `len(values)` 和列表切片，因此不能只根据 `Iterable` 的最低能力来
-编写。概念上，它要求的是“有长度并且支持按位置切片”的 Sequence 能力；当前代码把
-参数进一步限制成了具体的 `list`。
-
-### 1.4 返回值 `-> list[Document]`
+### 1.4 返回值 `-> list[str]`
 
 函数定义中的：
 
 ```python
-) -> list[Document]:
+) -> list[str]:
 ```
 
-表示该函数的返回值是一个列表，列表中的每一项都是 `Document`。
+表示该函数的返回值是一个列表，列表中的每一项都是字符串。
 
 类型标注主要用于帮助阅读代码、编辑器提示和静态类型检查。Python 通常不会仅仅因为写了类型标注，就在运行时自动检查传入对象的类型。
 
 ## 2. `zip()` 是什么
-
-项目代码位置：`3_rag_from_scratch/part5_multi_query.py`。
-
-```python
-"per_query_retrieval": [
-    {
-        "query": query,
-        "documents": compact_documents(retrieved),
-    }
-    for query, retrieved in zip(queries, per_query_documents)
-],
-```
 
 ### 2.1 `zip()` 的作用
 
@@ -214,48 +178,44 @@ def _batched(values: list[str] | list[Document], size: int = 100):
 假设数据是：
 
 ```python
-queries = ["问题1", "问题2"]
-
-per_query_documents = [
-    [doc1, doc2],
-    [doc3],
-]
+names = ["Alice", "Bob"]
+scores = [90, 85]
 ```
 
 执行：
 
 ```python
-zip(queries, per_query_documents)
+zip(names, scores)
 ```
 
 遍历时会依次产生两个二元组：
 
 ```python
-("问题1", [doc1, doc2])
-("问题2", [doc3])
+("Alice", 90)
+("Bob", 85)
 ```
 
 注意，`zip()` 返回的是一个可迭代的 `zip` 对象。为了直接查看全部内容，可以先转成列表：
 
 ```python
-pairs = list(zip(queries, per_query_documents))
+pairs = list(zip(names, scores))
 ```
 
 结果为：
 
 ```python
 [
-    ("问题1", [doc1, doc2]),
-    ("问题2", [doc3]),
+    ("Alice", 90),
+    ("Bob", 85),
 ]
 ```
 
-### 2.2 `for query, retrieved` 是元组拆包
+### 2.2 `for name, score` 是元组拆包
 
 下面这段代码：
 
 ```python
-for query, retrieved in zip(queries, per_query_documents)
+for name, score in zip(names, scores)
 ```
 
 每次先从 `zip()` 得到一个二元组，然后自动拆给两个变量。
@@ -263,26 +223,24 @@ for query, retrieved in zip(queries, per_query_documents)
 第一次循环相当于：
 
 ```python
-query, retrieved = ("问题1", [doc1, doc2])
+name, score = ("Alice", 90)
 
 # 拆包之后：
-query = "问题1"
-retrieved = [doc1, doc2]
+name = "Alice"
+score = 90
 ```
-
-这里的 `retrieved` 不是一个 `Document`，而是当前查询检索到的一组 `Document`。
 
 ### 2.3 完整列表推导式怎么执行
 
-原代码是一个列表推导式：
+下面是一个列表推导式：
 
 ```python
 result = [
     {
-        "query": query,
-        "documents": compact_documents(retrieved),
+        "name": name,
+        "score": score,
     }
-    for query, retrieved in zip(queries, per_query_documents)
+    for name, score in zip(names, scores)
 ]
 ```
 
@@ -291,10 +249,10 @@ result = [
 ```python
 result = []
 
-for query, retrieved in zip(queries, per_query_documents):
+for name, score in zip(names, scores):
     item = {
-        "query": query,
-        "documents": compact_documents(retrieved),
+        "name": name,
+        "score": score,
     }
     result.append(item)
 ```
@@ -304,48 +262,42 @@ for query, retrieved in zip(queries, per_query_documents):
 ```python
 [
     {
-        "query": "问题1",
-        "documents": [...],
+        "name": "Alice",
+        "score": 90,
     },
     {
-        "query": "问题2",
-        "documents": [...],
+        "name": "Bob",
+        "score": 85,
     },
 ]
 ```
 
-所以这段代码的目的确实是：
-
-1. 将每个查询和它对应的检索结果一一配对。
-2. 把每一对数据整理成一个字典。
-3. 把所有字典收集到列表中，方便作为接口结果的一部分返回。
-
-不过，此时得到的仍然是 Python 的 `dict` 和 `list`，还不是 JSON 字符串。后续经过 Web 框架的响应序列化，或者调用 `json.dumps()`，才会变成 JSON。
+执行顺序是：先按位置配对，再拆包，把每一对值转换成字典，最后收集成列表。
 
 ### 2.4 两边长度不同时会怎样
 
 普通 `zip()` 不要求两边长度相同，它会在较短的一边结束时停止：
 
 ```python
-queries = ["问题1", "问题2"]
-per_query_documents = [[doc1]]
+names = ["Alice", "Bob"]
+scores = [90]
 
-result = list(zip(queries, per_query_documents))
+result = list(zip(names, scores))
 print(result)
 ```
 
 结果只有一组：
 
 ```python
-[("问题1", [doc1])]
+[("Alice", 90)]
 ```
 
-`"问题2"` 会被静默忽略。
+`"Bob"` 会被静默忽略。
 
-如果业务逻辑要求两个列表必须严格一一对应，可以写成：
+如果要求两个列表长度必须相同，可以写成：
 
 ```python
-zip(queries, per_query_documents, strict=True)
+zip(names, scores, strict=True)
 ```
 
 长度不一致时，Python 会抛出 `ValueError`，这样更容易发现数据对应关系出了问题。
@@ -354,7 +306,7 @@ zip(queries, per_query_documents, strict=True)
 
 ### 3.1 `变量: 类型 = 值` 要分成三部分看
 
-项目代码：
+示例：
 
 ```python
 experiments: list[dict[str, object]] = []
@@ -373,7 +325,7 @@ experiments                 变量名
 ```python
 experiments.append(
     {
-        "chunk_size": 80,
+        "width": 80,
         "score": 0.71,
     }
 )
@@ -433,7 +385,7 @@ isinstance("hello", object)  # True
 
 ### 3.3 `tuple[str, bytes]` 不是字典
 
-项目代码：
+示例：
 
 ```python
 def pandas_skill_file() -> tuple[str, bytes]:
@@ -451,40 +403,38 @@ def pandas_skill_file() -> tuple[str, bytes]:
 result = ("SKILL.md", b"file content")
 ```
 
-元组可以包含不同类型的元素。下面的检索结果标注也是同一个道理：
+元组可以包含不同类型的元素。例如：
 
 ```python
-list[tuple[Document, float]]
+list[tuple[str, float]]
 ```
 
 它表示外层是列表，列表中的每一项都是：
 
 ```python
-(document对象, 分数)
+(字符串, 浮点数)
 ```
 
 两种常见元组标注：
 
 ```python
 tuple[str, bytes]       # 固定两个位置，并分别指定类型
-tuple[Document, ...]    # 任意多个 Document
+tuple[str, ...]         # 任意多个字符串
 ```
 
-### 3.4 `Embeddings | None = None` 要分成两段
-
-项目代码：
+### 3.4 `Model | None = None` 要分成两段
 
 ```python
-embeddings: Embeddings | None = None
+model: Model | None = None
 ```
 
 第一段是类型：
 
 ```python
-Embeddings | None
+Model | None
 ```
 
-表示参数既可以是 `Embeddings` 对象，也可以是 `None`。`|` 在类型标注中表示联合类型。
+表示参数既可以是 `Model` 对象，也可以是 `None`。`|` 在类型标注中表示联合类型。
 
 第二段是默认值：
 
@@ -495,9 +445,9 @@ Embeddings | None
 表示调用函数时可以省略这个参数，省略后它的值就是 `None`：
 
 ```python
-build_vector_store(documents)                  # 使用默认值 None
-build_vector_store(documents, embeddings=None) # 显式传 None
-build_vector_store(documents, embeddings=model)
+build_service()            # 使用默认值 None
+build_service(model=None)  # 显式传 None
+build_service(model=model)
 ```
 
 下面的写法同理：
@@ -509,8 +459,6 @@ text: str | None = None
 表示 `text` 可以是字符串，也可以为空值 `None`，并且默认是 `None`。
 
 ### 3.5 `Literal[...]` 是固定值类型
-
-项目中见过：
 
 ```python
 response_format: Literal["content", "content_and_artifact"]
@@ -534,13 +482,13 @@ from typing import Literal
 ### 3.6 类型标注不会自动创建对象
 
 ```python
-documents: list[Document]
+items: list[str]
 ```
 
 这一行只声明类型，并没有创建列表。真正创建空列表需要：
 
 ```python
-documents: list[Document] = []
+items: list[str] = []
 ```
 
 同样，函数的入参类型和返回类型只是约定：
@@ -554,88 +502,27 @@ def build_model(model_class: type) -> object:
 
 ### 3.7 多个函数参数要分别读取各自的类型标注
 
-`4_rag_knowledge_base_service/indexer.py`：
-
 ```python
-def _delete_ids(self, store, ids: Iterable[str]) -> int:
-    ids_list = list(ids)
-    for batch in self._batched(ids_list):
-        store.delete(ids=batch)
-    return len(ids_list)
+def combine(prefix, values: Iterable[str]) -> str:
+    return prefix + ",".join(values)
 ```
 
-函数参数之间使用逗号分隔，每个参数的类型标注只属于它自己：
+参数之间使用逗号分隔，每个类型标注只属于紧靠它左侧的参数：
 
 ```text
-self                 第 1 个参数，没有显式类型标注
-store                第 2 个参数，没有显式类型标注
-ids: Iterable[str]   第 3 个参数，标注为 Iterable[str]
--> int               函数返回值标注为 int
+prefix                  没有显式类型标注
+values: Iterable[str]   遍历时应当产生 str
+-> str                  返回值应当是 str
 ```
 
-所以 `store` 和 `ids` 不是同一种类型，`ids` 后面的 `: Iterable[str]` 不会向左作用到
-`store`。下面这个简单例子也是同样的规则：
+`values` 后面的标注不会向左作用到 `prefix`。列表、元组和产生字符串的生成器都可以
+满足 `Iterable[str]`：
 
 ```python
-def example(left, right: str) -> int:
-    ...
+["a", "b"]
+("a", "b")
+(value for value in ["a", "b"])
 ```
-
-它只表示 `right` 应该是 `str`；`left` 没有类型标注。
-
-沿着项目真实调用位置看：
-
-```python
-store = self._store()
-deleted_chunks = self._delete_ids(store, delete_ids)
-```
-
-两者的实际形态是：
-
-| 参数 | 当前项目传入的对象 |
-| --- | --- |
-| `store` | `_store()` 创建或连接的 `langchain_chroma.Chroma` 对象 |
-| `ids` | `delete_ids`，当前是 `list[str]` |
-
-`Iterable[str]` 是能力约束，不是一种与 `Chroma` 相同的实际容器。它表示遍历 `ids`
-时，每次应当得到一个字符串：
-
-```python
-for chunk_id in ids:
-    print(chunk_id)  # chunk_id 应当是 str
-```
-
-因此列表、元组和生成器都可以满足这个参数约定：
-
-```python
-["id-1", "id-2"]                 # list[str]
-("id-1", "id-2")                 # tuple[str, str]
-(value for value in ["id-1"])    # 产生 str 的生成器
-```
-
-函数内部先统一转换：
-
-```python
-ids_list = list(ids)
-```
-
-得到 `list[str]`，随后 `_batched()` 每次产生一小批 ID，最终调用的是 Chroma 对象的：
-
-```python
-store.delete(ids=batch)
-```
-
-这里还要区分两个完全不同的 `ids`：
-
-```text
-_delete_ids(..., ids=某个可迭代对象)
-                   ↑ 函数参数名
-
-store.delete(ids=batch)
-             ↑ Chroma.delete() 的关键字参数名
-```
-
-它们名字相同是因为都表达“文档 ID”，但处在两个不同函数调用层级。
 
 ### 3.8 参数可以不标注类型，但对象的运行时类型并没有隐藏
 
@@ -689,17 +576,13 @@ show([])       # <class 'list'>
 
 #### Python 根据实际操作判断对象能不能用
 
-项目方法：
-
 ```python
-def _delete_ids(self, store, ids: Iterable[str]) -> int:
-    ...
-    store.delete(ids=batch)
+def save(writer, text):
+    writer.write(text)
 ```
 
-虽然 `store` 没有标注为 `Chroma`，但代码要求它在运行时至少提供可调用的
-`.delete(ids=...)` 方法。只要对象提供所需能力，这行代码就能继续执行，这种风格通常
-称为“鸭子类型”：
+虽然 `writer` 没有类型标注，但运行时要求它提供可调用的 `.write(...)` 方法。只要对象
+提供所需能力，代码就可以工作，这种风格通常称为“鸭子类型”：
 
 ```text
 不先检查它名义上属于哪个类
@@ -712,74 +595,52 @@ def _delete_ids(self, store, ids: Iterable[str]) -> int:
 如果错误地传入整数：
 
 ```python
-self._delete_ids(123, ["id-1"])
+save(123, "hello")
 ```
 
 函数调用时不会因为缺少类型标注而立即拦截，但运行到：
 
 ```python
-store.delete(ids=batch)
+writer.write(text)
 ```
 
-就会抛出 `AttributeError`，因为 `int` 没有 `.delete()` 方法。
-
-如果 `ids` 传入不可迭代的整数：
-
-```python
-self._delete_ids(store, 123)
-```
-
-即使源代码标注了 `ids: Iterable[str]`，普通 Python 默认也不会在进入函数时自动校验；
-运行到 `list(ids)` 时才会因为整数不可迭代而抛出 `TypeError`。
+就会抛出 `AttributeError`，因为 `int` 没有 `.write()` 方法。
 
 #### 无标注、`Any` 和明确标注的区别
 
 ```python
-def first(store):            # 没写明预期类型
+def first(value):            # 没写明预期类型
     ...
 
-def second(store: Any):      # 明确告诉类型检查器跳过严格检查
+def second(value: Any):      # 明确告诉类型检查器跳过严格检查
     ...
 
-def third(store: Chroma):    # 明确说明预期是 Chroma
+def third(value: str):       # 明确说明预期是 str
     ...
 ```
 
 | 写法 | 代码表达的意思 | Python 是否自动运行时校验 |
 | --- | --- | --- |
-| `store` | 没有提供类型信息 | 否 |
-| `store: Any` | 明确放弃该值的大部分静态检查 | 否 |
-| `store: Chroma` | 预期传入 `Chroma`，便于阅读和静态检查 | 默认仍然不校验 |
+| `value` | 没有提供类型信息 | 否 |
+| `value: Any` | 明确放弃该值的大部分静态检查 | 否 |
+| `value: str` | 预期传入字符串，便于阅读和静态检查 | 默认仍然不校验 |
 
 因此，类型标注主要改善编辑器补全、静态检查和代码可读性，而不是让 Python 参数
 获得一个强制的固定类型。
 
 #### 语法允许省略，不代表所有框架场景都适合省略
 
-普通内部辅助函数可以不写标注，但有些框架会主动读取标注，例如 FastAPI、Pydantic
-可能使用它们进行请求解析、数据校验或接口文档生成。在这类位置省略标注，可能改变
-框架行为。
-
-当前 `_delete_ids()` 是普通内部辅助方法，`store` 的实际对象来源又可以沿着：
-
-```python
-store = self._store()
-```
-
-推断为 Chroma，所以省略标注不会阻止代码运行，只是让编辑器和读代码的人少了一条
-直接的类型信息。
+普通函数可以不写标注，但有些框架会主动读取标注并用于数据校验或接口文档生成。
+因此，语法上允许省略，不代表所有框架场景下省略后的行为都相同。
 
 ## 4. 列表、字典、元组、集合、索引和属性
 
 ### 4.1 Python 的 `dict` 相当于其他语言里的 Map
 
-历史代码中见过：
-
 ```python
 return {
-    "ContactInfo": ContactInfo,
-    "ProductReview": ProductReview,
-    "SupportTicket": SupportTicket,
+    "Parser": Parser,
+    "Writer": Writer,
 }
 ```
 
@@ -787,14 +648,14 @@ return {
 
 ```text
 key                 value
-"ContactInfo"  ->  ContactInfo 类对象
-"ProductReview" -> ProductReview 类对象
+"Parser"  ->  Parser 类对象
+"Writer"  ->  Writer 类对象
 ```
 
 读取字典：
 
 ```python
-ContactInfo = deps["ContactInfo"]
+Parser = dependencies["Parser"]
 ```
 
 这里不是创建类，而是从字典中取出之前保存的类对象，再赋给变量。
@@ -804,7 +665,7 @@ ContactInfo = deps["ContactInfo"]
 ```python
 config = {
     "configurable": {
-        "thread_id": "l6-agent-memory-demo",
+        "session_id": "demo-1",
     }
 }
 ```
@@ -812,7 +673,7 @@ config = {
 读取内层值：
 
 ```python
-thread_id = config["configurable"]["thread_id"]
+session_id = config["configurable"]["session_id"]
 ```
 
 `parameters`、`type`、`properties` 等字典 key 对 Python 本身没有特殊含义：
@@ -824,49 +685,49 @@ schema = {
 }
 ```
 
-它们是否必须出现，由 JSON Schema、接口协议或业务代码规定，而不是由 Python 的字典语法规定。
+它们是否必须出现，由使用这份字典的代码约定，而不是由 Python 的字典语法规定。
 
 ### 4.2 中括号可能表示列表，也可能表示取值
 
 创建列表：
 
 ```python
-middleware = [FilesystemMiddleware(backend=backend)]
+items = [object()]
 ```
 
 即使只有一个元素，也需要中括号才能表示“这是一个列表”：
 
 ```python
-one_object = FilesystemMiddleware(backend=backend)
-one_item_list = [FilesystemMiddleware(backend=backend)]
+one_object = object()
+one_item_list = [object()]
 ```
 
 在已有对象后使用中括号，则通常表示索引、切片或按 key 取值：
 
 ```python
-docs[0]              # 列表的第一个元素
+items[0]             # 列表的第一个元素
 messages[-1]         # 列表的最后一个元素
-deps["Document"]     # 字典中 key 为 Document 的值
+mapping["name"]      # 按字典 key 取值
 text[:10000]         # 字符串切片
 ```
 
-### 4.3 `docs[0].page_content` 分两步执行
+### 4.3 `objects[0].attribute` 分两步执行
 
 ```python
-return docs[0].page_content
+return users[0].name
 ```
 
 执行顺序：
 
 ```python
-first_document = docs[0]
-content = first_document.page_content
-return content
+first_user = users[0]
+name = first_user.name
+return name
 ```
 
-- `[0]` 取列表第一个 `Document`。
-- `.page_content` 读取这个对象的属性。
-- 返回的是第一个 `Document` 的全部正文字符串。
+- `[0]` 取列表第一个对象。
+- `.name` 读取这个对象的属性。
+- 最终返回属性值。
 
 ### 4.4 `[-1]` 表示最后一个元素
 
@@ -888,15 +749,15 @@ result["messages"][-1]
 
 ```python
 body = (
-    "Agent 是模型和工具的循环。"
-    "模型拿到工具结果后可以继续决策。"
+    "相邻的字符串字面量"
+    "会被自动拼接。"
 )
 ```
 
 结果是一个字符串：
 
 ```python
-"Agent 是模型和工具的循环。模型拿到工具结果后可以继续决策。"
+"相邻的字符串字面量会被自动拼接。"
 ```
 
 创建单元素元组必须有逗号：
@@ -1057,7 +918,8 @@ Python 的 `dict` 可以理解成：
 - 不会自动按 key 或 value 排序
 ```
 
-Python 标准库没有另外提供一个常用的 `HashMap` 或 `unordered_map` 容器。即使业务完全不关心顺序，仍然直接使用 `dict`，只是不依赖它的遍历顺序。
+Python 标准库没有另外提供一个常用的 `HashMap` 或 `unordered_map` 容器。即使调用方
+完全不关心顺序，仍然直接使用 `dict`，只是不依赖它的遍历顺序。
 
 不同语言可以粗略对照为：
 
@@ -1071,7 +933,7 @@ Python 标准库没有另外提供一个常用的 `HashMap` 或 `unordered_map` 
 如果只需要不重复的元素、不需要 value，使用 `set`：
 
 ```python
-document_keys = {"doc_a", "doc_b"}
+unique_keys = {"a", "b"}
 ```
 
 三者不要混淆：
@@ -1092,11 +954,11 @@ print(list(doubled))
 
 ### 4.9 `sorted(scores.items(), key=..., reverse=True)` 完整语法
 
-本次代码：
+示例：
 
 ```python
 return [
-    (documents_by_key[key], score)
+    (items_by_key[key], score)
     for key, score in sorted(
         scores.items(),
         key=lambda item: item[1],
@@ -1141,16 +1003,16 @@ for key, score in sorted_pairs:
     ...
 ```
 
-第五步，使用 key 找到原始文档，再组成新的二元组：
+第五步，使用 key 找到原始对象，再组成新的二元组：
 
 ```python
-(documents_by_key[key], score)
+(items_by_key[key], score)
 ```
 
 最终类型近似为：
 
 ```python
-list[tuple[Document, float]]
+list[tuple[object, float]]
 ```
 
 完整普通循环写法：
@@ -1165,8 +1027,8 @@ sorted_pairs = sorted(
 result = []
 
 for key, score in sorted_pairs:
-    document = documents_by_key[key]
-    result.append((document, score))
+    item = items_by_key[key]
+    result.append((item, score))
 
 return result
 ```
@@ -1177,14 +1039,14 @@ return result
 | --- | --- |
 | `for key, score` | 名为 `key` 的循环变量 |
 | `sorted(..., key=lambda ...)` | `sorted()` 的排序依据参数 |
-| `documents_by_key[key]` | 使用循环变量从字典取值 |
+| `items_by_key[key]` | 使用循环变量从字典取值 |
 
 Python 的排序是稳定排序。如果两个 score 相同，它们会保持进入 `sorted()` 之前的相对顺序；这里也就是字典中的插入顺序。
 
-如果 `scores` 中存在某个 key，但 `documents_by_key` 中没有该 key：
+如果 `scores` 中存在某个 key，但 `items_by_key` 中没有该 key：
 
 ```python
-documents_by_key[key]
+items_by_key[key]
 ```
 
 会抛出 `KeyError`。
@@ -1193,7 +1055,7 @@ documents_by_key[key]
 
 这三个方法都可以处理“key 可能不存在”的情况，但是否修改字典不同。
 
-Part 15 的累计分数代码：
+示例：
 
 ```python
 scores[key] = scores.get(key, 0.0) + 1.0 / (rank + k)
@@ -1216,10 +1078,10 @@ else:
 scores[key] = old_score + 1.0 / (rank + k)
 ```
 
-同一文件还使用了：
+另一个例子：
 
 ```python
-documents_by_key.setdefault(key, document)
+items_by_key.setdefault(key, item)
 ```
 
 `setdefault(key, default)` 表示：
@@ -1227,9 +1089,7 @@ documents_by_key.setdefault(key, document)
 - key 已存在：返回旧值，不覆盖它。
 - key 不存在：写入 `default`，然后返回这个默认值。
 
-这里没有接收返回值，只利用了“第一次出现时保存 Document”的副作用。
-
-`2_langchain/L3_Function_Calling_In_Langchain.py` 中还有：
+这里没有接收返回值，只利用了“key 第一次出现时保存默认值”的副作用。
 
 ```python
 description = schema.pop("description", None)
@@ -1252,18 +1112,18 @@ description = schema.pop("description", None)
 
 ### 4.11 `set`、成员判断和保序去重
 
-Part 5 使用集合记录已经见过的查询：
+集合经常与列表配合进行保序去重：
 
 ```python
 unique: list[str] = []
 seen: set[str] = set()
 
-for query in candidates:
-    normalized = query.casefold().strip()
+for value in candidates:
+    normalized = value.casefold().strip()
     if normalized in seen:
         continue
     seen.add(normalized)
-    unique.append(query.strip())
+    unique.append(value.strip())
 ```
 
 这里：
@@ -1280,52 +1140,79 @@ seen    负责快速判断是否重复
 unique  负责保存原始对象和首次出现顺序
 ```
 
-不能只把结果放进 `set` 后再期待它提供业务上的首次命中顺序。
+不能只把结果放进 `set` 后再期待它保存首次出现顺序。
 
-### 4.12 `list[list[Document]]` 与两层索引
+#### `set(字典)` 会把字典的 key 转成集合
 
-Part 5 和 Part 15 的批量检索结果标注为：
+字典直接参与遍历时默认遍历 key：
 
 ```python
-ranked_lists: list[list[Document]]
+mapping = {"a": 1, "b": 2}
+
+set(mapping)          # {"a", "b"}
+set(mapping.keys())   # {"a", "b"}，与上一行相同
+set(mapping.values()) # {1, 2}
+```
+
+`set(mapping)` 会创建新集合，不会修改原字典。
+
+#### 集合差集与 `sorted()`
+
+```python
+previous = {"a.md", "b.md"}
+current = {"b.md", "c.md"}
+
+missing = previous - current
+# {"a.md"}，类型是 set[str]
+
+ordered = sorted(missing)
+# ["a.md"]，类型是 list[str]
+```
+
+集合差集有方向：
+
+```python
+previous - current  # {"a.md"}
+current - previous  # {"c.md"}
+```
+
+`sorted()` 接收任意可迭代对象并返回一个新列表，不会修改原集合。
+
+### 4.12 `list[list[str]]` 与两层索引
+
+```python
+groups: list[list[str]]
 ```
 
 它表示：
 
-- 外层列表：每一项对应一条 query。
-- 内层列表：当前 query 按相关度排列的多个 `Document`。
+- 外层列表：包含多组数据。
+- 内层列表：每一组包含多个字符串。
 
 例如：
 
 ```python
-ranked_lists = [
-    [query1_top1, query1_top2],
-    [query2_top1, query2_top2],
+groups = [
+    ["a", "b"],
+    ["c", "d"],
 ]
 ```
 
 两层索引的含义：
 
 ```python
-ranked_lists[0]     # query1 的整组结果
-ranked_lists[0][0]  # query1 的 Top-1 Document
-ranked_lists[1][1]  # query2 的 Top-2 Document
+groups[0]     # ["a", "b"]
+groups[0][0]  # "a"
+groups[1][1]  # "d"
 ```
 
-`list[list[Document]]` 只是数据形状的类型标注，不会自动执行排序；内层为什么已经按相关度排序，是 Retriever 的行为。
+`list[list[str]]` 只是描述两层列表的数据形状，不会自动排序或修改数据。
 
 ### 4.13 `[:4]`、`[:6]` 对列表同样是切片
 
-Part 15：
-
 ```python
-queries = build_query_variants(question, use_live=options.use_live)[:4]
-```
-
-Part 5：
-
-```python
-return unique[:6]
+first_four = values[:4]
+first_six = values[:6]
 ```
 
 对列表使用 `[:N]` 会创建一个新列表，最多取得前 N 项：
@@ -1341,11 +1228,8 @@ values[:9]  # 不会报错，返回全部五项
 
 ### 4.14 `range(start, stop, step)`、列表分片与分批生成器
 
-`4_rag_knowledge_base_service/indexer.py`：
-
 ```python
-@staticmethod
-def _batched(values: list[str] | list[Document], size: int = 100):
+def batched(values: list[str], size: int = 100):
     for start in range(0, len(values), size):
         yield values[start : start + size]
 ```
@@ -1523,7 +1407,7 @@ yield values[start : start + size]
     ↓
 yield 把小列表交给调用方
     ↓
-_batched() 暂停
+batched() 暂停
     ↓
 调用方请求下一批
     ↓
@@ -1545,7 +1429,7 @@ while start < len(values):
 都创建出来：
 
 ```python
-batches = IncrementalIndexer._batched(["a", "b", "c", "d", "e"], size=2)
+batches = batched(["a", "b", "c", "d", "e"], size=2)
 
 print(type(batches))
 # <class 'generator'>
@@ -1565,9 +1449,7 @@ for batch in batches:
 如果显式收集为列表：
 
 ```python
-all_batches = list(
-    IncrementalIndexer._batched(["a", "b", "c", "d", "e"], size=2)
-)
+all_batches = list(batched(["a", "b", "c", "d", "e"], size=2))
 
 # [["a", "b"], ["c", "d"], ["e"]]
 ```
@@ -1583,49 +1465,26 @@ all_batches = list(
 
 | 表达式 | 数据形态 |
 | --- | --- |
-| `_batched(values)` | 生成器对象 |
+| `batched(values)` | 生成器对象 |
 | 每次 `yield` 的值 | 一个一维小列表 |
-| `list(_batched(values))` | 由多个小列表组成的二维列表 |
+| `list(batched(values))` | 由多个小列表组成的二维列表 |
 
-项目没有先收集成二维列表，而是直接逐批消费：
-
-```python
-for batch in self._batched(ids_list):
-    store.delete(ids=batch)
-```
-
-添加 Chroma 文档时，则分别切分 `documents` 和 `chunk_ids`，再用 `zip()` 对齐同一批：
+调用方可以不先收集成二维列表，而是直接逐批消费：
 
 ```python
-for documents, ids in zip(
-    self._batched(source.documents),
-    self._batched(source.chunk_ids),
-):
-    store.add_documents(documents=documents, ids=ids)
+for batch in batched(values):
+    consume(batch)
 ```
 
-默认 `size=100`，所以每次最多向 Chroma 提交 100 个文档及其对应的 100 个 ID；最后
-一批可以少于 100 个。
-
-`@staticmethod` 表示这个辅助方法不使用实例状态，因此参数中没有 `self`。当前代码
-始终使用正整数 100；如果把 `size` 设置成 0，`range()` 会抛出 `ValueError`。
+默认 `size=100`，因此每次最多产生 100 个元素，最后一批可以少于 100 个。
+`size` 必须是非零整数；传入 `0` 时 `range()` 会抛出 `ValueError`。
 
 ### 4.15 `set.difference()` 与不可修改的 `frozenset`
 
-当前项目中：
-
 ```python
-ANSWERABILITY_STOP_TOKENS = frozenset(
-    {
-        "知识",
-        "识库",
-        "文档",
-        "问题",
-        "什么",
-    }
-)
-
-return lexical_tokens(text).difference(ANSWERABILITY_STOP_TOKENS)
+selected = {"a", "b", "c"}
+excluded = frozenset({"a", "c"})
+result = selected.difference(excluded)
 ```
 
 #### `set.difference()` 计算集合差集
@@ -1664,8 +1523,8 @@ tokens.difference(stop_tokens)
 tokens - stop_tokens
 ```
 
-如果需要直接修改普通 `set`，对应方法是 `difference_update()`；但当前项目需要保留
-原集合，因此使用返回新集合的 `difference()`。
+如果需要直接修改普通 `set`，可以使用 `difference_update()`；`difference()` 则返回
+新集合并保留原集合。
 
 #### `frozenset` 是不可修改的集合
 
@@ -1695,9 +1554,6 @@ frozen_set.add("问题")       # 报错：frozenset 没有 add()
 frozen_set.remove("知识")    # 报错：frozenset 没有 remove()
 ```
 
-当前项目把停用词定义成 `frozenset`，表示这组模块级配置只供查询，不应该在业务运行
-过程中被意外增加或删除。
-
 返回值类型取决于调用 `difference()` 的左侧对象：
 
 ```python
@@ -1712,7 +1568,7 @@ frozenset({"a", "b"}).difference({"a"})
 
 ### 5.1 单独出现的三引号字符串可能是文档字符串
 
-历史问题中的代码：
+示例：
 
 ```python
 def get_current_weather(location):
@@ -1753,7 +1609,7 @@ value[start:stop:step]
 
 其中 `stop` 位置本身不包含在结果中。
 
-项目里还见过：
+另一个例子：
 
 ```python
 delta = content[len(seen):]
@@ -1794,7 +1650,7 @@ f"python{sys.version_info.major}.{sys.version_info.minor}"
 
 ### 5.5 `split()`、`strip()` 和 `join()`
 
-项目代码：
+示例：
 
 ```python
 parts = [
@@ -1861,33 +1717,31 @@ text.partition(separator)
 # ("name", "", "")
 ```
 
-RAG 课件使用它提取标签中间的 context：
+链式调用可以连续提取两个标记之间的内容：
 
 ```python
-context = message_text.partition("<context>")[2].partition("</context>")[0].strip()
+content = text.partition("<tag>")[2].partition("</tag>")[0].strip()
 ```
 
 分步写法：
 
 ```python
-after_opening = message_text.partition("<context>")[2]
-before_closing = after_opening.partition("</context>")[0]
-context = before_closing.strip()
+after_opening = text.partition("<tag>")[2]
+before_closing = after_opening.partition("</tag>")[0]
+content = before_closing.strip()
 ```
 
-- 第一个 `[2]` 取得 `<context>` 后面的内容。
-- 第二个 `[0]` 取得 `</context>` 前面的内容。
+- 第一个 `[2]` 取得 `<tag>` 后面的内容。
+- 第二个 `[0]` 取得 `</tag>` 前面的内容。
 - `strip()` 删除最终结果首尾的空白。
 
 与 `split(separator, 1)` 相比，`partition()` 会保留分隔符，并且无论是否找到都固定返回三个元素；`split()` 不保留分隔符，返回列表且长度可能不同。`rpartition()` 的规则相同，但从右侧最后一次出现的位置切分。分隔符不能为空字符串，否则会抛出 `ValueError`。
 
-### 5.7 `splitlines()`、`casefold()` 和 `re.sub()` 清理模型输出
-
-Part 5 会把模型生成的多行查询清理并去重：
+### 5.7 `splitlines()`、`casefold()` 和 `re.sub()`
 
 ```python
-candidates.extend(_clean_query(line) for line in text.splitlines())
-normalized = query.casefold().strip()
+lines = text.splitlines()
+normalized = value.casefold().strip()
 ```
 
 `splitlines()` 按换行边界拆分字符串：
@@ -1902,23 +1756,22 @@ normalized = query.casefold().strip()
 `casefold()` 返回适合做不区分大小写比较的新字符串：
 
 ```python
-"RAG".casefold() == "rag".casefold()  # True
+"Python".casefold() == "python".casefold()  # True
 ```
 
 它不会修改原字符串。和 `lower()` 相比，`casefold()` 对部分非英语字符的大小写归一化更彻底，因此更适合作为去重 key。
 
-清理查询编号的函数使用了正则替换：
+`re.sub()` 可以使用正则替换文本：
 
 ```python
-def _clean_query(line: str) -> str:
-    return re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
+cleaned = re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", line).strip()
 ```
 
 `re.sub(pattern, replacement, text)` 表示把匹配到的内容替换掉。这里 replacement 是空字符串，所以是在删除行首编号：
 
 ```python
-_clean_query("1. 什么是 RAG？")  # "什么是 RAG？"
-_clean_query("- 如何切块？")     # "如何切块？"
+re.sub(r"^\s*(?:[-*]|\d+[.)])\s*", "", "1. 第一项").strip()
+# "第一项"
 ```
 
 模式中的主要部分：
@@ -1936,7 +1789,7 @@ _clean_query("- 如何切块？")     # "如何切块？"
 
 ### 5.8 `re.compile()`、正则 Pattern 对象与全大写常量名
 
-项目代码：
+示例：
 
 ```python
 ASCII_TOKEN_PATTERN = re.compile(r"[a-z0-9_./-]+")
@@ -1969,14 +1822,14 @@ matches = pattern.findall("rag 2026 python")
 # ["rag", "python"]
 ```
 
-因此项目代码的执行阶段是：
+正则常量通常在模块导入时创建一次，之后重复使用：
 
 ```python
 # 模块被导入时执行一次：创建 Pattern 对象
 ASCII_TOKEN_PATTERN = re.compile(r"[a-z0-9_./-]+")
 CJK_RUN_PATTERN = re.compile(r"[\u4e00-\u9fff]+")
 
-# lexical_tokens() 每次被调用时：使用 Pattern 对象处理具体文本
+# 函数每次被调用时：使用 Pattern 对象处理具体文本
 tokens = set(ASCII_TOKEN_PATTERN.findall(normalized))
 chinese_runs = CJK_RUN_PATTERN.findall(normalized)
 ```
@@ -2013,7 +1866,7 @@ r"[a-z0-9_./-]+"
 | `-` | 连字符；放在字符集合末尾时表示普通连字符 |
 | `+` | 前面的字符集合连续出现一次或多次 |
 
-项目会先执行：
+如果匹配前先执行：
 
 ```python
 normalized = text.lower()
@@ -2036,23 +1889,17 @@ r"[\u4e00-\u9fff]+"
 例如：
 
 ```python
-text = "RAG_service/v1 用中文检索-2026！"
+text = "Python_service/v1 示例文本-2026！"
 normalized = text.lower()
 
 ASCII_TOKEN_PATTERN.findall(normalized)
-# ["rag_service/v1", "-2026"]
+# ["python_service/v1", "-2026"]
 
 CJK_RUN_PATTERN.findall(normalized)
 # ["用中文检索"]
 ```
 
-这两个模式分别提取英文/数字类词项和连续中文片段。项目随后还会把连续中文片段
-切成二字词：
-
-```python
-"用中文检索"
-→ "用中", "中文", "文检", "检索"
-```
+这两个模式分别提取英文、数字类片段和连续中文片段。
 
 变量名写成全大写：
 
@@ -2061,7 +1908,7 @@ ASCII_TOKEN_PATTERN
 CJK_RUN_PATTERN
 ```
 
-表示开发者约定“这个模块级变量定义后按常量使用，不要在业务过程中重新赋值”。
+表示开发者约定“这个模块级变量定义后按常量使用，不要重新赋值”。
 但 Python 没有真正的常量关键字，下面的代码在语法上仍然允许：
 
 ```python
@@ -2070,296 +1917,6 @@ ASCII_TOKEN_PATTERN = "changed"
 
 因此“常量”描述的是变量的使用约定；`re.Pattern` 描述的是变量当前保存的对象
 类型。
-
-### 5.9 `lexical_tokens()`：英文整段提取，中文相邻双字切分
-
-项目中的函数：
-
-```python
-def lexical_tokens(text: str) -> set[str]:
-    normalized = text.lower()
-    tokens = set(ASCII_TOKEN_PATTERN.findall(normalized))
-    for run in CJK_RUN_PATTERN.findall(normalized):
-        tokens.update(run[index : index + 2] for index in range(len(run) - 1))
-    return tokens
-```
-
-可以读作：
-
-> 接收一个字符串 `text`，先统一转成小写；提取英文、数字和路径类词项；
-> 再把每段连续中文按相邻两个字切分；用集合去重后返回。
-
-以这段文本为例：
-
-```python
-text = "RAG_service/v1 使用知识库知识"
-```
-
-每一步的值和类型是：
-
-```python
-normalized = text.lower()
-# "rag_service/v1 使用知识库知识"
-# 类型：str
-
-ASCII_TOKEN_PATTERN.findall(normalized)
-# ["rag_service/v1"]
-# 类型：list[str]
-
-tokens = set(ASCII_TOKEN_PATTERN.findall(normalized))
-# {"rag_service/v1"}
-# 类型：set[str]
-
-CJK_RUN_PATTERN.findall(normalized)
-# ["使用知识库知识"]
-# 类型：list[str]
-```
-
-这里的 `run` 是 `for` 循环变量，不是 Python 关键字：
-
-```python
-for run in CJK_RUN_PATTERN.findall(normalized):
-    ...
-```
-
-可以读作：
-
-> 遍历找到的每一段连续中文，每次把当前中文字符串暂时赋值给变量 `run`。
-
-例如：
-
-```python
-normalized = "中文 RAG 知识库"
-CJK_RUN_PATTERN.findall(normalized)
-# ["中文", "知识库"]
-
-for run in CJK_RUN_PATTERN.findall(normalized):
-    print(run, type(run))
-
-# 第一轮：run == "中文"，类型是 str
-# 第二轮：run == "知识库"，类型是 str
-```
-
-变量名 `run` 在这里表示“一段连续出现的字符”（a run of characters）。它只是开发者
-选择的普通变量名，也可以改写成更直观的 `chinese_text`：
-
-```python
-for chinese_text in CJK_RUN_PATTERN.findall(normalized):
-    tokens.update(
-        chinese_text[index : index + 2]
-        for index in range(len(chinese_text) - 1)
-    )
-```
-
-对于连续中文 `"使用知识库知识"`：
-
-```python
-len(run)
-# 7
-
-range(len(run) - 1)
-# 相当于依次产生 0、1、2、3、4、5
-
-run[0:2]  # "使用"
-run[1:3]  # "用知"
-run[2:4]  # "知识"
-run[3:5]  # "识库"
-run[4:6]  # "库知"
-run[5:7]  # "知识"
-```
-
-这里是一个“宽度为 2、每次向右移动 1 个字符”的滑动窗口。生成器表达式：
-
-```python
-run[index : index + 2] for index in range(len(run) - 1)
-```
-
-展开成普通 Python 循环就是：
-
-```python
-two_character_tokens = []
-for index in range(len(run) - 1):
-    token = run[index : index + 2]
-    two_character_tokens.append(token)
-
-tokens.update(two_character_tokens)
-```
-
-`set.update(...)` 会把多个元素加入原集合并自动去重。因此上例最终得到的集合等价于：
-
-```python
-{
-    "rag_service/v1",
-    "使用",
-    "用知",
-    "知识",
-    "识库",
-    "库知",
-}
-```
-
-#### 它在当前项目中的作用
-
-`lexical_tokens()` 不是为了得到自然语言学意义上的准确分词，而是把文本转换成一组
-可以直接比较、去重和稳定哈希的简单特征。
-
-例如问题和知识库文档分别是：
-
-```python
-question = "知识库使用什么向量数据库？"
-document = "当前知识库使用 Chroma 向量数据库。"
-```
-
-去掉项目定义的高频停用词后，实际得到的部分词项是：
-
-```python
-query_tokens
-# {"使用", "向量", "库使", "量数", "据库", ...}
-
-document_tokens
-# {"chroma", "使用", "向量", "库使", "量数", "据库", ...}
-
-query_tokens.intersection(document_tokens)
-# {"使用", "向量", "库使", "量数", "据库"}
-```
-
-项目用交集计算问题词项被文档覆盖的比例：
-
-```python
-lexical_overlap = len(query_tokens.intersection(document_tokens)) / max(
-    1, len(query_tokens)
-)
-# 这组输入实际得到约 0.7143
-```
-
-因此它有两个下游用途：
-
-1. `StableHashEmbeddings._embed()` 把每个唯一词项稳定哈希到一个向量槽位，构造
-   无需模型和 API Key 的离线教学向量。
-2. `KBService.ask()` 比较问题和候选文档的词项交集，辅助过滤“向量看起来相似，
-   但文档实际不能回答问题”的结果。
-
-注意：
-
-- `set` 不保证展示顺序，所以实际打印顺序可能不同。
-- 重复出现的 `"知识"` 最终只保留一份。
-- 一段中文只有一个字时，`len(run) - 1` 等于 `0`，不会产生双字词项。
-- 这是项目为了离线检索写的简单词项规则，不是大模型或 embedding 模型自带的 tokenizer。
-
-### 5.10 `technical_tokens()`：筛选 API 名、字段名和英文词项
-
-当前项目中的函数：
-
-```python
-def technical_tokens(text: str) -> set[str]:
-    return {
-        token
-        for token in ASCII_TOKEN_PATTERN.findall(text.lower())
-        if len(token) >= 3 and any(character.isalnum() for character in token)
-    }
-```
-
-它可以读作：
-
-> 把文本转成小写并提取 ASCII 词项；只保留长度至少为 3，而且至少包含一个
-> 字母或数字的词项；最后用集合去重并返回。
-
-例如：
-
-```python
-text = "字段 tenant_id 使用 API /api/v1/ask，--- 和 id"
-
-ASCII_TOKEN_PATTERN.findall(text.lower())
-# ["tenant_id", "api", "/api/v1/ask", "---", "id"]
-
-technical_tokens(text)
-# {"tenant_id", "api", "/api/v1/ask"}
-```
-
-过滤过程如下：
-
-| 候选词项 | `len(token) >= 3` | 至少有一个字母或数字 | 是否保留 |
-| --- | --- | --- | --- |
-| `"tenant_id"` | 是 | 是 | 保留 |
-| `"api"` | 是 | 是 | 保留 |
-| `"/api/v1/ask"` | 是 | 是 | 保留 |
-| `"---"` | 是 | 否 | 丢弃 |
-| `"id"` | 否 | 是 | 丢弃 |
-
-#### `any(...)` 的作用
-
-```python
-any(character.isalnum() for character in token)
-```
-
-读作：
-
-> 逐个检查 `token` 中的字符，只要至少一个字符是字母或数字，就返回 `True`。
-
-例如：
-
-```python
-any(character.isalnum() for character in "---")
-# False
-
-any(character.isalnum() for character in "/api/")
-# True，因为其中的 a、p、i 是字母
-```
-
-整个集合推导式展开成普通 Python 循环是：
-
-```python
-result: set[str] = set()
-
-for token in ASCII_TOKEN_PATTERN.findall(text.lower()):
-    long_enough = len(token) >= 3
-    contains_letter_or_number = any(
-        character.isalnum()
-        for character in token
-    )
-
-    if long_enough and contains_letter_or_number:
-        result.add(token)
-
-return result
-```
-
-#### 它在知识库问答中的作用
-
-例如问题是：
-
-```python
-question = "tenant_id 字段在哪里？"
-```
-
-问题的技术词项是：
-
-```python
-query_technical_tokens = {"tenant_id"}
-```
-
-两个候选文档：
-
-```python
-document_a = "请求必须包含 tenant_id"
-document_b = "请求必须包含 area_id"
-```
-
-比较结果：
-
-```python
-{"tenant_id"}.intersection({"tenant_id"})
-# {"tenant_id"}，转换成 bool 后是 True
-
-{"tenant_id"}.intersection({"area_id"})
-# set()，转换成 bool 后是 False
-```
-
-因此，当问题中存在技术词项时，当前项目要求候选文档至少精确命中其中一个技术词项。
-这能避免把 `tenant_id` 的问题错误匹配到只介绍 `area_id` 的文档。
-
-这里的“技术词项”只是项目定义的启发式规则：所有符合条件的英文词项都有可能被
-保留，它并不真正理解某个英文词是不是技术术语。
 
 ## 6. 列表推导式与生成器表达式
 
@@ -2399,7 +1956,7 @@ for item in items:
 ]
 ```
 
-另一个历史示例：
+另一个例子：
 
 ```python
 return [dict(row) for row in cursor.fetchall()]
@@ -2424,9 +1981,26 @@ for part in values:
 
 末尾的 `if` 决定当前元素是否进入新列表。
 
-### 6.4 双层列表推导式 `flatten`
+### 6.4 集合推导式与 `any()`
 
-项目历史代码：
+集合推导式使用 `{}`，会自动去重：
+
+```python
+values = ["api", "id", "api", "name"]
+result = {value for value in values if len(value) >= 3}
+# {"api", "name"}
+```
+
+`any()` 接收一个可迭代对象，只要其中有一个真值就返回 `True`：
+
+```python
+any(character.isalnum() for character in "---")   # False
+any(character.isalnum() for character in "/api/") # True
+```
+
+它会短路：遇到第一个真值后立即停止遍历；全部为假时才返回 `False`。
+
+### 6.5 双层列表推导式 `flatten`
 
 ```python
 def flatten(list_of_lists):
@@ -2455,42 +2029,37 @@ for sublist in list_of_lists:  # 外层循环
 ["a", "b", "c", "d", "e"]
 ```
 
-### 6.5 推导式默认保留遍历顺序
+### 6.6 推导式默认保留遍历顺序
 
 列表推导式会按照源数据的遍历顺序追加元素。只要输入结果本身是按请求顺序返回的，推导后的列表也会保持这个顺序。
 
-### 6.6 生成器表达式与 `list.extend()`
-
-Part 5：
+### 6.7 生成器表达式与 `list.extend()`
 
 ```python
-candidates.extend(
-    _clean_query(line)
-    for line in text.splitlines()
-)
+lines.extend(line.strip() for line in text.splitlines())
 ```
 
 下面这一段：
 
 ```python
-(_clean_query(line) for line in text.splitlines())
+(line.strip() for line in text.splitlines())
 ```
 
 是生成器表达式。它和列表推导式外形相似，但不会先创建完整列表，而是在遍历时逐项产生结果。
 
-当生成器表达式是函数调用的唯一参数时，可以省略它自己的圆括号，所以项目代码写成：
+当生成器表达式是函数调用的唯一参数时，可以省略它自己的圆括号：
 
 ```python
-candidates.extend(_clean_query(line) for line in text.splitlines())
+lines.extend(line.strip() for line in text.splitlines())
 ```
 
 `extend()` 会遍历收到的可迭代对象，把其中每一项追加到原列表：
 
 ```python
-candidates = ["原始问题"]
-candidates.extend(["改写一", "改写二"])
+values = ["a"]
+values.extend(["b", "c"])
 
-# ["原始问题", "改写一", "改写二"]
+# ["a", "b", "c"]
 ```
 
 它与 `append()` 不同：
@@ -2505,26 +2074,49 @@ values.extend([2, 3])  # [1, 2, 3]，逐项追加
 
 `extend()` 会原地修改列表，通常返回 `None`。
 
+### 6.8 `max()` 消费生成器并返回单个最大值
+
+```python
+best_relevance = max(
+    (item[3] for item in candidates),
+    default=0.0,
+)
+```
+
+`(item[3] for item in candidates)` 是生成器表达式：它遍历 `candidates`，
+逐项产生每个元素下标 `3` 对应的值，但不创建结果列表。`max()` 消费这些值，
+最终返回其中一个最大值，而不是返回列表或生成器：
+
+```python
+values = [0.42, 0.76, 0.51]
+max(value for value in values)  # 0.76
+```
+
+当可迭代对象为空时，普通 `max()` 会抛出 `ValueError`；传入
+`default=0.0` 后则返回这个默认值：
+
+```python
+max((value for value in []), default=0.0)  # 0.0
+```
+
 ## 7. 函数参数：逗号、默认值、`*`、`*args`、`**kwargs`、`**config`
 
 ### 7.1 函数参数之间的逗号只是分隔符
 
-项目代码：
-
 ```python
-def split_documents(
-    documents: Iterable[Document],
+def format_text(
+    text: str,
     *,
-    chunk_size: int = 300,
-    chunk_overlap: int = 50,
-) -> list[Document]:
+    width: int = 80,
+    uppercase: bool = False,
+) -> str:
     ...
 ```
 
 每个逗号把一个参数与下一个参数分开。多行写法和下面的单行写法语义相同：
 
 ```python
-def split_documents(documents, *, chunk_size=300, chunk_overlap=50):
+def format_text(text, *, width=80, uppercase=False):
     ...
 ```
 
@@ -2536,37 +2128,25 @@ def split_documents(documents, *, chunk_size=300, chunk_overlap=50):
 
 ```python
 *,
-chunk_size: int = 300,
-chunk_overlap: int = 50,
+width: int = 80,
+uppercase: bool = False,
 ```
 
 表示 `*` 后面的参数是“仅限关键字参数”：
 
 ```python
-split_documents(documents, chunk_size=500, chunk_overlap=100)  # 正确
-split_documents(documents, 500, 100)                           # TypeError
-```
-
-历史代码中的写法同理：
-
-```python
-def database_connection(
-    database_path: Path,
-    *,
-    read_only: bool = False,
-):
-    ...
+format_text(text, width=100, uppercase=True)  # 正确
+format_text(text, 100, True)                  # TypeError
 ```
 
 ### 7.3 有默认值的参数可以不传
 
 ```python
-def build_retriever(
-    vector_store,
-    k=3,
-    search_type="similarity",
-    fetch_k=None,
-    lambda_mult=0.5,
+def connect(
+    host,
+    port=443,
+    timeout=30,
+    secure=True,
 ):
     ...
 ```
@@ -2574,18 +2154,17 @@ def build_retriever(
 因此可以只传前两个：
 
 ```python
-build_retriever(vector_store, k=3)
+connect("example.com")
 ```
 
 没有显式传入的参数会使用默认值。也可以覆盖其中一部分：
 
 ```python
-build_retriever(
-    vector_store,
-    k=3,
-    search_type="mmr",
-    fetch_k=6,
-    lambda_mult=0.5,
+connect(
+    "example.com",
+    port=8443,
+    timeout=10,
+    secure=True,
 )
 ```
 
@@ -2594,10 +2173,10 @@ Python 根据参数名匹配，不需要“自动识别多个 `int`”。
 下面也是关键字参数，参数值恰好是一个列表：
 
 ```python
-load_skills(sources=["/skills/"])
+load_files(paths=["/data/"])
 ```
 
-这里 `sources` 是参数名，`["/skills/"]` 是传入的列表值。
+这里 `paths` 是参数名，`["/data/"]` 是传入的列表值。
 
 ### 7.4 `*args` 收集多余的位置参数
 
@@ -2623,7 +2202,7 @@ build_model(timeout=60, temperature=0.2)
 
 `kwargs` 是字典，名称来自 keyword arguments。
 
-历史代码：
+示例：
 
 ```python
 def load_dotenv(*_args, **_kwargs):
@@ -2634,24 +2213,22 @@ def load_dotenv(*_args, **_kwargs):
 
 ### 7.6 调用函数时的 `**config` 是拆字典
 
-项目代码：
-
 ```python
 config = {
-    "chunk_size": 140,
-    "chunk_overlap": 30,
+    "width": 100,
+    "uppercase": True,
 }
 
-split_documents_token_aware(documents, **config)
+format_text(text, **config)
 ```
 
 等价于：
 
 ```python
-split_documents_token_aware(
-    documents,
-    chunk_size=140,
-    chunk_overlap=30,
+format_text(
+    text,
+    width=100,
+    uppercase=True,
 )
 ```
 
@@ -2666,28 +2243,26 @@ split_documents_token_aware(
 
 ### 7.7 类和函数本身也可以作为参数或返回值
 
-历史代码中见过：
-
 ```python
-ChatOpenAI = deps["ChatOpenAI"]
-model = build_zhipu_chat_model(ChatOpenAI)
+Formatter = dependencies["Formatter"]
+formatter = build_formatter(Formatter)
 ```
 
-`deps["ChatOpenAI"]` 取出的是类对象。Python 中类和函数都是可以保存、传参和返回的对象：
+字典中取出的是类对象。Python 中类和函数都可以保存、传参和返回：
 
 ```python
-def build_zhipu_chat_model(model_class):
-    return model_class(model="glm")
+def build_formatter(formatter_class):
+    return formatter_class(width=80)
 ```
 
 流程是：
 
 ```text
-传入 ChatOpenAI 类
+传入 Formatter 类
     ↓
-model_class 指向该类
+formatter_class 指向该类
     ↓
-model_class(...) 调用类
+formatter_class(...) 调用类
     ↓
 创建并返回实例
 ```
@@ -2696,40 +2271,27 @@ model_class(...) 调用类
 
 ### 7.8 `lambda` 是匿名函数
 
-项目代码：
-
 ```python
-lambda value: build_query_variants(
-    str(value),
-    use_live=options.use_live,
-)
+lambda value: str(value).strip()
 ```
 
 它等价于：
 
 ```python
 def generate(value):
-    return build_query_variants(
-        str(value),
-        use_live=options.use_live,
-    )
+    return str(value).strip()
 ```
 
-当外部框架调用这个函数并传入 `question` 时：
-
-```text
-question -> value -> build_query_variants(str(value), ...)
-```
-
-另一个项目写法：
+另一个写法：
 
 ```python
-lambda _: queries
+lambda _: fixed_value
 ```
 
-`_` 仍然会接收一个参数，但下划线表示“这个参数不使用”。无论传入什么，它都返回外层已有的 `queries`。
+`_` 仍然会接收一个参数，但下划线表示“这个参数不使用”。无论传入什么，它都返回
+外层已有的 `fixed_value`。
 
-`lambda` 可以读取外层作用域中的 `queries`、`options` 等变量，这称为闭包捕获。
+`lambda` 可以读取外层作用域中的变量，这称为闭包捕获。
 
 ### 7.9 `return` 只能写在函数体中
 
@@ -2752,39 +2314,38 @@ SyntaxError: 'return' outside function
 
 ### 7.10 `argparse` 的 `action`、`choices` 和 `default`
 
-项目代码：
-
 ```python
 parser.add_argument(
-    "--web-source",
+    "--verbose",
     action="store_true",
 )
 
 parser.add_argument(
-    "--embedding",
-    choices=("local", "hash", "glm"),
-    default="local",
+    "--format",
+    choices=("text", "json"),
+    default="text",
 )
 ```
 
-`add_argument()` 默认使用 `action="store"`：命令行出现选项后，读取它后面的一个值并保存。因此即使不写 `choices`，`--embedding local` 也可以接收字符串；`choices` 只负责限制允许的值：
+`add_argument()` 默认使用 `action="store"`：命令行出现选项后，读取它后面的一个值并
+保存；`choices` 只负责限制允许的值：
 
 ```bash
-python demo.py --embedding glm       # args.embedding == "glm"
-python demo.py --embedding unknown   # argparse 报错
-python demo.py                       # args.embedding == "local"
+python demo.py --format json     # args.format == "json"
+python demo.py --format xml      # argparse 报错
+python demo.py                   # args.format == "text"
 ```
 
-`default="local"` 表示没有传 `--embedding` 时使用 `local`。
+`default="text"` 表示没有传 `--format` 时使用 `"text"`。
 
 `action="store_true"` 是 `argparse` 规定的固定 action 名称。它把选项变成不带值的布尔开关：
 
 ```bash
-python demo.py                # args.web_source is False
-python demo.py --web-source   # args.web_source is True
+python demo.py             # args.verbose is False
+python demo.py --verbose   # args.verbose is True
 ```
 
-不能写成 `--web-source true`，因为 `store_true` 本身不读取后续值。长选项名中的连字符默认会转换成属性名中的下划线，所以 `--web-source` 通过 `args.web_source` 读取。
+不能写成 `--verbose true`，因为 `store_true` 本身不读取后续值。
 
 三者的职责不要混在一起：
 
@@ -2808,10 +2369,10 @@ for chunk in chunks:
 
 ### 8.2 `enumerate()` 同时提供序号和元素
 
-项目代码：
+示例：
 
 ```python
-for rank, (document, score) in enumerate(matches, start=1):
+for rank, (item, score) in enumerate(matches, start=1):
     ...
 ```
 
@@ -2819,23 +2380,23 @@ for rank, (document, score) in enumerate(matches, start=1):
 
 ```python
 matches = [
-    (doc1, 0.91),
-    (doc2, 0.83),
+    ("a", 0.91),
+    ("b", 0.83),
 ]
 ```
 
 `enumerate(matches, start=1)` 依次产生：
 
 ```python
-(1, (doc1, 0.91))
-(2, (doc2, 0.83))
+(1, ("a", 0.91))
+(2, ("b", 0.83))
 ```
 
 循环变量进行了两层拆包：
 
 ```text
-rank                     <- 1
-(document, score)        <- (doc1, 0.91)
+rank                 <- 1
+(item, score)        <- ("a", 0.91)
 ```
 
 ### 8.3 一个赋值语句也可以拆包
@@ -2864,17 +2425,15 @@ invoke_result, batch_result = await asyncio.gather(
 ### 8.4 `zip()` 与拆包组合
 
 ```python
-for question, documents in zip(questions, batch_documents):
+for name, score in zip(names, scores):
     ...
 ```
 
-每次从 `zip()` 取得一个二元组，再拆成 `question` 和 `documents`。详细规则见第 2 节。
+每次从 `zip()` 取得一个二元组，再拆成 `name` 和 `score`。详细规则见第 2 节。
 
 ## 9. 条件判断：三元表达式、类型检查、属性检查和真假值
 
 ### 9.1 Python 的条件表达式
-
-历史代码：
 
 ```python
 arguments = (
@@ -2899,87 +2458,88 @@ else:
     arguments = raw_arguments
 ```
 
-另一个历史例子：
+另一个例子：
 
 ```python
-schema = (
-    args_schema.model_json_schema()
-    if hasattr(args_schema, "model_json_schema")
-    else args_schema.schema()
+length = len(value) if hasattr(value, "__len__") else 0
+```
+
+也可以在条件为假时返回 `None`：
+
+```python
+cache = Cache() if use_cache else None
+```
+
+表示启用缓存时创建对象，否则使用 `None`。
+
+条件表达式较长时可以放进圆括号中换行：
+
+```python
+active_value = (
+    existing_value
+    if existing_value is not None
+    else build_value()
 )
-```
-
-你的理解是正确的：如果条件为真，就执行 `model_json_schema()`，并把它的返回值赋给 `schema`；否则执行 `schema()`。
-
-还有：
-
-```python
-checkpointer = deps["InMemorySaver"]() if use_memory else None
-```
-
-表示启用内存时创建对象，否则使用 `None`。
-
-RAG 课件中的多行写法：
-
-```python
-active_embeddings = (
-    embeddings
-    if embeddings is not None
-    else build_embeddings(mode=embedding_mode)
-)
-```
-
-仍然是同一个条件表达式，可以从中间的条件开始读：
-
-```text
-如果 embeddings 不是 None
-    就把已有的 embeddings 赋给 active_embeddings
-否则
-    调用 build_embeddings(...)，把它返回的 Embeddings 对象赋给 active_embeddings
 ```
 
 它等价于：
 
 ```python
-if embeddings is not None:
-    active_embeddings = embeddings
+if existing_value is not None:
+    active_value = existing_value
 else:
-    active_embeddings = build_embeddings(mode=embedding_mode)
+    active_value = build_value()
 ```
 
-这里的圆括号只用于把一个长表达式分成多行，不是函数调用，也不是元组。Python 创建元组的关键是逗号，例如 `(embeddings,)`；这里只有括号而没有逗号，所以整个表达式只产生一个值。它也不是匿名函数：匿名函数必须出现 `lambda`，例如 `lambda value: value`。
+这里的圆括号只用于分组和换行，不是元组。Python 创建元组的关键是逗号，例如
+`(existing_value,)`。
 
 更一般地，只要一个表达式还位于 `()`、`[]` 或 `{}` 内，Python 就允许在合适的位置直接换行，这叫隐式续行，不需要在行尾添加 `\`：
 
 ```python
-queries_documents = (
-    RunnableLambda(
-        lambda _: queries
-    ) | retriever.map()
-).invoke(question)
-```
-
-这里的换行和缩进只影响可读性，不改变表达式的执行结果。它等价于：
-
-```python
-queries_documents = (
-    RunnableLambda(lambda _: queries) | retriever.map()
-).invoke(question)
-```
-
-最外层的 `(...)` 包住完整的 `RunnableLambda(...) | retriever.map()` 表达式，所以最后的 `.invoke(question)` 调用的是整条组合后的 Chain。
-
-`RunnableLambda(...)` 这次只有一个位置参数 `lambda _: queries`，所以不需要用逗号分隔参数。多行函数调用可以选择添加尾逗号：
-
-```python
-RunnableLambda(
-    lambda _: queries,
+total = (
+    first_value
+    + second_value
+    + third_value
 )
 ```
 
-在函数调用中，这个尾逗号不会把参数变成元组，仍然只传入一个 `lambda` 对象；而脱离函数调用后，`(value,)` 才表示单元素元组。
+条件表达式只执行被选中的分支。例如：
 
-条件表达式只执行被选中的分支：已有 `embeddings` 时不会调用 `build_embeddings(...)`。两条分支最终都应得到一个实现了 LangChain `Embeddings` 接口的对象，例如 `LocalMiniLMEmbeddings` 或 `StableHashEmbeddings`。
+```python
+result = load_value() if should_load else None
+```
+
+`should_load` 为假时不会调用 `load_value()`。空列表也可以直接作为条件：
+
+```python
+processed_count = process(items) if items else 0
+```
+
+```python
+bool([])         # False
+bool(["a", "b"]) # True
+```
+
+`processed_count = ...` 这个条件表达式等价于：
+
+```python
+if items:
+    processed_count = process(items)
+else:
+    processed_count = 0
+```
+
+同一规则也适用于集合。`intersection()` 返回交集集合；空集合转换为 `bool` 是
+`False`，非空集合转换为 `bool` 是 `True`：
+
+```python
+left = {"a", "b"}
+right = {"b", "c"}
+
+has_common = bool(left.intersection(right))
+# bool({"b"}) -> True
+```
 
 ### 9.2 `isinstance()` 判断对象的运行时类型
 
@@ -3003,10 +2563,10 @@ isinstance(value, (str, bytes))
 ### 9.3 `hasattr()` 判断属性或方法是否存在
 
 ```python
-hasattr(args_schema, "model_json_schema")
+hasattr(obj, "save")
 ```
 
-表示检查 `args_schema` 是否有名为 `model_json_schema` 的属性或方法，返回布尔值。
+表示检查 `obj` 是否有名为 `save` 的属性或方法，返回布尔值。
 
 ### 9.4 `getattr()` 根据名字读取属性
 
@@ -3103,10 +2663,10 @@ if part.strip():
 ### 9.6 `or` 可以提供后备值
 
 ```python
-agent = agent or build_voice_agent(deps)
+value = value or create_default()
 ```
 
-如果传入的 `agent` 是真值，就继续使用它；否则创建一个新 agent。
+如果原来的 `value` 是真值，就继续使用它；否则调用函数创建默认值。
 
 ```python
 content = getattr(message, "content", "") or ""
@@ -3114,53 +2674,35 @@ content = getattr(message, "content", "") or ""
 
 如果属性不存在、为 `None` 或为空字符串，最终统一得到空字符串。
 
-当前项目还有一个利用 `or` 短路的判断：
+`or` 会短路：
 
 ```python
-sources = active_manifest.get("sources", {})
-
-return (
-    not sources
-    or active_manifest.get("index_fingerprint")
-    == self.index_fingerprint
-)
+return not items or is_valid(items)
 ```
 
-如果 `sources == {}`：
+如果 `items` 为空：
 
 ```python
-not sources
+not items
 # True
 ```
 
 `or` 左侧已经是 `True`，Python 不再计算右侧，整个表达式直接返回 `True`。只有
-`sources` 非空、`not sources` 为 `False` 时，才继续比较两个 fingerprint。
+`items` 非空、`not items` 为 `False` 时，才调用 `is_valid(items)`。
 
 可以展开成普通 `if`：
 
 ```python
-if not sources:
+if not items:
     return True
 
-return (
-    active_manifest.get("index_fingerprint")
-    == self.index_fingerprint
-)
+return is_valid(items)
 ```
-
-方法前一行：
-
-```python
-active_manifest = manifest if manifest is not None else self.read_manifest()
-```
-
-是条件表达式，表示显式传入了 `manifest` 就直接使用；参数是 `None` 时才调用
-`read_manifest()` 读取本地文件。
 
 ### 9.7 `continue` 跳过本次循环剩余代码
 
 ```python
-if event.type != "stt_output" or not event.transcript:
+if not item:
     continue
 ```
 
@@ -3168,23 +2710,17 @@ if event.type != "stt_output" or not event.transcript:
 
 ### 9.8 `try / except` 捕获异常
 
-历史代码：
-
 ```python
 try:
-    from dotenv import find_dotenv, load_dotenv
+    import optional_package
 except ImportError:
-    find_dotenv = None
-
-    def load_dotenv(*_args, **_kwargs):
-        return False
+    optional_package = None
 ```
 
 含义是：
 
 1. 尝试导入依赖。
-2. 如果发生 `ImportError`，执行后备定义。
-3. 后续代码仍然可以调用 `load_dotenv(...)`，只是后备函数固定返回 `False`。
+2. 如果发生 `ImportError`，执行后备赋值。
 
 下面的写法会保留原异常链：
 
@@ -3193,69 +2729,62 @@ except ImportError as exc:
     raise RuntimeError("缺少依赖") from exc
 ```
 
-排错时既能看到新的业务错误，也能看到最初的导入错误。
+排错时既能看到新的异常，也能看到最初的导入错误。
 
 ## 10. 类、对象、方法、默认工厂和装饰器
 
 ### 10.1 `__init__` 在创建实例时初始化属性
 
-历史代码：
-
 ```python
-class KeywordEmbeddings:
-    def __init__(self):
-        self.keywords = [
-            "task",
-            "decomposition",
-            "rag",
-            "retrieval",
-        ]
+class User:
+    def __init__(self, name: str):
+        self.name = name
 ```
 
 使用：
 
 ```python
-embeddings = KeywordEmbeddings()
+user = User("Alice")
 ```
 
 Python 创建对象时直接调用类，不需要 Java 风格的 `new` 关键字。
 
 执行过程：
 
-1. 创建 `KeywordEmbeddings` 实例。
-2. 自动调用 `__init__(self)`。
-3. 把关键词列表保存到当前实例的 `self.keywords` 属性。
+1. 创建 `User` 实例。
+2. 自动调用 `__init__(self, "Alice")`。
+3. 把名字保存到当前实例的 `self.name` 属性。
 
 `self` 代表当前对象本身。
 
-### 10.2 `_embed` 的单下划线是命名约定
+### 10.2 单下划线开头是内部使用的命名约定
 
 ```python
-def _embed(self, text: str):
+def _normalize(self, text: str):
     ...
 ```
 
 单下划线表示“这是类或模块内部使用的实现细节”。它不是强制私有，外部仍然可以调用：
 
 ```python
-embeddings._embed("rag")
+processor._normalize("text")
 ```
 
 但通常建议外部使用公开方法：
 
 ```python
-embeddings.embed_query("rag")
+processor.normalize("text")
 ```
 
 ### 10.3 `@dataclass(frozen=True)` 是装饰器
 
-项目代码：
-
 ```python
+from dataclasses import asdict, dataclass
+
 @dataclass(frozen=True)
-class EmbeddingRuntime:
-    mode: str
-    model: str
+class Point:
+    x: int
+    y: int
 ```
 
 `@dataclass(...)` 会处理紧随其后的类，自动生成常用方法，例如 `__init__`、`__repr__` 和 `__eq__`。
@@ -3263,9 +2792,12 @@ class EmbeddingRuntime:
 `frozen=True` 表示实例创建后不允许普通字段重新赋值：
 
 ```python
-runtime = EmbeddingRuntime(mode="local", model="MiniLM")
-runtime.mode = "remote"  # FrozenInstanceError
+point = Point(x=2, y=3)
+point.x = 4  # FrozenInstanceError
 ```
+
+`frozen=True` 阻止字段重新赋值，但如果字段本身保存可变对象，它不会自动把该对象
+递归变成不可变对象。
 
 装饰器的一般形式：
 
@@ -3281,462 +2813,64 @@ def function():
 function = decorator(function)
 ```
 
-项目中的 `@tool(...)` 也是 Python 装饰器语法，只是具体增强逻辑由 LangChain 提供。
-
-#### `IndexStats`：用 dataclass 表示一次索引的统计结果
-
-当前项目定义：
-
-```python
-@dataclass(frozen=True)
-class IndexStats:
-    reset: bool
-    scanned_files: int
-    added_files: int
-    updated_files: int
-    unchanged_files: int
-    removed_files: int
-    indexed_chunks: int
-    deleted_chunks: int
-    total_indexed_chunks: int
-    index_fingerprint: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-```
-
-`IndexStats` 不保存 Chroma 中的文档和向量。它只是一次 `reindex()` 执行结束后返回的
-统计结果对象：
-
-| 字段 | 类型 | 含义 |
-| --- | --- | --- |
-| `reset` | `bool` | 本次是否按 `reset=True` 重建索引 |
-| `scanned_files` | `int` | 本次扫描到的受支持来源文件数 |
-| `added_files` | `int` | 新增来源文件数 |
-| `updated_files` | `int` | 内容发生变化并重新索引的已有文件数 |
-| `unchanged_files` | `int` | 与 manifest 相比没有变化的文件数 |
-| `removed_files` | `int` | 已从来源目录删除的文件数 |
-| `indexed_chunks` | `int` | 本次实际新增或重新写入 Chroma 的 chunk 数 |
-| `deleted_chunks` | `int` | 本次从 Chroma 删除的旧 chunk 数 |
-| `total_indexed_chunks` | `int` | 本次执行结束后整个知识库的 chunk 总数 |
-| `index_fingerprint` | `str` | chunk 参数、Embedding 身份和 collection 的配置指纹 |
-
-例如：
-
-```python
-stats = IndexStats(
-    reset=False,
-    scanned_files=5,
-    added_files=1,
-    updated_files=1,
-    unchanged_files=3,
-    removed_files=0,
-    indexed_chunks=2,
-    deleted_chunks=1,
-    total_indexed_chunks=6,
-    index_fingerprint="16fff5586f9f9b4a372b",
-)
-```
-
-这些字段都没有定义默认值，因此创建对象时少传任何一个字段都会报错：
-
-```python
-IndexStats(
-    reset=False,
-    scanned_files=5,
-)
-# TypeError：缺少其他必需参数
-```
-
 #### `asdict()` 是 dataclasses 模块函数
 
-项目导入的是：
+```python
+payload = asdict(point)
+# {"x": 2, "y": 3}
+```
+
+`asdict()` 是 `dataclasses` 模块函数，不是实例自带的方法；它会递归转换嵌套的
+dataclass，并返回一个新字典。
+
+#### 类名、参数名和实例属性是三个不同名称
 
 ```python
-from dataclasses import asdict, dataclass
+class Config:
+    pass
+
+class Service:
+    def __init__(self, config: Config):
+        self.config = config
 ```
 
-所以：
+- `Config` 是类。
+- `config` 是参数变量。
+- `self.config` 是当前实例的属性。
+
+类型标注不会创建或转换对象。`self.config = config` 只是把参数当前指向的对象保存到
+实例属性中：
 
 ```python
-asdict(self)
+config = Config()
+service = Service(config)
+service.config is config  # True
 ```
 
-表示把当前 dataclass 实例转换成一个新的字典。它不是 `IndexStats` 自带的方法，下面
-这样调用才是原始形式：
+### 10.4 `@property` 把无参数方法变成只读式属性
 
 ```python
-payload = asdict(stats)
+class Rectangle:
+    def __init__(self, width: int, height: int):
+        self.width = width
+        self.height = height
+
+    @property
+    def area(self) -> int:
+        return self.width * self.height
 ```
 
-结果是：
+调用方读取 property 时不写括号：
 
 ```python
-{
-    "reset": False,
-    "scanned_files": 5,
-    "added_files": 1,
-    "updated_files": 1,
-    "unchanged_files": 3,
-    "removed_files": 0,
-    "indexed_chunks": 2,
-    "deleted_chunks": 1,
-    "total_indexed_chunks": 6,
-    "index_fingerprint": "16fff5586f9f9b4a372b",
-}
+rectangle = Rectangle(3, 4)
+rectangle.area    # 12
+rectangle.area()  # TypeError：前一次属性访问已经得到 int
 ```
 
-项目为了让调用方使用更直观，另外包装了一个实例方法：
+这里没有缓存结果；每次读取 `rectangle.area` 都会重新执行方法体。
 
-```python
-def to_dict(self) -> dict[str, Any]:
-    return asdict(self)
-```
-
-因此：
-
-```python
-stats.to_dict()
-```
-
-内部实际执行的仍然是：
-
-```python
-asdict(stats)
-```
-
-`asdict()` 还会递归转换嵌套的 dataclass；普通类实例不能直接传给它。
-
-转换成字典后，CLI 可以交给 `json.dumps()` 输出 JSON，FastAPI 也可以通过：
-
-```python
-ReindexResponse(request_id=request_id, **stats.to_dict())
-```
-
-把字典中的统计字段展开为 `ReindexResponse` 的关键字参数。
-
-#### `ChunkedSource`：保存一个来源文件的全部切块结果
-
-当前项目定义：
-
-```python
-@dataclass(frozen=True)
-class ChunkedSource:
-    source: str
-    source_sha256: str
-    documents: list[Document]
-    chunk_ids: list[str]
-```
-
-`ChunkedSource` 是项目自己定义的 dataclass，不是 Chroma 对象，也不是 LangChain
-提供的类型。它表示：
-
-> 一个来源文件完成切块和 chunk ID 生成以后得到的中间结果。
-
-名称可以拆成：
-
-```text
-Chunked = 已经完成切块的
-Source  = 一个来源文件
-```
-
-各字段含义：
-
-| 字段 | 类型 | 含义 |
-| --- | --- | --- |
-| `source` | `str` | 来源文件相对于知识库目录的路径 |
-| `source_sha256` | `str` | 整个来源文件的 SHA-256，用于判断文件内容是否变化 |
-| `documents` | `list[Document]` | 切分并补充 metadata 后的 chunk Document 列表 |
-| `chunk_ids` | `list[str]` | 与 `documents` 按相同顺序一一对应的稳定 chunk ID |
-
-一个来源文件可能产生多个 chunk：
-
-```text
-rag_basics.md
-    ↓ Loader
-LoadedSource（原始 Document）
-    ↓ RecursiveCharacterTextSplitter
-ChunkedSource
-├── documents[0] ↔ chunk_ids[0]
-├── documents[1] ↔ chunk_ids[1]
-└── documents[2] ↔ chunk_ids[2]
-```
-
-这里最重要的隐含约束是：
-
-```python
-len(chunked_source.documents) == len(chunked_source.chunk_ids)
-
-chunked_source.documents[index].metadata["chunk_id"] \
-    == chunked_source.chunk_ids[index]
-```
-
-当前代码在同一个循环中同时追加 `Document` 和 ID，所以能够保持这个对应关系：
-
-```python
-documents.append(Document(page_content=content, metadata=metadata))
-chunk_ids.append(chunk_id)
-```
-
-它有两个主要下游用途：
-
-1. 写入 Chroma：
-
-   ```python
-   store.add_documents(
-       documents=source.documents,
-       ids=source.chunk_ids,
-   )
-   ```
-
-2. 写入增量索引 manifest：
-
-   ```python
-   {
-       "sha256": source.source_sha256,
-       "chunk_count": len(source.chunk_ids),
-       "chunk_ids": source.chunk_ids,
-   }
-   ```
-
-因此 `ChunkedSource` 本身不执行切块，也不执行向量计算；真正切块发生在
-`_chunk_source()` 中。它只把切块完成后的相关数据打包在一起，方便后续同时写
-Chroma 和 manifest。
-
-`frozen=True` 只能阻止给字段重新赋值：
-
-```python
-chunked_source.source = "other.md"
-# FrozenInstanceError
-```
-
-但 `documents` 和 `chunk_ids` 本身仍然是可变列表；语法上依旧能够执行
-`append()`。因此这里的“不修改列表内容”仍然依靠项目代码约定。
-
-#### `settings: Settings`：配置类、参数变量和实例属性
-
-当前项目代码：
-
-```python
-class IncrementalIndexer:
-    def __init__(self, settings: Settings):
-        self.settings = settings
-        self._embeddings = build_embeddings(settings)
-```
-
-需要先区分三个名称：
-
-| 名称 | 含义 |
-| --- | --- |
-| `Settings` | 项目定义的配置类，类名首字母大写且使用复数 |
-| `settings` | 调用 `__init__()` 时接收配置对象的参数变量 |
-| `self.settings` | 当前 `IncrementalIndexer` 实例保存配置对象的属性 |
-
-```python
-settings: Settings
-```
-
-读作：
-
-> 参数名是 `settings`，按照类型标注，调用方应该传入一个 `Settings` 实例。
-
-冒号后面的 `Settings` 只是类型标注，不会在这里创建配置，也不会自动把字典转换成
-`Settings`。项目真正创建和解析配置的位置是：
-
-```python
-settings = Settings.from_env()
-indexer = IncrementalIndexer(settings)
-```
-
-执行：
-
-```python
-self.settings = settings
-```
-
-只是把同一个对象引用保存到实例属性中，没有复制对象，也没有重新读取环境变量：
-
-```python
-indexer.settings is settings
-# True
-```
-
-`__init__` 是实例初始化方法。调用：
-
-```python
-IncrementalIndexer(settings)
-```
-
-时 Python 自动创建实例并调用：
-
-```python
-IncrementalIndexer.__init__(new_instance, settings)
-```
-
-`__init__()` 负责初始化已有的新实例，正常情况下返回 `None`。
-
-#### `Settings` 是 frozen dataclass
-
-当前项目中的 `Settings` 是普通 Python dataclass，不是 Pydantic `BaseSettings`：
-
-```python
-@dataclass(frozen=True)
-class Settings:
-    mode: Literal["offline", "live"]
-    embedding_mode: Literal["local", "hash", "glm"]
-    source_dir: Path
-    runtime_dir: Path
-    ...
-```
-
-`@dataclass` 自动生成接收这些字段的 `__init__()`；`frozen=True` 表示对象创建后不应
-重新给字段赋值：
-
-```python
-settings.mode = "live"
-# FrozenInstanceError
-```
-
-主要字段可以分为：
-
-| 分类 | 字段 | 作用 |
-| --- | --- | --- |
-| 运行模式 | `mode` | `offline` 使用本地摘录回答；`live` 调用聊天模型生成 |
-| 向量模式 | `embedding_mode` | 选择 `local`、`hash` 或 `glm` Embedding |
-| 来源和运行目录 | `source_dir`、`runtime_dir` | 知识来源目录与持久化运行目录 |
-| Chroma | `collection_name` | Chroma collection 名称 |
-| 切块 | `chunk_size`、`chunk_overlap` | chunk 大小和重叠长度 |
-| 检索 | `default_top_k` | 默认召回候选数量 |
-| 拒答门槛 | `min_relevance_score`、`min_lexical_overlap` | 候选文档最低相关度要求 |
-| 上下文 | `max_context_chars` | 最终交给回答阶段的上下文字符上限 |
-| 超时 | `timeout_seconds` | 在线模型请求超时 |
-| 在线模型 | `zhipu_api_key`、`zhipu_base_url`、`chat_model` | 在线聊天模型配置 |
-| 远程向量模型 | `embedding_model` | `glm` 模式使用的 Embedding 模型名 |
-| 本地向量模型 | `local_embedding_model`、`local_embedding_cache`、`local_embedding_path` | 本地模型身份、缓存和文件路径 |
-| 追踪 | `langsmith_tracing` | 是否启用 LangSmith tracing |
-
-不要直接把完整 `settings` 对象写入日志或文档。dataclass 自动生成的 `repr` 默认会展示
-所有字段，其中包括 `zhipu_api_key`。需要排查配置时，应只打印允许公开的字段，或者把
-密钥替换成是否已配置的布尔值。
-
-此外还有三个计算属性，它们不是额外存储的字段：
-
-```python
-settings.manifest_path
-# settings.runtime_dir / "index_manifest.json"
-
-settings.chroma_dir
-# settings.runtime_dir / "chroma"
-
-settings.is_live
-# settings.mode == "live"
-```
-
-#### `Settings.from_env()` 才负责解析配置
-
-`from_env()` 是类方法，执行顺序是：
-
-```text
-读取已有系统环境变量
-    ↓
-根目录 .env 补充缺失值
-    ↓
-目录 4 的 .env 再补充仍然缺失的值
-    ↓
-读取并转换 str / int / float / bool / Path
-    ↓
-校验模式、API Key 条件和切块参数
-    ↓
-cls(...) 创建 Settings 实例
-```
-
-调用方也可以显式覆盖部分配置：
-
-```python
-Settings.from_env(
-    mode="offline",
-    embedding_mode="hash",
-    runtime_dir=temporary_runtime_dir,
-)
-```
-
-项目会执行的主要校验包括：
-
-- `mode` 只能是 `offline` 或 `live`。
-- `embedding_mode` 只能是 `local`、`hash` 或 `glm`。
-- `live` 和 `glm` 模式要求配置 API Key。
-- 必须满足 `chunk_size > chunk_overlap >= 0`。
-
-因此下面的完整传递过程是：
-
-```text
-Settings.from_env()
-    ↓ 返回 Settings 实例
-settings
-    ↓ 传给 KnowledgeBaseService
-service.settings
-    ↓ 同一个对象继续传给 IncrementalIndexer
-indexer.settings
-    ↓ build_embeddings(settings) / _store() / reindex() / search()
-```
-
-#### `@property`：`index_fingerprint` 是读取时计算的属性
-
-当前项目代码：
-
-```python
-@property
-def index_fingerprint(self) -> str:
-    payload = {
-        "chunk_size": self.settings.chunk_size,
-        "chunk_overlap": self.settings.chunk_overlap,
-        "embedding": embedding_identity(self.settings),
-        "collection": self.settings.collection_name,
-    }
-    return _sha256(
-        json.dumps(payload, sort_keys=True, ensure_ascii=False)
-    )[:20]
-```
-
-`@property` 会让一个无参数实例方法使用起来像普通属性：
-
-```python
-fingerprint = indexer.index_fingerprint
-```
-
-上面这行访问属性时，Python 实际调用概念上接近：
-
-```python
-fingerprint = type(indexer).index_fingerprint.fget(indexer)
-```
-
-调用方不写括号：
-
-```python
-indexer.index_fingerprint    # 正确
-indexer.index_fingerprint()  # 错误：前一次访问已经得到 str
-```
-
-它没有在 `__init__()` 中执行：
-
-```python
-self.index_fingerprint = ...
-```
-
-也没有缓存计算结果。每次读取 `indexer.index_fingerprint` 都会根据当前索引构建配置
-重新计算并返回一个 `str`。
-
-当 `_empty_manifest()` 执行：
-
-```python
-{
-    "index_fingerprint": self.index_fingerprint,
-}
-```
-
-时，右侧先触发 property 计算，得到的字符串随后才作为普通 value 放进新字典。
-
-### 10.4 `对象.属性 = 值` 是属性赋值
+### 10.5 `对象.属性 = 值` 是属性赋值
 
 ```python
 conn.row_factory = sqlite3.Row
@@ -3744,60 +2878,62 @@ conn.row_factory = sqlite3.Row
 
 这不是定义局部变量，而是把 `sqlite3.Row` 保存到 `conn` 对象的 `row_factory` 属性中。
 
-### 10.5 `@classmethod` 与 `cls`
-
-`2_langchain/L12_Voice_Agent.py`：
+### 10.6 `@classmethod` 与 `cls`
 
 ```python
-@classmethod
-def stt_chunk(cls, text: str):
-    return cls(type="stt_chunk", text=text, transcript=text)
+class User:
+    def __init__(self, name: str):
+        self.name = name
+
+    @classmethod
+    def guest(cls):
+        return cls(name="guest")
 ```
 
 `@classmethod` 把方法绑定到类，而不是绑定到某个实例。调用时不需要手动传入 `cls`：
 
 ```python
-event = VoiceAgentEvent.stt_chunk("你好")
+user = User.guest()
 ```
 
-Python 会自动把 `VoiceAgentEvent` 作为第一个参数 `cls`。如果要写出接近底层函数的概念形式，可以表示为：
+Python 会自动把 `User` 作为第一个参数 `cls`。接近底层函数的概念形式是：
 
 ```python
-VoiceAgentEvent.stt_chunk.__func__(VoiceAgentEvent, "你好")
+User.guest.__func__(User)
 ```
 
 方法内部的：
 
 ```python
-return cls(type="stt_chunk", ...)
+return cls(name="guest")
 ```
 
 表示调用当前类创建实例。与三种常见方法对比：
 
 | 方法 | 第一个自动参数 | 常见调用方式 |
 | --- | --- | --- |
-| 普通实例方法 | `self`，当前实例 | `event.method()` |
-| `@classmethod` | `cls`，当前类 | `VoiceAgentEvent.method()` |
-| `@staticmethod` | 没有自动参数 | `VoiceAgentEvent.method()` |
+| 普通实例方法 | `self`，当前实例 | `obj.method()` |
+| `@classmethod` | `cls`，当前类 | `ClassName.method()` |
+| `@staticmethod` | 没有自动参数 | `ClassName.method()` |
 
 `cls` 和 `self` 都不是 Python 关键字，但属于应当遵守的惯用命名。
 
-### 10.6 `default_factory=list` 为每个实例创建新列表
-
-`2_langchain/L4.py`：
+### 10.7 可变默认值与 `default_factory=list`
 
 ```python
-people: list[Person] = Field(
-    default_factory=list,
-    description="文本中提到的人",
-)
+from dataclasses import dataclass, field
+
+@dataclass
+class Group:
+    people: list[str] = field(default_factory=list)
 ```
 
-这里传入的是 `list` 函数对象，没有写 `list()`。Pydantic 会在每次创建模型且没有提供 `people` 时调用它：
+这里传入的是 `list` 函数对象，没有写 `list()`。每次创建 `Group` 时，dataclass 都会
+调用它创建一个新列表：
 
 ```text
-创建第一个 Information → 调用 list() → 得到列表 A
-创建第二个 Information → 调用 list() → 得到列表 B
+创建第一个 Group → 调用 list() → 得到列表 A
+创建第二个 Group → 调用 list() → 得到列表 B
 ```
 
 这样两个实例不会意外共享同一个可变列表。普通 Python 函数也应避免把可变对象直接作为默认值：
@@ -3818,57 +2954,40 @@ def add_item(item, items=None):
     return items
 ```
 
-标准库 `dataclasses` 对应写法是：
-
-```python
-from dataclasses import dataclass, field
-
-@dataclass
-class Group:
-    people: list[str] = field(default_factory=list)
-```
-
 核心规则是：需要“每次创建一个新对象”时传工厂函数，不要提前调用并保存同一个可变对象。
 
-### 10.7 一个实例方法可以通过 `self` 调用另一个实例方法
-
-`2_langchain/L9_Semantic_Search_Knowledge_Base.py` 中的教学 Embedding：
+### 10.8 一个实例方法可以通过 `self` 调用另一个实例方法
 
 ```python
-def embed_query(self, text: str) -> list[float]:
-    return self._embed(text)
+class TextProcessor:
+    def _normalize(self, text: str) -> str:
+        return text.strip().lower()
 
-def embed_documents(self, texts: list[str]) -> list[list[float]]:
-    return [self.embed_query(text) for text in texts]
+    def normalize(self, text: str) -> str:
+        return self._normalize(text)
+
+    def normalize_all(self, texts: list[str]) -> list[str]:
+        return [self.normalize(text) for text in texts]
 ```
 
-这是合法的普通方法调用。对每段文档文本都会执行：
-
-```text
-self.embed_query(text)
-    ↓
-self._embed(text)
-    ↓
-list[float]
-```
-
-最终列表推导式收集成 `list[list[float]]`。如果 query 和 document 将来需要不同编码规则，也可以让两个公开方法分别调用共同的 `_embed()` 并添加各自处理。
+`self.normalize(text)` 是普通的实例方法调用，Python 会把当前实例自动传给
+`normalize()` 的 `self` 参数。列表推导式最终收集成 `list[str]`。
 
 ## 11. Python 包、模块、导入和依赖字典
 
 ### 11.1 包层级怎么读
 
 ```python
-from deepagents.backends.langsmith import LangSmithSandbox
+from package.subpackage.module import ClassName
 ```
 
 从左到右：
 
 ```text
-deepagents               顶层包
-└── backends              子包
-    └── langsmith         模块或子包
-        └── LangSmithSandbox  导入的类
+package                  顶层包
+└── subpackage           子包
+    └── module           模块
+        └── ClassName    导入的类
 ```
 
 这和文件目录结构很像，但最终以 Python 包实际导出的内容为准。
@@ -3890,145 +3009,80 @@ Path("data.txt")
 从模块中直接导入对象，使用时不需要写 `pathlib.Path`。
 
 ```python
-from langchain_openai import ChatOpenAI as ModelClass
+from pathlib import Path as FilePath
 ```
 
 `as` 可以在当前文件中使用别名。
 
-### 11.3 `from ._common` 与 `from _common` 兼容两种启动方式
+### 11.3 相对导入、绝对导入与 `python -m`
 
-RAG Part 1 使用了：
-
-```python
-try:
-    from ._common import build_rag_chain, build_retriever
-except ImportError:  # pragma: no cover
-    from _common import build_rag_chain, build_retriever
-```
-
-两段导入的对象名称相同，但查找模块的方式不同：
-
-```python
-from ._common import ...
-```
-
-开头的 `.` 表示“当前包”，也就是从 `3_rag_from_scratch/_common.py` 做相对导入。它适合模块模式：
-
-```bash
-.venv/bin/python -m 3_rag_from_scratch.part1_overview
-```
-
-这里的 `-m` 是 `module` 的缩写，表示“按照模块名查找，然后把该模块作为主程序执行”。这条命令可以拆成：
+假设目录结构是：
 
 ```text
-.venv/bin/python                         使用项目虚拟环境中的 Python
--m                                       按模块名运行
-3_rag_from_scratch                       包名
-part1_overview                           包内模块名
-3_rag_from_scratch.part1_overview        完整模块名
-```
-
-包和模块对应当前文件结构：
-
-```text
-3_rag_from_scratch/           包（包含 __init__.py）
+my_package/
 ├── __init__.py
-├── _common.py                3_rag_from_scratch._common 模块
-└── part1_overview.py         3_rag_from_scratch.part1_overview 模块
+├── helpers.py
+└── main.py
 ```
 
-使用 `-m` 时写的是点分模块名，不是文件路径，所以没有 `/` 和 `.py`：
-
-```bash
-# 模块名
-python -m 3_rag_from_scratch.part1_overview
-
-# 文件路径
-python 3_rag_from_scratch/part1_overview.py
-```
-
-两种方式都会把被执行文件中的 `__name__` 设置为 `"__main__"`，因此都会进入：
+`main.py` 中可以使用相对导入：
 
 ```python
-if __name__ == "__main__":
-    main()
+from .helpers import build
 ```
 
-关键区别是包上下文：`-m` 运行时 Python 知道当前模块属于 `3_rag_from_scratch`，`__package__` 有包名，所以 `from ._common` 能找到当前包中的 `_common`；直接按文件路径运行时通常没有这个父包上下文。
-
-另一个常见例子是：
+开头的 `.` 表示当前包。通常使用模块方式启动：
 
 ```bash
-.venv/bin/python -m pip install package_name
+python -m my_package.main
 ```
 
-意思是使用当前这个 `.venv/bin/python` 去运行它环境里的 `pip` 模块，可以避免误用系统中另一套 `pip`。
-
-```python
-from _common import ...
-```
-
-没有开头的点，是按顶层模块名查找。直接运行文件时，脚本所在目录会进入 Python 的模块搜索路径，因此它能找到同目录的 `_common.py`：
+`-m` 后面写点分模块名，不写 `/` 和 `.py`。直接运行：
 
 ```bash
-.venv/bin/python 3_rag_from_scratch/part1_overview.py
+python my_package/main.py
 ```
 
-直接运行单文件时，`part1_overview.py` 没有已知的父包，第一段相对导入会出现类似 `attempted relative import with no known parent package` 的 `ImportError`，随后执行 `except` 中的同目录导入。
-
-之所以把名称完整写两遍，是为了保证无论走哪条导入路径，后续代码都获得完全相同的局部名称：
-
-```text
-模块模式 ─→ from ._common ─┐
-                            ├─→ build_rag_chain、build_retriever ...
-脚本模式 ─→ from _common  ─┘
-```
-
-这不是把模块成功导入两次：第一段成功后不会进入 `except`；第一段失败时才执行第二段。`# pragma: no cover` 是覆盖率工具的提示，不影响 Python 的执行逻辑。
-
-这种写法是学习脚本为了同时支持两种入口所做的兼容处理。正式包通常统一要求使用 `python -m ...` 或安装后的命令入口，从而只保留包内相对导入；此外，宽泛捕获 `ImportError` 也可能把 `_common.py` 内部依赖缺失误认为入口问题，排错时要查看最初异常。
+时通常没有父包上下文，因此相对导入可能报
+`attempted relative import with no known parent package`。正式包最好统一一种启动方式，
+避免用宽泛的 `except ImportError` 掩盖模块内部真正的依赖错误。
 
 ### 11.4 函数内部导入是延迟导入
 
 ```python
 def load_dependencies():
-    from langchain_openai import ChatOpenAI
-    return {"ChatOpenAI": ChatOpenAI}
+    from pathlib import Path
+    return {"Path": Path}
 ```
 
-只有调用 `load_dependencies()` 时才执行导入。学习项目里常用它来：
+只有调用 `load_dependencies()` 时才执行导入。常见用途包括：
 
 - 把可选依赖集中处理。
 - 导入失败时给出更清楚的错误。
 - 避免仅仅导入当前文件就立刻加载所有重依赖。
 
-当前知识库项目也使用了函数内部导入：
+每次调用函数都会执行到其中的 `import` 语句，但 Python 通常会从 `sys.modules`
+缓存中复用已经导入的模块，不会每次重新加载整个包。
+
+### 11.5 类和函数也可以作为字典的值
 
 ```python
-def _store(self):
-    from langchain_chroma import Chroma
-    ...
-```
+class Item:
+    pass
 
-只有调用 `_store()` 时，当前函数才需要获得 `Chroma` 这个名称。每次调用都会执行到
-这条 `import` 语句，但 Python 通常会从 `sys.modules` 模块缓存中复用已经导入的模块，
-不会每次都重新加载整个 `langchain_chroma` 包。
-
-### 11.5 `deps["Document"]` 是从字典取类
-
-```python
-Document = deps["Document"]
-document = Document(page_content="hello")
+dependencies = {"Item": Item}
+item_class = dependencies["Item"]
+item = item_class()
 ```
 
 执行过程：
 
 ```text
-deps 字典保存 Document 类
-       ↓
-按 key 取出类并赋给局部变量 Document
-       ↓
-调用 Document(...) 创建实例
+字典保存 Item 类
+    ↓
+按 key 取出类对象
+    ↓
+调用类对象创建实例
 ```
 
 变量可以指向普通值，也可以指向函数或类。
@@ -4037,7 +3091,7 @@ deps 字典保存 Document 类
 
 ### 12.1 `__file__` 是当前 Python 文件的路径
 
-项目代码：
+示例：
 
 ```python
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -4054,14 +3108,14 @@ project_root = absolute_file.parents[1] # 取上两级目录
 假设文件是：
 
 ```text
-/home/wangfei/code/andrew/2_langchain/L7.py
+/project/package/module.py
 ```
 
 那么：
 
 ```text
-parents[0] = /home/wangfei/code/andrew/2_langchain
-parents[1] = /home/wangfei/code/andrew
+parents[0] = /project/package
+parents[1] = /project
 ```
 
 `parents[1]` 是第二个父目录，因为 Python 索引从 `0` 开始。
@@ -4090,8 +3144,6 @@ Path("/tmp") / "data.txt"  # 正确，得到 Path
 
 ### 12.3 `Path.read_text()` 读取文本时的参数
 
-项目代码：
-
 ```python
 text = path.read_text(encoding="utf-8", errors="replace").strip()
 ```
@@ -4099,7 +3151,7 @@ text = path.read_text(encoding="utf-8", errors="replace").strip()
 假设 `path` 当前是：
 
 ```python
-Path("4_rag_knowledge_base_service/data/source/rag_basics.md")
+Path("data/example.md")
 ```
 
 这一行读作：
@@ -4107,13 +3159,13 @@ Path("4_rag_knowledge_base_service/data/source/rag_basics.md")
 > 让 `path` 这个 `Path` 对象用 UTF-8 编码读取文件；遇到不能按 UTF-8
 > 解码的字节时，用替代字符代替；读取完成后，再删除文本首尾的空白字符。
 
-当前项目 Python 环境中的方法签名是：
+方法签名可以简化理解为：
 
 ```python
 Path.read_text(self, encoding=None, errors=None)
 ```
 
-项目代码里的参数对应关系：
+参数对应关系：
 
 | 参数 | 实际值 | 作用 |
 | --- | --- | --- |
@@ -4207,15 +3259,12 @@ text = original_text.strip()
 
 ### 12.4 `Path.mkdir(parents=True, exist_ok=True)` 创建目录
 
-当前项目代码：
-
 ```python
-self.settings.chroma_dir.mkdir(parents=True, exist_ok=True)
+path = Path("runtime/cache")
+path.mkdir(parents=True, exist_ok=True)
 ```
 
-这里 `self.settings.chroma_dir` 是一个 `Path` 对象。这行可以读作：
-
-> 创建 Chroma 持久化目录；缺少的父目录也一起创建；如果目录已经存在则继续执行。
+这表示创建目标目录；缺少的父目录也一起创建；如果目录已经存在则继续执行。
 
 两个参数分别表示：
 
@@ -4227,30 +3276,19 @@ self.settings.chroma_dir.mkdir(parents=True, exist_ok=True)
 例如：
 
 ```python
-path = Path("runtime/chroma")
+path = Path("runtime/cache")
 result = path.mkdir(parents=True, exist_ok=True)
 
 print(result)
 # None
 ```
 
-`mkdir()` 负责产生目录创建这一文件系统副作用，正常完成时返回 `None`。它不会清空
-已经存在的目录，也不会删除其中的 Chroma 数据。
+`mkdir()` 会产生文件系统副作用，正常完成时返回 `None`。它不会清空已经存在的目录。
 
 `exist_ok=True` 只表示“目录已经存在可以接受”。如果目标路径已经是普通文件、父目录
 没有写权限或磁盘发生错误，仍然会抛出相应异常。
 
-项目随后执行：
-
-```python
-persist_directory = str(self.settings.chroma_dir)
-```
-
-这是把 `Path` 对象转换成 Chroma 构造函数接收的路径字符串；它不会再次创建目录。
-
 ### 12.5 `Path.rglob("*")` 递归查找目录内容
-
-项目代码：
 
 ```python
 for path in sorted(source_dir.rglob("*")):
@@ -4265,7 +3303,7 @@ source_dir.rglob("*")
 读作：
 
 > 从 `source_dir` 目录开始，递归查找它下面所有层级中名称符合 `"*"`
-> 的项目。
+> 的路径项。
 
 各部分含义：
 
@@ -4304,8 +3342,7 @@ source/notes/b.md
 
 - 它查找的是 `source_dir` 的后代，不包含 `source_dir` 自己。
 - 结果既可能包含文件，也可能包含目录。
-- 它返回的是惰性迭代器，在当前项目 Python 环境中实际类型为 `generator`，
-  不是已经装好全部结果的 `list`。
+- 它返回惰性迭代结果，不是已经装好全部结果的 `list`。
 - 每次迭代得到的元素都是 `Path` 对象。
 
 可以这样观察惰性迭代：
@@ -4325,53 +3362,37 @@ source_dir.rglob("*")      # 递归匹配所有层级中的子项
 source_dir.rglob("*.md")   # 递归匹配所有层级中的 Markdown 文件名
 ```
 
-在完整项目代码中，数据流是：
+可以使用 `sorted()` 收集并排序，再通过 `continue` 跳过目录：
 
 ```python
 found_paths = source_dir.rglob("*")  # generator[Path]
 sorted_paths = sorted(found_paths)   # 消耗 generator，得到排序后的 list[Path]
 
 for path in sorted_paths:
-    if not path.is_file() or path.suffix.lower() not in SUPPORTED_SUFFIXES:
+    if not path.is_file():
         continue
+    print(path)
 ```
 
-因为 `"*"` 也会找到目录和不支持的文件，所以后面的条件继续筛选：
-
-- `path.is_file()`：只保留普通文件，排除目录。
-- `path.suffix.lower()`：取得小写扩展名。
-- `SUPPORTED_SUFFIXES`：只允许 `.md`、`.markdown` 和 `.pdf`。
-- `continue`：当前项目不符合条件时，直接进入下一轮循环。
+`path.is_file()` 判断是否为普通文件；`continue` 会跳过当前循环剩余代码。
 
 ### 12.6 `relative_to().as_posix()` 生成相对路径字符串
 
-项目代码：
-
 ```python
-source = path.relative_to(source_dir).as_posix()
+relative_text = path.relative_to(base_dir).as_posix()
 ```
-
-这里的 `source` 不是 Python 关键字，只是作者定义的变量名。在这个知识库项目中，
-它表示“来源文件标识”，也就是当前文档来自知识库中的哪个文件。
-
-`path` 和 `source` 的用途不同：
-
-| 变量 | 示例值 | 类型 | 用途 |
-| --- | --- | --- | --- |
-| `path` | `Path("/project/data/source/manual/setup.md")` | `Path` | 访问磁盘上的真实文件 |
-| `source` | `"manual/setup.md"` | `str` | 保存到 metadata、索引和引用结果中的稳定来源标识 |
 
 这条链式调用分两步执行。假设：
 
 ```python
-source_dir = Path("/project/data/source")
-path = Path("/project/data/source/manual/setup.md")
+base_dir = Path("/project/data")
+path = Path("/project/data/manual/setup.md")
 ```
 
 第一步：
 
 ```python
-relative_path = path.relative_to(source_dir)
+relative_path = path.relative_to(base_dir)
 ```
 
 得到：
@@ -4380,25 +3401,25 @@ relative_path = path.relative_to(source_dir)
 Path("manual/setup.md")
 ```
 
-`relative_to(source_dir)` 的意思是：
+`relative_to(base_dir)` 的意思是：
 
-> 以 `source_dir` 为起点，计算 `path` 位于它下面的相对路径。
+> 以 `base_dir` 为起点，计算 `path` 位于它下面的相对路径。
 
 可以从理解效果的角度把它看成删除共同的目录前缀：
 
 ```text
-完整路径：/project/data/source/manual/setup.md
-起点目录：/project/data/source
-相对结果：                    manual/setup.md
+完整路径：/project/data/manual/setup.md
+起点目录：/project/data
+相对结果：              manual/setup.md
 ```
 
 但它不是普通的字符串替换，而是按照路径层级计算。如果 `path` 不在
-`source_dir` 里面，`relative_to()` 会抛出 `ValueError`。
+`base_dir` 里面，`relative_to()` 会抛出 `ValueError`。
 
 第二步：
 
 ```python
-source = relative_path.as_posix()
+relative_text = relative_path.as_posix()
 ```
 
 得到：
@@ -4424,34 +3445,12 @@ manual\setup.md
 manual/setup.md
 ```
 
-所以原代码可以拆成：
+这段链式调用可以拆成：
 
 ```python
-relative_path = path.relative_to(source_dir)  # Path
-source = relative_path.as_posix()             # str
+relative_path = path.relative_to(base_dir)   # Path
+relative_text = relative_path.as_posix()     # str
 ```
-
-当前项目中的实际示例：
-
-```python
-source_dir = Path("4_rag_knowledge_base_service/data/source")
-path = source_dir / "rag_basics.md"
-
-relative_path = path.relative_to(source_dir)
-source = relative_path.as_posix()
-```
-
-中间值和类型：
-
-```text
-relative_path = PosixPath("rag_basics.md")  # Path
-source = "rag_basics.md"                    # str
-```
-
-项目不直接把机器上的绝对路径作为 `source`，是因为绝对路径会随着电脑、项目
-安装位置或容器挂载位置变化；相对于知识库根目录的 `"rag_basics.md"` 更稳定。
-这个值随后会进入 `Document.metadata["source"]`，并用于索引 manifest、稳定
-chunk ID、检索记录和最终 citation。
 
 ### 12.7 `sys.path.insert(0, path)` 调整模块搜索顺序
 
@@ -4487,7 +3486,7 @@ result = await coroutine
 
 ### 13.2 `asyncio.gather()` 并发等待多个异步任务
 
-历史代码：
+示例：
 
 ```python
 (
@@ -4557,7 +3556,7 @@ yield event
 ```python
 async for audio_chunk in audio_stream:
     text = audio_chunk.decode(errors="ignore")
-    yield VoiceAgentEvent.stt_chunk(text)
+    yield text
 ```
 
 `async for` 每次异步等待下一项，适合网络流、音频流、模型流式输出等不能一次性得到全部数据的场景。
@@ -4572,55 +3571,38 @@ b" "                     # bytes 字面量
 
 文本处理通常使用 `str`，网络、文件或音频等原始二进制数据经常使用 `bytes`。
 
-### 13.7 流式增量代码怎么读
-
-历史代码：
-
-```python
-delta = content[len(seen):] if content.startswith(seen) else content
-seen = content
-```
-
-含义是：
-
-1. 如果新 `content` 以前面已经见过的 `seen` 开头，只取后面新增部分。
-2. 否则把完整 `content` 当作本次数据。
-3. 最后更新 `seen`。
-
-这里组合了字符串切片、条件表达式和变量赋值。
-
-### 13.8 同步方法不能把异步方法的协程当成结果
+### 13.7 同步方法不能把异步方法的协程当成结果
 
 是否异步由定义时的 `async def` 决定：
 
 ```python
-def embed_query(self, text: str) -> list[float]:
-    return self._embed(text)           # 同步，直接得到向量
+def get_value(self, text: str) -> str:
+    return self._get(text)             # 同步，直接得到结果
 
-async def aembed_query(self, text: str) -> list[float]:
+async def aget_value(self, text: str) -> str:
     ...                                # 异步，调用后先得到协程
 ```
 
 因此下面的同步实现有问题：
 
 ```python
-def embed_documents(self, texts: list[str]) -> list[list[float]]:
-    return [self.aembed_query(text) for text in texts]
+def get_many(self, texts: list[str]) -> list[str]:
+    return [self.aget_value(text) for text in texts]
 ```
 
-列表中装入的是协程对象，不是 `list[float]`。同步版本应调用同步方法：
+列表中装入的是协程对象，不是 `str`。同步版本应调用同步方法：
 
 ```python
-def embed_documents(self, texts: list[str]) -> list[list[float]]:
-    return [self.embed_query(text) for text in texts]
+def get_many(self, texts: list[str]) -> list[str]:
+    return [self.get_value(text) for text in texts]
 ```
 
 异步批量版本才使用 `await`：
 
 ```python
-async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+async def aget_many(self, texts: list[str]) -> list[str]:
     return await asyncio.gather(
-        *(self.aembed_query(text) for text in texts)
+        *(self.aget_value(text) for text in texts)
     )
 ```
 
@@ -4629,16 +3611,6 @@ async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
 ## 14. `with`、`@contextmanager`、资源管理和回调注册
 
 ### 14.1 `with` 使用上下文管理器自动收尾
-
-项目历史代码：
-
-```python
-with database_connection(database_path) as conn:
-    conn.executescript("""
-        CREATE TABLE Genre (...);
-    """)
-    conn.commit()
-```
 
 `with` 会在进入代码块时获取资源，并在离开时执行清理。即使代码块中发生异常，也会调用上下文管理器的退出逻辑。
 
@@ -4649,203 +3621,97 @@ with open("data.txt", encoding="utf-8") as file:
     content = file.read()
 ```
 
-### 14.2 `@contextmanager`、`yield` 和 `finally`
+#### `with threading.RLock()` 自动加锁和释放锁
 
-`2_langchain/L11_SQL_Agent.py` 使用生成器函数创建上下文管理器：
+```python
+import threading
+
+self._lock = threading.RLock()
+
+with self._lock:
+    result = update_shared_state()
+```
+
+进入 `with` 时调用锁的 `acquire()`，离开代码块时调用 `release()`。它等价于：
+
+```python
+self._lock.acquire()
+try:
+    result = update_shared_state()
+finally:
+    self._lock.release()
+```
+
+因此即使 `update_shared_state()` 抛出异常，锁也会在 `finally` 阶段释放，避免其他
+线程一直无法进入临界区。拿到锁的线程执行 `with` 内部代码时，使用同一个锁的其他
+线程会等待。
+
+`with lock:` 使用默认的阻塞式获取锁，没有内置等待超时。锁被其他线程持有时，
+当前线程不会直接返回，而是一直等待到锁可用。若业务需要限制等待时间，需要显式
+调用 `acquire(timeout=...)`：
+
+```python
+acquired = self._lock.acquire(timeout=5.0)
+if not acquired:
+    raise TimeoutError("等待锁超过 5 秒")
+
+try:
+    result = update_shared_state()
+finally:
+    self._lock.release()
+```
+
+这个锁等待超时与 HTTP 请求超时、数据库超时、模型调用超时是相互独立的配置。
+
+`RLock` 中的 `R` 表示 reentrant（可重入）：同一个线程已经持有该锁时，可以再次
+获取同一把锁；每次获取都必须有对应的释放。普通 `threading.Lock` 不支持同一线程
+重复获取。
+
+这种锁只协调同一 Python 进程中共享同一个锁对象的线程。不同服务实例如果分别创建
+自己的 `RLock`，或者程序运行在多个进程/多个服务副本中，它们不会被这把锁互斥；
+这时需要文件锁、数据库锁或分布式锁等跨进程协调机制。
+
+### 14.2 `@contextmanager`、`yield` 和 `finally`
 
 ```python
 from contextlib import contextmanager
 
 @contextmanager
-def database_connection(database_path, *, read_only=False):
-    conn = sqlite3.connect(database_path)
+def open_text(path):
+    file = open(path, encoding="utf-8")
     try:
-        yield conn
+        yield file
     finally:
-        conn.close()
+        file.close()
 ```
 
 调用：
 
 ```python
-with database_connection(database_path) as conn:
-    conn.execute("SELECT 1")
+with open_text("data.txt") as file:
+    content = file.read()
 ```
 
 执行顺序是：
 
 ```text
-运行 yield 之前的代码，创建 conn
+运行 yield 之前的代码，打开文件
     ↓
-yield conn，把 conn 交给 as conn
+yield file，把文件对象交给 as file
     ↓
 执行 with 代码块
     ↓
 离开 with 后，从 yield 下一行继续
     ↓
-执行 finally，关闭连接
+执行 finally，关闭文件
 ```
 
-`yield` 在这里既交出资源，也标记“进入”和“退出”两个阶段的分界。`finally` 保证即使 `with` 代码块抛出异常，也会执行 `conn.close()`。
+`yield` 在这里既交出资源，也标记“进入”和“退出”两个阶段的分界。`finally` 保证即使
+`with` 代码块抛出异常，也会执行 `file.close()`。
 
 普通包含 `yield` 的函数是生成器；加上 `@contextmanager` 后，`contextlib` 会把这种“前置处理 → yield → 后置处理”的生成器协议适配成 `with` 所需的上下文管理器协议。
 
-### 14.3 `mkstemp()`、`fdopen()` 与临时文件原子替换
-
-`4_rag_knowledge_base_service/indexer.py`：
-
-```python
-def _write_manifest(self, payload: dict[str, Any]) -> None:
-    self.settings.runtime_dir.mkdir(parents=True, exist_ok=True)
-    fd, temporary_path = tempfile.mkstemp(
-        prefix=".index_manifest.", suffix=".tmp", dir=self.settings.runtime_dir
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-        os.replace(temporary_path, self.settings.manifest_path)
-    finally:
-        if os.path.exists(temporary_path):
-            os.unlink(temporary_path)
-```
-
-这不是普通的“直接打开正式文件并覆盖”，而是：
-
-```text
-创建并打开临时文件
-    ↓
-把 manifest JSON 写入临时文件
-    ↓
-关闭临时文件
-    ↓
-用完整临时文件替换正式 manifest
-    ↓
-发生异常时删除遗留的临时文件
-```
-
-#### `fd, temporary_path` 是返回值拆包
-
-```python
-fd, temporary_path = tempfile.mkstemp(...)
-```
-
-等价于：
-
-```python
-result = tempfile.mkstemp(...)
-fd = result[0]
-temporary_path = result[1]
-```
-
-两个值分别是：
-
-| 变量 | 典型类型 | 含义 |
-| --- | --- | --- |
-| `fd` | `int` | 已经打开的操作系统文件描述符，例如 `3`、`4` |
-| `temporary_path` | `str` | 这个临时文件的路径 |
-
-`fd` 不是文件锁，也不是文件内容。它是操作系统用来标识当前已打开文件的整数句柄。
-`mkstemp()` 已经同时完成了“安全创建临时文件”和“打开文件”，所以不能再只根据
-`temporary_path` 重复打开而忘记关闭 `fd`。
-
-`os.fdopen(fd, ...)` 把这个底层整数描述符包装成 Python 文件对象：
-
-```python
-handle = os.fdopen(fd, "w", encoding="utf-8")
-```
-
-其中：
-
-- `"w"`：按文本写入模式使用；
-- `encoding="utf-8"`：把 Python 字符串编码成 UTF-8 字节；
-- `handle`：具有 `.write()`、`.close()` 等方法的文本文件对象。
-
-#### 这里的 `with` 负责关闭文件
-
-```python
-with os.fdopen(fd, "w", encoding="utf-8") as handle:
-    ...
-```
-
-进入 `with` 后，`handle` 指向文件对象；离开代码块时会自动执行关闭逻辑。无论正常
-结束，还是 `json.dump()` 抛出异常，文件对象都会被关闭，写入缓冲也会在关闭过程中
-刷新。
-
-它可以近似理解为：
-
-```python
-handle = os.fdopen(fd, "w", encoding="utf-8")
-try:
-    ...
-finally:
-    handle.close()
-```
-
-#### `json.dump()` 直接把 JSON 写入文件对象
-
-```python
-json.dump(
-    payload,
-    handle,
-    ensure_ascii=False,
-    indent=2,
-    sort_keys=True,
-)
-```
-
-参数含义：
-
-| 参数 | 含义 |
-| --- | --- |
-| `payload` | 要序列化的 Python 对象；这里是 `dict` |
-| `handle` | JSON 的写入目标文件对象 |
-| `ensure_ascii=False` | 中文直接写成中文，不转换成 `\u4e2d` 形式 |
-| `indent=2` | 使用两个空格缩进，便于人阅读 |
-| `sort_keys=True` | 按字典键排序，让文件输出顺序稳定 |
-
-`json.dump()` 中的 `dump` 没有 `s`，表示直接写入文件；`json.dumps()` 末尾的 `s`
-可以理解为 string，它返回 JSON 字符串：
-
-```python
-json.dump(payload, handle)  # 返回 None，JSON 写入 handle
-json_text = json.dumps(payload)  # 返回 str
-```
-
-`handle.write("\n")` 再给 JSON 文件末尾补一个换行，方便终端查看和版本管理。
-
-#### `replace` 提交结果，`unlink` 清理残留文件
-
-```python
-os.replace(temporary_path, self.settings.manifest_path)
-```
-
-写入完整并关闭文件后，再用临时文件替换正式 manifest。临时文件和正式文件在同一个
-目录中，因此正常情况下替换是原子的：其他读取者通常只会看到旧的完整文件或新的
-完整文件，不会看到只写了一半的 JSON。
-
-```python
-finally:
-    if os.path.exists(temporary_path):
-        os.unlink(temporary_path)
-```
-
-`finally` 无论前面成功还是抛出异常都会执行。`os.unlink(path)` 表示删除这个文件路径，
-近似于：
-
-```python
-os.remove(path)
-```
-
-它不是关闭文件，也不是解除文件锁。文件描述符由前面的 `with` 关闭；这里负责删除
-写入失败后可能遗留的 `.tmp` 文件。替换成功时，临时路径已经被移动成正式路径，
-`os.path.exists(temporary_path)` 通常为 `False`，不会误删正式 manifest。
-
-这套写法可以概括成：
-
-> 先完整写临时文件，成功后一次性替换正式文件；失败则清理临时文件。
-
-### 14.4 三引号也可以表示多行普通字符串
+### 14.3 三引号也可以表示多行普通字符串
 
 ```python
 sql = """
@@ -4856,7 +3722,7 @@ INSERT INTO Genre VALUES (...);
 
 当它被赋值给变量或作为函数参数时，就是普通的多行字符串，不是文档字符串。
 
-### 14.5 注册函数时不要提前调用
+### 14.4 注册函数时不要提前调用
 
 ```python
 atexit.register(database_path.unlink, missing_ok=True)
@@ -4894,7 +3760,7 @@ print("hello")
 
 ```bash
 source .venv/bin/activate
-.venv/bin/python 2_langchain/L7.py
+.venv/bin/python app.py
 ```
 
 否则会出现 `SyntaxError` 或 `IndentationError`，因为 Python 在尝试把 shell 命令解析成 Python 语法。
@@ -4910,13 +3776,13 @@ exit()
 回到类似下面的终端提示符：
 
 ```text
-wangfei@host:~/code/andrew$
+user@host:~/project$
 ```
 
 再执行：
 
 ```bash
-.venv/bin/python 2_langchain/L7.py
+.venv/bin/python app.py
 ```
 
 ### 15.3 `venv` 是虚拟环境工具，不是 Python 语法
@@ -4928,17 +3794,15 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-项目在新电脑初始化时，应先参考 `docs/setup-new-machine.md`。
-
 ## 16. Python `dict/list` 与 JSON 的区别
 
 ### 16.1 Python 对象还不是 JSON 字符串
 
 ```python
 result = {
-    "query": "什么是 RAG？",
-    "documents": [],
-    "answerable": True,
+    "name": "Alice",
+    "items": [],
+    "active": True,
     "error": None,
 }
 ```
@@ -4955,9 +3819,9 @@ JSON 形式类似：
 
 ```json
 {
-  "query": "什么是 RAG？",
-  "documents": [],
-  "answerable": true,
+  "name": "Alice",
+  "items": [],
+  "active": true,
   "error": null
 }
 ```
@@ -4971,8 +3835,6 @@ JSON 形式类似：
 | `True` / `False` | `true` / `false` |
 | `None` | `null` |
 
-Web 框架常常会自动完成序列化，所以业务代码可以直接返回字典或列表。
-
 ### 16.2 `json.loads()` 把 JSON 字符串解析成 Python 对象
 
 ```python
@@ -4985,8 +3847,6 @@ arguments = json.loads(raw_arguments)
 ```python
 {"location": "Boston"}
 ```
-
-历史代码先用 `isinstance(raw_arguments, str)` 判断是否需要解析，是为了兼容“参数可能已经是字典”的情况。
 
 ### 16.3 `dict(row)` 是 Python 数据结构转换
 
@@ -5003,7 +3863,7 @@ result = dict(row)
 | 符号 | 示例 | 含义 |
 | --- | --- | --- |
 | `[]` | `[a, b]` | 创建列表 |
-| `[]` | `docs[0]` | 索引取值 |
+| `[]` | `items[0]` | 索引取值 |
 | `[]` | `text[:10]` | 切片 |
 | `[]` | `list[str]` | 泛型类型标注 |
 | `()` | `function()` | 调用函数 |
@@ -5021,29 +3881,22 @@ result = dict(row)
 | `**` | `def f(**kwargs)` | 收集关键字参数 |
 | `**` | `f(**config)` | 拆开字典作为关键字参数 |
 | `|` | `str | None` | 联合类型 |
-| `|` | `prompt | model` | 对象重载后的管道运算 |
+| `|` | `{1, 2} | {2, 3}` | 集合并集 |
 | `/` | `10 / 2` | 数值除法 |
 | `/` | `Path("a") / "b"` | `Path` 重载后的路径拼接 |
 
-### 17.2 `prompt | model | parser` 为什么能工作
-
-`|` 本来是 Python 运算符。LangChain 的对象实现了对应的运算符方法，因此：
+### 17.2 `|` 的含义取决于两侧对象
 
 ```python
-chain = prompt | model | parser
+str | None                  # 联合类型
+{1, 2} | {2, 3}             # 集合并集：{1, 2, 3}
+{"a": 1} | {"b": 2}         # 字典合并：{"a": 1, "b": 2}
 ```
 
-会被这些对象解释成“把多个步骤组成管道”。这仍然是合法的 Python 运算符语法，但“管道”的业务含义来自 LangChain 的运算符重载。
+Python 运算符会根据两侧对象的类型执行不同操作；自定义类也可以通过特殊方法重载
+运算符。
 
-同一个 `|` 出现在：
-
-```python
-str | None
-```
-
-时，则由 Python 类型系统解释成联合类型，含义完全不同。
-
-## 18. 历史提问速查
+## 18. 语法速查
 
 ```text
 """说明文字"""
@@ -5064,8 +3917,8 @@ list[dict[str, object]] = []
 tuple[str, bytes]
     固定两个位置、两种类型的元组标注，不是 Map
 
-Embeddings | None = None
-    参数类型可为 Embeddings 或 None，默认值是 None
+Model | None = None
+    参数类型可为 Model 或 None，默认值是 None
 
 [expression for item in values if condition]
     列表推导式：遍历、转换、可选过滤
@@ -5097,7 +3950,7 @@ yield / async for / AsyncIterator[T]
 Path(__file__).resolve().parents[1]
     当前文件绝对路径的第二级父目录
 
-for rank, (document, score) in enumerate(..., start=1)
+for rank, (item, score) in enumerate(..., start=1)
     带序号遍历，并进行两层元组拆包
 
 zip(left, right)
@@ -5127,8 +3980,8 @@ set / map()
 seen: set[str] = set() / value in seen / seen.add(value)
     创建空集合 / 判断成员 / 添加成员，常与列表配合做保序去重
 
-list[list[Document]]
-    二维列表；外层通常对应多条查询，内层对应每条查询的一组 Document
+list[list[str]]
+    二维列表；外层和内层元素类型都通过泛型标注表达
 
 values[:4]
     取得序列前四项并返回新对象，不修改原序列
@@ -5148,7 +4001,7 @@ default_factory=list
 @contextmanager + yield + finally
     用生成器函数描述获取资源、交出资源和退出清理三个阶段
 
-def embed_query(...) / async def aembed_query(...)
+def get_value(...) / async def aget_value(...)
     前者直接返回结果；后者调用后先返回协程，必须 await 才得到结果
 
 Python REPL 的 >>>

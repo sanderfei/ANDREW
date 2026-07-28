@@ -63,6 +63,9 @@ def _evaluate(embeddings) -> dict[str, object]:
     }
 
 
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# .venv/bin/python 3_rag_from_scratch/part2_offline_vs_glm_embeddings.py --live --embedding local
+# 本课只对比 Embedding，没有回答生成阶段；--live 不会触发聊天模型。
 def main() -> None:
     options = parse_runtime_options("RAG Part 2 补充：本地与远程 embedding 对比")
     stable_hash_result = _evaluate(build_embeddings(mode="hash"))

@@ -45,7 +45,7 @@ ANSWERABILITY_STOP_TOKENS = frozenset(
 
 
 def lexical_tokens(text: str) -> set[str]:
-    """为中文和英文都提供可解释的离线词项集合。"""
+    """为中文和英文都提供可解释的离线词项集合。相邻两个汉字滑动提取"""
 
     normalized = text.lower()
     tokens = set(ASCII_TOKEN_PATTERN.findall(normalized))
@@ -55,7 +55,7 @@ def lexical_tokens(text: str) -> set[str]:
         tokens.update(run[index : index + 2] for index in range(len(run) - 1))
     return tokens
 
-
+# 除去影响答案的高频词汇
 def grounding_tokens(text: str) -> set[str]:
     """用于 answerability gate 的词项，排除高频泛化词。"""
 
@@ -63,6 +63,7 @@ def grounding_tokens(text: str) -> set[str]:
     return lexical_tokens(text).difference(ANSWERABILITY_STOP_TOKENS)
 
 
+# 从文本中提取 API 名、字段名、路径和英文技术术语，用来防止引用到“语义相似但技术对象不同”的文档
 def technical_tokens(text: str) -> set[str]:
     """识别问题中的 API 名、字段名和英文术语，用于避免错误引用。"""
 

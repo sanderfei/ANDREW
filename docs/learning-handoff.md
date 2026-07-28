@@ -2,12 +2,12 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-07-24
+> 最后更新：2026-07-28
 
 ## 当前学习主线
 
 - 目录：`4_rag_knowledge_base_service/`
-- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完；目录 4 第 5 周“摄取与持久化”的 `config.py`、`loaders.py`、`embeddings.py`、`indexer.py` 核心流程已经逐文件学习，下一步先用临时数据观察完整增量状态，再进入第 6 周 `contracts.py` 与 `kb_service.py`。
+- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完；目录 4 第 5 周摄取与持久化、第 6 周问答服务，以及第 7 周 `evaluate.py` 的黄金集与增量回归流程均已逐文件学习。下一步从 `scripts/smoke.py` 的 FastAPI 端到端验证继续，再处理 Docker / CI 交付边界。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
@@ -195,11 +195,36 @@ list[float]
 - 已区分 `Iterable`、`Sequence`、`list`、生成器和 `range`：`for`/`in` 才是循环关键字，`range(...)` 返回不可修改的 `range` Sequence。
 - Python 参数允许省略类型标注；参数名没有固定类型，但传入对象始终有实际运行时类型。当前未标注的 `store` 实际由 `_store()` 返回 Chroma 对象。
 
+## 目录 4 第 6 周与第 7 周评测已掌握
+
+### contracts、候选筛选与回答流程
+
+- `contracts.py` 中的 Pydantic 模型定义 API/CLI 共用的数据契约：`AskRequest` 校验问题和 `top_k`，`AskResponse` 汇总答案、可回答性、citations 与 retrieval trace，`ReindexResponse` 和 `HealthResponse` 分别描述索引变更与健康状态。
+- `KnowledgeBaseService.ask()` 先确认索引兼容，再提取问题词项并执行 Chroma Top-K 检索。`candidates` 保存完成分数计算但尚未过滤的全部候选，`matches` 保存全部候选的审计记录，`accepted_pairs` 只保存通过 gate 的候选。
+- `lexical_overlap = |问题词项 ∩ 文档词项| / |问题词项|`；`relevance_score = 0.25 * vector_score + 0.75 * lexical_overlap` 是项目自定义综合分数，不是正确概率。
+- `technical_tokens()` 只提取英文/ASCII 技术标识。纯中文问题通常得到空集合，虽然单条候选的 `technical_match` 为 `False`，但最终 `not query_technical_tokens or technical_match` 为 `True`，因此不会阻止中文问题继续通过向量和词面条件筛选。
+- 没有 `accepted_pairs` 时，服务在创建聊天模型前直接返回固定拒答。通过 gate 后先按 `relevance_score` 降序；offline 返回原文摘录，live 才把上下文交给在线聊天模型。
+- `with self._lock` 使用进程内 `threading.RLock` 串行化 ask/reindex。同一进程中 A 持锁时，B 默认在进入 `with` 处持续等待，直到 A 释放锁；当前没有配置获取锁的超时时间。该锁不跨 Uvicorn 多进程或多台机器。
+
+### citation 边界与推荐生产设计
+
+- 当前目录 4 的 citations 从 `accepted_pairs` 前三条构建，offline 答案取前两条 quote，live context 则按 `max_context_chars` 从 `accepted_pairs` 依次加入，因此三组证据不保证严格相等；这是学习型文档级来源追踪。
+- `StrOutputParser()` 只返回答案字符串，程序只能知道哪些 chunk 进入过 context，不能确认模型实际使用了哪些。推荐生产设计是先确定 `used_evidence`，在 Prompt 中携带稳定 `chunk_id`，让模型结构化返回 `answer + cited_chunk_ids`，再由程序校验这些 ID 是本次 context IDs 的子集。
+- Citation 的 `source`、`quote`、score 等字段仍应由程序根据校验后的真实 `Document` 构建，不能直接信任模型自由生成的来源信息。若需要句子级归因，应进一步返回 claim 与 chunk IDs 的映射。
+
+### evaluate.py 与启动入口
+
+- `evaluate.py` 在临时目录复制来源、建立独立 Chroma、运行 20 条黄金样本，再通过修改和删除临时文档验证增量索引与 manifest 清理，不污染主运行目录。
+- 默认评估组合为 `--embedding local --mode live`：本地 MiniLM 负责建库和查询向量，通过 gate 的问题调用在线模型；CI 显式使用 `--embedding hash --mode offline`。
+- live 答案可能把 `manifest` 改写成“清单”等同义表达，因此关键术语必须存在于 citation 证据中；答案未逐字复述时记录 warning。offline 摘录仍执行逐字确定性断言。
+- 目录 3 的 10 个课件入口及目录 4 的 `app.py`、`cli.py`、`evaluate.py` 已在 `main()` 上方补充可复制启动命令。目录 3 实际参数名为 `--live --embedding local`，目录 4 为 `--mode live --embedding local`。
+- Part 2/Part 3 课件没有聊天生成阶段，`--live` 只由公共参数解析器接收，不会触发 LLM；Generation、citation、Multi Query 与 RRF 等包含生成或改写阶段的课件才会调用聊天模型。
+
 ## 目录 3 完成状态
 
 - 用户已确认 `3_rag_from_scratch` 的后续 Multi Query 与 Reciprocal Rank Fusion / reranking 学习也已完成，目录 3 不再作为下一步。
 - 目录 4 不反向修改目录 3 的课件，而是把已掌握的 indexing、retrieval、answerability、generation 和 citation 契约工程化为持久化知识库服务。
-- 目录 4 的建议顺序是：`loaders.py` → `embeddings.py` → `indexer.py` → `contracts.py` → `kb_service.py` → `app.py` / `cli.py` → `evaluate.py` / `scripts/smoke.py`。
+- 目录 4 已按 `loaders.py` → `embeddings.py` → `indexer.py` → `contracts.py` → `kb_service.py` → `app.py` / `cli.py` → `evaluate.py` 学习；尚未逐行学习 `scripts/smoke.py`。
 
 ## 已验证命令
 
@@ -210,7 +235,7 @@ list[float]
 .venv/bin/python 3_rag_from_scratch/part1_overview.py
 
 # 本地 MiniLM 检索 + 在线 ep-qwen2.5-72b 回答
-.venv/bin/python 3_rag_from_scratch/part1_overview.py --live
+.venv/bin/python 3_rag_from_scratch/part1_overview.py --live --embedding local
 
 # Part 2：Embedding、余弦相似度、切块与入库
 .venv/bin/python 3_rag_from_scratch/part2_indexing.py
@@ -234,40 +259,39 @@ list[float]
 .venv/bin/python 3_rag_from_scratch/part4_2_answer_with_citations.py
 
 # Part 4-2：本地 MiniLM 检索 + 在线 ep-qwen2.5-72b 生成
-.venv/bin/python 3_rag_from_scratch/part4_2_answer_with_citations.py --live
+.venv/bin/python 3_rag_from_scratch/part4_2_answer_with_citations.py --live --embedding local
 
 # 目录 4：用本地 MiniLM 完整重建持久化 Chroma 索引
-.venv/bin/python 4_rag_knowledge_base_service/cli.py reindex --reset
+.venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local reindex --reset
 
-# 目录 4：健康检查与离线问答
-.venv/bin/python 4_rag_knowledge_base_service/cli.py health
-.venv/bin/python 4_rag_knowledge_base_service/cli.py ask "本机默认 embedding 使用什么模型，向量维度是多少？"
+# 目录 4：健康检查与本地 MiniLM 检索、在线回答
+.venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local health
+.venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local ask "本机默认 embedding 使用什么模型，向量维度是多少？"
 
-# 目录 4：本机 MiniLM 黄金集与无需模型下载的 Hash 回归
-.venv/bin/python 4_rag_knowledge_base_service/evaluate.py --embedding local
-.venv/bin/python 4_rag_knowledge_base_service/evaluate.py --embedding hash
+# 目录 4：本机 MiniLM 检索 + 在线回答，以及无需模型下载/API 的 Hash 离线回归
+.venv/bin/python 4_rag_knowledge_base_service/evaluate.py --embedding local --mode live
+.venv/bin/python 4_rag_knowledge_base_service/evaluate.py --embedding hash --mode offline
 
 # 目录 4：FastAPI 端到端冒烟
 .venv/bin/python 4_rag_knowledge_base_service/scripts/smoke.py
 
-# 当前目录 4 Python 文件编译检查
-.venv/bin/python -m compileall -q 4_rag_knowledge_base_service
+# 目录 3、目录 4 Python 文件编译检查
+.venv/bin/python -m compileall -q 3_rag_from_scratch 4_rag_knowledge_base_service
 
 # 提交前检查补丁格式
 git diff --check
 ```
 
-已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答；MiniLM 与 Hash 两套 20 条黄金集均为 20/20，在线 Qwen 回答仍保持 `embedding_mode=local`。2026-07-24 提交前再次验证目录 4 全量编译通过、Hash 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过。
+已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答。2026-07-28 再次验证 Hash + offline 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过；local + live 黄金集也为 `20/20`，其中 4 条仅因模型同义改写产生 warning，在线回答仍保持 `embedding_mode=local`。目录 3 的 10 个入口以及目录 4 评估/CLI 参数帮助检查全部通过，两个目录全量编译和 `git diff --check` 通过。
 
 ## 下一步
 
-继续 `4_rag_knowledge_base_service`，不要重复已经完成的 `config.py`、`loaders.py`、`embeddings.py` 和 `indexer.py` 概念讲解：
+继续 `4_rag_knowledge_base_service`，不要重复已经完成的目录 3，以及目录 4 从 `config.py` 到 `evaluate.py` 的概念讲解：
 
-1. 先用临时 `source_dir` 和 `runtime_dir` 手动观察一次新增、未变化、内容更新和来源删除，逐次对照 `IndexStats`、新 manifest 与 Chroma；主知识库数据不作为实验对象。
-2. 进入第 6 周 `contracts.py`，学习请求/响应对象、字段校验、citation/retrieval 数据契约和 dataclass/Pydantic 边界。
-3. 阅读 `kb_service.py`，追踪 Chroma 候选如何经过向量分数、词面覆盖、技术词检查和 answerability gate，最后形成 accepted Documents、拒答、context、answer 与 citations。
-4. 阅读 `app.py` / `cli.py`，对照 HTTP、CLI 如何复用同一个 `KnowledgeBaseService`，以及 request ID、异常映射和 `reindex(reset=...)` 的入口。
-5. 第 6 周完成后再进入 `evaluate.py`、`scripts/smoke.py` 和交付流程，不提前跳到 Agent/LangGraph。
+1. 逐行学习 `scripts/smoke.py`：临时来源、`TestClient`、request ID、health/reindex/ask/refusal/update/delete 断言，以及它与 `evaluate.py` 的测试层级差异。
+2. 处理 Docker / CI 一致性：当前 `Dockerfile` 已删除，但 README 的 Docker 章节和 `.github/workflows/rag-kb-ci.yml` 的 `docker-build` job 仍依赖它。进入容器交付前先明确是恢复 Dockerfile，还是同步移除 Docker 文档与 CI job。
+3. 补充 HTTP live 模式的人工演示，确认本地 MiniLM 检索、在线回答、citations、retrieval trace 和 `X-Request-ID` 的真实响应。
+4. 完成第 7 周交付检查后，再决定是否进入 LangSmith 评测/可观测性，不提前跳到 Agent/LangGraph。
 
 ## 新电脑继续学习时的启动提示
 
@@ -277,8 +301,8 @@ git diff --check
 
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
-不要重复 3_rag_from_scratch 以及目录 4 已完成的 config/loaders/embeddings/indexer
-概念讲解，从“下一步”的临时增量实验开始，然后分析 contracts.py。
+不要重复 3_rag_from_scratch，以及目录 4 已完成的 config/loaders/embeddings/indexer/
+contracts/kb_service/app/cli/evaluate 概念讲解，从“下一步”的 scripts/smoke.py 开始。
 先分析，不要修改代码。
 ```
 

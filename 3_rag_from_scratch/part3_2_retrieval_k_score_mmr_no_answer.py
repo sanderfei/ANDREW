@@ -88,6 +88,9 @@ def _scored(vector_store, question: str, k: int) -> list[dict[str, object]]:
 # 更合理的实际策略通常是：
 #   → 先用相关性阈值排除明显无关候选
 #   → 再在剩余候选中使用 MMR 去重
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# .venv/bin/python 3_rag_from_scratch/part3_2_retrieval_k_score_mmr_no_answer.py --live --embedding local
+# 本课只有检索与拒答门控，没有回答生成阶段；--live 不会触发聊天模型。
 def main() -> None:
     options = parse_runtime_options("RAG Part 3 补充：k / score / MMR / no-answer")
     embeddings = build_embeddings(mode=options.embedding_mode)

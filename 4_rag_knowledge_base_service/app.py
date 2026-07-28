@@ -72,6 +72,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 app = create_app()
 
 
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# RAG_MODE=live RAG_EMBEDDING_MODE=local \
+#   .venv/bin/python 4_rag_knowledge_base_service/app.py
 def main() -> None:
     import uvicorn
 

@@ -1,4 +1,4 @@
-"""离线黄金集评测与文档更新回归；不用 pytest 或测试类。"""
+"""RAG 黄金集评测与文档更新回归；默认本地 MiniLM 检索、在线模型回答。"""
 
 from __future__ import annotations
 
@@ -28,7 +28,10 @@ def _load_cases(path: Path) -> list[dict[str, object]]:
 
 
 def _evaluate_cases(
-    service: KnowledgeBaseService, cases: list[dict[str, object]]
+    service: KnowledgeBaseService,
+    cases: list[dict[str, object]],
+    *,
+    mode: str,
 ) -> tuple[list[dict[str, object]], list[str]]:
     results: list[dict[str, object]] = []
     failures: list[str] = []
@@ -43,10 +46,14 @@ def _evaluate_cases(
         expected_answerable = bool(case["expected_answerable"])
         passed = response.answerable == expected_answerable
         reasons: list[str] = []
+        warnings: list[str] = []
         if not passed:
             reasons.append(
                 f"answerable={response.answerable}，期望 {expected_answerable}"
             )
+        if expected_answerable and not response.answer.strip():
+            passed = False
+            reasons.append("可回答问题返回了空 answer")
 
         expected_sources = set(case.get("expected_sources", []))
         if expected_sources and not expected_sources.issubset(citations):
@@ -62,18 +69,26 @@ def _evaluate_cases(
             passed = False
             reasons.append(f"出现禁止引用来源 {sorted(overlap)}")
 
+        citation_text = "\n".join(citation.quote for citation in response.citations)
+        expected_text = response.answer if mode == "offline" else citation_text
+        expected_text_name = "answer" if mode == "offline" else "citation 证据"
         for term in case.get("expected_terms", []):
-            if str(term) not in response.answer:
+            normalized_term = str(term)
+            if normalized_term not in expected_text:
                 passed = False
-                reasons.append(f"answer 未包含关键术语 {term!r}")
+                reasons.append(f"{expected_text_name}未包含关键术语 {term!r}")
+            elif mode == "live" and normalized_term not in response.answer:
+                warnings.append(f"live answer 未逐字包含关键术语 {term!r}")
 
         result = {
             "id": case_id,
             "category": case.get("category", "unknown"),
             "passed": passed,
             "answerable": response.answerable,
+            "answer": response.answer,
             "citations": citations,
             "reasons": reasons,
+            "warnings": warnings,
         }
         results.append(result)
         if not passed:
@@ -104,7 +119,10 @@ def _run_update_regression(service: KnowledgeBaseService, source_dir: Path) -> d
     failures: list[str] = []
     if update_stats.updated_files != 1 or update_stats.indexed_chunks < 1:
         failures.append("文档更新没有触发预期的增量写入")
-    if not update_answer.answerable or "release_channel=canary" not in update_answer.answer:
+    update_evidence = "\n".join(
+        citation.quote for citation in update_answer.citations
+    )
+    if not update_answer.answerable or "release_channel=canary" not in update_evidence:
         failures.append("更新后的资料没有被检索到")
     if delete_stats.removed_files != 1 or "service_operations.md" in manifest_sources:
         failures.append("删除源文件后 manifest 没有同步清理")
@@ -116,34 +134,46 @@ def _run_update_regression(service: KnowledgeBaseService, source_dir: Path) -> d
     }
 
 
-def run(output: Path, *, embedding_mode: str = "local") -> int:
+def run(
+    output: Path,
+    *,
+    embedding_mode: str = "local",
+    mode: str = "live",
+) -> int:
     cases = _load_cases(PROJECT_DIR / "data" / "eval" / "golden_cases.json")
     with tempfile.TemporaryDirectory(prefix="rag-kb-eval-") as temporary:
         temporary_root = Path(temporary)
         source_dir = temporary_root / "source"
         shutil.copytree(PROJECT_DIR / "data" / "source", source_dir)
         settings = Settings.from_env(
-            mode="offline",
+            mode=mode,
             embedding_mode=embedding_mode,
             source_dir=source_dir,
             runtime_dir=temporary_root / "runtime",
         )
         service = KnowledgeBaseService(settings)
         initial_index = service.reindex()
-        results, failures = _evaluate_cases(service, cases)
+        results, failures = _evaluate_cases(service, cases, mode=mode)
         update_regression = _run_update_regression(service, source_dir)
         failures.extend(update_regression["failures"])
 
+    warnings = [
+        f"{result['id']}: {warning}"
+        for result in results
+        for warning in result["warnings"]
+    ]
     category_totals = Counter(str(result["category"]) for result in results)
     category_passed = Counter(
         str(result["category"]) for result in results if result["passed"]
     )
     report = {
         "status": "passed" if not failures else "failed",
+        "mode": mode,
         "embedding_mode": embedding_mode,
         "total": len(results),
         "passed": sum(bool(result["passed"]) for result in results),
         "failed": len(failures),
+        "warning_count": len(warnings),
         "by_category": {
             category: {
                 "total": category_totals[category],
@@ -155,19 +185,49 @@ def run(output: Path, *, embedding_mode: str = "local") -> int:
         "update_regression": update_regression,
         "results": results,
         "failures": failures,
+        "warnings": warnings,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({key: report[key] for key in ("status", "total", "passed", "failed")}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                key: report[key]
+                for key in (
+                    "status",
+                    "mode",
+                    "embedding_mode",
+                    "total",
+                    "passed",
+                    "failed",
+                    "warning_count",
+                )
+            },
+            ensure_ascii=False,
+        )
+    )
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
+    for warning in warnings:
+        print(f"WARN: {warning}", file=sys.stderr)
     return 0
 
 
+# 在仓库根目录运行完整评估（mode=live，embedding_mode=local）：
+# .venv/bin/python 4_rag_knowledge_base_service/evaluate.py --mode live --embedding local
+#
+# 增量同步来源文件到索引：
+# .venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local reindex
+#
+# 删除旧索引并完整重建（切块或 Embedding 配置改变后使用）：
+# .venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local reindex --reset
+#
+# 查看当前索引状态：
+# .venv/bin/python 4_rag_knowledge_base_service/cli.py --mode live --embedding local health
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="运行离线 RAG 黄金集与更新回归")
+    parser = argparse.ArgumentParser(description="运行 RAG 黄金集与更新回归")
     parser.add_argument(
         "--output",
         type=Path,
@@ -178,10 +238,16 @@ def main(argv: list[str] | None = None) -> int:
         "--embedding",
         choices=("local", "hash"),
         default="local",
-        help="默认验证本机 MiniLM；CI 可用 hash 做无需模型下载的确定性回归。",
+        help="默认使用本机 MiniLM；CI 可选择 hash 做确定性检索回归。",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("offline", "live"),
+        default="live",
+        help="默认 live 调用聊天模型生成答案；CI 使用 offline 返回确定性摘录。",
     )
     args = parser.parse_args(argv)
-    return run(args.output, embedding_mode=args.embedding)
+    return run(args.output, embedding_mode=args.embedding, mode=args.mode)
 
 
 if __name__ == "__main__":

@@ -322,12 +322,14 @@ class IncrementalIndexer:
         previous_sources = old_sources if not reset else {}
         current_names = set(chunked_sources)
         previous_names = set(previous_sources)
+        # 新增 & 修改过的
         changed_names = sorted(
             name
             for name, source in chunked_sources.items()
             if name not in previous_sources
             or previous_sources[name].get("sha256") != source.source_sha256
         )
+        # 集合的 - 表示差集：只保留左边有、右边没有的元素。
         removed_names = sorted(previous_names - current_names)
 
         delete_ids: list[str] = []

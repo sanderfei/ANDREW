@@ -37,6 +37,9 @@ except ImportError:  # pragma: no cover - 仅 direct-script 入口会走到这�
 SECOND_QUESTION = "How does RAG use retrieved context?"
 
 
+# 在仓库根目录运行（mode=live，embedding_mode=local）：
+# .venv/bin/python 3_rag_from_scratch/part3_1_retrieval.py --live --embedding local
+# 本课只有检索阶段，没有回答生成阶段；--live 不会触发聊天模型。
 def main() -> None:
     options = parse_runtime_options("RAG From Scratch Part 3：Retrieval")
 
