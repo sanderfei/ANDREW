@@ -268,3 +268,19 @@ class KnowledgeBaseService:
                 mode=self.settings.mode,
                 embedding_mode=self.settings.embedding_mode,
             )
+
+
+class KnowledgeService:
+    """服务对象在 API 与 CLI 间复用；读写由同一锁协调。"""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.indexer = IncrementalIndexer(settings)
+        self._lock = threading.RLock()
+
+
+    def health(self, *, request_id: str) -> HealthResponse:
+        with  self._lock:
+            manifest = self.indexer.read_manifest()
+            sources = manifest["sources"]
+            

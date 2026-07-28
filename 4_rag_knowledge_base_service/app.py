@@ -33,6 +33,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.service = service
 
+    # 一个 FastAPI HTTP 中间件：每次收到请求时，为请求分配一个唯一的 request_id，并返回给客户端，方便追踪一次完整请求。
     @app.middleware("http")
     async def add_request_id(request: Request, call_next):
         request.state.request_id = request.headers.get("X-Request-ID") or uuid4().hex
