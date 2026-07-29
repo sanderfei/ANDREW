@@ -2,12 +2,12 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-07-28
+> 最后更新：2026-07-29
 
 ## 当前学习主线
 
-- 目录：`4_rag_knowledge_base_service/`
-- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完；目录 4 第 5 周摄取与持久化、第 6 周问答服务，以及第 7 周 `evaluate.py` 的黄金集与增量回归流程均已逐文件学习。下一步从 `scripts/smoke.py` 的 FastAPI 端到端验证继续，再处理 Docker / CI 交付边界。
+- 目录：`5_langgraph_agentic_rag/`
+- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～10 课件已经按官方 LangGraph 主线完成本地适配并通过测试，但不等于用户已经逐课掌握；下一步从目录 5 的 README 和 Part 1 开始学习。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
@@ -275,23 +275,34 @@ list[float]
 # 目录 4：FastAPI 端到端冒烟
 .venv/bin/python 4_rag_knowledge_base_service/scripts/smoke.py
 
-# 目录 3、目录 4 Python 文件编译检查
-.venv/bin/python -m compileall -q 3_rag_from_scratch 4_rag_knowledge_base_service
+# 目录 5：Part 1～4 原有冒烟
+.venv/bin/python 5_langgraph_agentic_rag/scripts/smoke.py
+
+# 目录 5：Part 5～10 高级冒烟
+.venv/bin/python 5_langgraph_agentic_rag/scripts/smoke_advanced.py
+
+# 目录 3、目录 4、目录 5 Python 文件编译检查
+.venv/bin/python -m compileall -q \
+  3_rag_from_scratch \
+  4_rag_knowledge_base_service \
+  5_langgraph_agentic_rag
 
 # 提交前检查补丁格式
 git diff --check
 ```
 
-已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答。2026-07-28 再次验证 Hash + offline 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过；local + live 黄金集也为 `20/20`，其中 4 条仅因模型同义改写产生 warning，在线回答仍保持 `embedding_mode=local`。目录 3 的 10 个入口以及目录 4 评估/CLI 参数帮助检查全部通过，两个目录全量编译和 `git diff --check` 通过。
+已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答。2026-07-28 再次验证 Hash + offline 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过；local + live 黄金集也为 `20/20`，其中 4 条仅因模型同义改写产生 warning，在线回答仍保持 `embedding_mode=local`。目录 3 的 10 个入口以及目录 4 评估/CLI 参数帮助检查全部通过，两个目录全量编译和 `git diff --check` 通过。2026-07-29 验证目录 5 的原有冒烟和高级冒烟均通过：Part 5～10 覆盖 Reducer/Streaming、重试与补偿、SQLite 恢复/replay/fork、受控 RAG+SQL+HITL、同 thread 多轮状态、FastAPI/SSE，以及 6 个评测用例、31 项合同检查；Part 1～4 文件哈希保持不变。
 
 ## 下一步
 
-继续 `4_rag_knowledge_base_service`，不要重复已经完成的目录 3，以及目录 4 从 `config.py` 到 `evaluate.py` 的概念讲解：
+从 `5_langgraph_agentic_rag` 开始逐课学习，不重复目录 3 和目录 4 已掌握的 RAG 基础，也不要因为代码已通过测试就把目录 5 标记为已学会：
 
-1. 逐行学习 `scripts/smoke.py`：临时来源、`TestClient`、request ID、health/reindex/ask/refusal/update/delete 断言，以及它与 `evaluate.py` 的测试层级差异。
-2. 处理 Docker / CI 一致性：当前 `Dockerfile` 已删除，但 README 的 Docker 章节和 `.github/workflows/rag-kb-ci.yml` 的 `docker-build` job 仍依赖它。进入容器交付前先明确是恢复 Dockerfile，还是同步移除 Docker 文档与 CI job。
-3. 补充 HTTP live 模式的人工演示，确认本地 MiniLM 检索、在线回答、citations、retrieval trace 和 `X-Request-ID` 的真实响应。
-4. 完成第 7 周交付检查后，再决定是否进入 LangSmith 评测/可观测性，不提前跳到 Agent/LangGraph。
+1. 先读目录 5 README，再学习 `part1_graph_basics.py` 的 State、Node、Edge 和条件边。
+2. 学习 `part2_agentic_rag.py`，重点追踪消息类型、ToolNode、检索 artifact、证据判断、改写回边和引用校验。
+3. 学习 Part 3～4 的 `thread_id`、interrupt/resume、Tool Schema 与 SQL 三层只读边界。
+4. 学习 Part 5～7 的 Reducer、v2 Streaming、RetryPolicy/error_handler、SQLite checkpoint、历史、replay 和 fork。
+5. 学习 Part 8～10 的受控多工具图、同 thread 多轮状态、FastAPI/SSE/恢复接口与确定性合同评测。
+6. 目录 5 学完后再进入独立的 LangSmith tracing/实验记录；多 Agent 不属于当前路线。目录 4 尚未处理的 Docker / CI 一致性留到第 11 周上线工程化阶段。
 
 ## 新电脑继续学习时的启动提示
 
@@ -301,8 +312,8 @@ git diff --check
 
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
-不要重复 3_rag_from_scratch，以及目录 4 已完成的 config/loaders/embeddings/indexer/
-contracts/kb_service/app/cli/evaluate 概念讲解，从“下一步”的 scripts/smoke.py 开始。
+不要重复 3_rag_from_scratch 和目录 4 已掌握的内容。
+目录 5 代码已经通过测试，但我还没有逐课学完；从“下一步”的 Part 1 开始。
 先分析，不要修改代码。
 ```
 

@@ -1,0 +1,75 @@
+[
+    {
+        "key": "ctrl+d",
+        "command": "editor.action.deleteLines",
+        "when": "editorTextFocus && !editorReadonly"
+    },
+    {
+        "key": "ctrl+y",
+        "command": "editor.action.copyLinesDownAction",
+        "when": "editorTextFocus && !editorReadonly"
+    },
+    {
+        "key": "ctrl+alt+v",
+        "command": "editor.action.codeAction",
+        "args": {
+            "kind": "refactor.extract.variable",
+            "apply": "ifSingle"
+        },
+        "when": "editorTextFocus && !editorReadonly && editorLangId == python"
+    },
+    {
+        "key": "alt+w",
+        "command": "workbench.action.closeOtherEditors"
+    },
+    {
+        "key": "alt+v",
+        "command": "workbench.action.splitEditorRight",
+        "when": "editorTextFocus"
+    },
+    {
+        "key": "alt+f7",
+        "command": "references-view.findReferences",
+        "when": "editorTextFocus && editorHasReferenceProvider"
+    },
+    {
+        "key": "alt+left",
+        "command": "-workbench.action.previousEditor",
+        "when": "!terminalFocus"
+    },
+    {
+        "key": "ctrl+alt+left",
+        "command": "-workbench.action.navigateBack",
+        "when": "canNavigateBack"
+    },
+    {
+        "key": "ctrl+alt+left",
+        "command": "workbench.action.previousEditor",
+        "when": "!terminalFocus"
+    },
+    {
+        "key": "alt+left",
+        "command": "workbench.action.navigateBack",
+        "when": "canNavigateBack"
+    },
+    {
+        "key": "alt+right",
+        "command": "-workbench.action.nextEditor",
+        "when": "!terminalFocus"
+    },
+    {
+        "key": "ctrl+alt+right",
+        "command": "-workbench.action.navigateForward",
+        "when": "canNavigateForward"
+    },
+    {
+        "key": "ctrl+alt+right",
+        "command": "workbench.action.nextEditor",
+        "when": "!terminalFocus"
+    },
+    {
+        "key": "alt+right",
+        "command": "workbench.action.navigateForward",
+        "when": "canNavigateForward"
+    }
+]

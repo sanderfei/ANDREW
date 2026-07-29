@@ -78,6 +78,7 @@ gh auth status
 | Python | `ms-python.python` | 必需 |
 | Pylance | `ms-python.vscode-pylance` | 推荐 |
 | Codex | `openai.chatgpt` | 学习时推荐 |
+| IntelliJ IDEA Keybindings | `k--kato.intellij-idea-keybindings` | 复现当前基础键位时推荐 |
 
 项目和 Python 环境都放在 WSL 的 Linux 文件系统中，不放在 `/mnt/c`。后续克隆完成后，在 Ubuntu 终端运行：
 
@@ -102,6 +103,33 @@ git status --short --branch
 cd ~/code/andrew
 git pull --ff-only
 ```
+
+### 导入仓库中的 VS Code 快捷键
+
+仓库中的 [vscode-keybindings.json](vscode-keybindings.json) 是当前 Windows VS Code 的用户自定义快捷键快照。它只包含用户覆盖项，不包含 VS Code 默认键位和扩展自身提供的全部键位；要完整复现当前体验，请先安装第 3 节列出的 `IntelliJ IDEA Keybindings` 扩展。
+
+导入步骤：
+
+1. 在另一台电脑的 VS Code 中按 `Ctrl+Shift+P`。
+2. 执行 `Preferences: Open Keyboard Shortcuts (JSON)`；中文界面可搜索“打开键盘快捷方式(JSON)”。
+3. 先备份该电脑原有的内容。
+4. 如果原文件为空，直接用 `docs/vscode-keybindings.json` 的完整内容替换；如果已有自定义快捷键，只把仓库文件数组中的各个 `{...}` 条目合并到原数组中，不要把两个数组直接嵌套。
+5. 保存后通常立即生效；如未生效，执行 `Developer: Reload Window`。
+
+Windows VS Code 的实际用户配置文件通常位于：
+
+```text
+%APPDATA%\Code\User\keybindings.json
+```
+
+导入后可重点验证：
+
+| 快捷键 | 功能 |
+| --- | --- |
+| `Alt+Left` | 返回上一个浏览位置 |
+| `Alt+Right` | 前进到下一个浏览位置 |
+| `Ctrl+Alt+Left` | 切换到上一个编辑器标签页 |
+| `Ctrl+Alt+Right` | 切换到下一个编辑器标签页 |
 
 ## 5. 创建 Python 虚拟环境
 

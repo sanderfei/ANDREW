@@ -1,0 +1,6 @@
+# 目录 5 继续复用目录 4 的 Chroma、Embedding 与模型依赖。
+# 首次安装时同时执行：
+#   .venv/bin/pip install -r 4_rag_knowledge_base_service/requirements.txt \
+#     -r 5_langgraph_agentic_rag/requirements.txt
+langgraph>=1.2,<2.0
+langgraph-checkpoint-sqlite>=3.1,<4.0

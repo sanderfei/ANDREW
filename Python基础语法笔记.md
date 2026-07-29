@@ -767,7 +767,7 @@ not_a_tuple = ("hello")
 one_item_tuple = ("hello",)
 ```
 
-### 4.6 `scores.items()` 返回什么
+### 4.6 `dict.items()` 和 `dict.values()` 返回什么
 
 假设字典是：
 
@@ -825,7 +825,38 @@ for item in scores.items():
 score_pairs = list(scores.items())
 ```
 
-`dict_items` 是动态视图，它引用原字典。创建视图后再修改字典，之后查看视图时会反映新数据：
+`values()` 只返回所有 value，不携带 key：
+
+```python
+score_values = scores.values()
+# dict_values([0.91, 0.72])
+```
+
+它的类型是字典视图 `dict_values`，同样不是普通列表。遍历时每次直接得到一个 value：
+
+```python
+for score in scores.values():
+    print(score)
+
+# 0.91
+# 0.72
+```
+
+需要普通列表时可以显式转换：
+
+```python
+score_list = list(scores.values())
+# [0.91, 0.72]
+```
+
+对比：
+
+| 调用 | 返回类型 | 遍历时每次得到 |
+| --- | --- | --- |
+| `mapping.items()` | `dict_items` | `(key, value)` 元组 |
+| `mapping.values()` | `dict_values` | `value` |
+
+`dict_items` 和 `dict_values` 都是动态视图，它们引用原字典。创建视图后再修改字典，之后查看视图时会反映新数据：
 
 ```python
 view = scores.items()
@@ -3842,11 +3873,44 @@ raw_arguments = '{"location": "Boston"}'
 arguments = json.loads(raw_arguments)
 ```
 
-结果：
+这里的 JSON 最外层是对象 `{...}`，所以结果是 Python `dict`：
 
 ```python
 {"location": "Boston"}
 ```
+
+但 `json.loads()` 并不是固定返回 `dict`。它会根据 JSON 最外层的数据类型，返回对应的 Python 对象：
+
+| JSON 最外层类型 | 示例 | Python 返回类型 |
+| --- | --- | --- |
+| object | `{"name": "Alice"}` | `dict` |
+| array | `[1, 2, 3]` | `list` |
+| string | `"hello"` | `str` |
+| number | `1` / `1.5` | `int` / `float` |
+| boolean | `true` / `false` | `bool` |
+| null | `null` | `None` |
+
+例如：
+
+```python
+type(json.loads('{"name": "Alice"}'))  # dict
+type(json.loads('[1, 2, 3]'))          # list
+```
+
+下面这行代码分两步执行：
+
+```python
+payload = json.loads(path.read_text(encoding="utf-8"))
+```
+
+等价于：
+
+```python
+text = path.read_text(encoding="utf-8")  # 先读取文件，得到 str
+payload = json.loads(text)               # 再解析 JSON，得到对应的 Python 对象
+```
+
+因此，只有当文件内容最外层是 `{...}` 时，`payload` 才是 `dict`；如果最外层是 `[...]`，它就是 `list`。
 
 ### 16.3 `dict(row)` 是 Python 数据结构转换
 

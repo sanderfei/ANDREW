@@ -24,7 +24,6 @@ from embeddings import (
 )
 from indexer import IncrementalIndexer, IndexStats
 
-
 REJECTION_ANSWER = "我不知道，当前知识库中没有足够相关资料。"
 LIVE_RAG_PROMPT = ChatPromptTemplate.from_messages(
     [
@@ -40,10 +39,12 @@ LIVE_RAG_PROMPT = ChatPromptTemplate.from_messages(
     ]
 )
 
+
 # 预览 防止text过长
 def _preview(text: str, limit: int = 280) -> str:
     normalized = " ".join(text.split())
     return normalized if len(normalized) <= limit else normalized[: limit - 1] + "…"
+
 
 # terms：从问题中提取并过滤后的关键词集合
 # 只围绕“最早出现的关键词”截取一个连续窗口，这是一个简化的举例，生产级实现通常会使用句子边界、关键词密集窗口或二次语义排序来选择引用
@@ -56,9 +57,7 @@ def _relevant_quote(text: str, terms: set[str], limit: int = 420) -> str:
     normalized = " ".join(text.split())
     lowered = normalized.lower()
     positions = [
-        position
-        for term in terms
-        if (position := lowered.find(term.lower())) >= 0
+        position for term in terms if (position := lowered.find(term.lower())) >= 0
     ]
     if not positions:
         return _preview(normalized, limit)
@@ -173,7 +172,13 @@ class KnowledgeBaseService:
                 )
                 # 计算后的全部候选
                 candidates.append(
-                    (document, vector_score, lexical_overlap, relevance_score, technical_match)
+                    (
+                        document,
+                        vector_score,
+                        lexical_overlap,
+                        relevance_score,
+                        technical_match,
+                    )
                 )
 
             best_relevance = max((item[3] for item in candidates), default=0.0)
@@ -192,10 +197,7 @@ class KnowledgeBaseService:
                     relevance_score >= self.settings.min_relevance_score
                     and lexical_overlap >= self.settings.min_lexical_overlap
                     and relevance_score >= best_relevance * 0.85
-                    and (
-                        not query_technical_tokens
-                        or technical_match
-                    )
+                    and (not query_technical_tokens or technical_match)
                 )
                 metadata = document.metadata
                 matches.append(
@@ -277,10 +279,13 @@ class KnowledgeBaseService:
                     vector_score=round(vector_score, 6),
                     lexical_overlap=round(lexical_overlap, 6),
                 )
-                for document, relevance_score, vector_score, lexical_overlap in accepted_pairs[:3]
+                for document, relevance_score, vector_score, lexical_overlap in accepted_pairs[
+                    :3
+                ]
             ]
 
             if self.settings.is_live:
+                # 优先把相关度最高的文本放入 context，总文本长度尽量控制在上下文限制内
                 context_parts: list[str] = []
                 used_chars = 0
                 for document, _relevance, _vector, _lexical in accepted_pairs:
@@ -303,7 +308,8 @@ class KnowledgeBaseService:
                 answer = "根据本地知识库的相关片段：\n" + "\n\n".join(
                     # offline 只使用前 2 条 quote
                     # 离线模式没有聊天模型，不会综合、推理或改写，只是展示原文摘录：限制为两条是为了避免答案变成大段文档拼接
-                    citation.quote for citation in citations[:2]
+                    citation.quote
+                    for citation in citations[:2]
                 )
 
             return AskResponse(
@@ -315,19 +321,3 @@ class KnowledgeBaseService:
                 mode=self.settings.mode,
                 embedding_mode=self.settings.embedding_mode,
             )
-
-
-class KnowledgeService:
-    """服务对象在 API 与 CLI 间复用；读写由同一锁协调。"""
-
-    def __init__(self, settings: Settings):
-        self.settings = settings
-        self.indexer = IncrementalIndexer(settings)
-        self._lock = threading.RLock()
-
-
-    def health(self, *, request_id: str) -> HealthResponse:
-        with  self._lock:
-            manifest = self.indexer.read_manifest()
-            sources = manifest["sources"]
-            

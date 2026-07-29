@@ -2254,6 +2254,7 @@ Agentic RAG 对应 [2_langchain/L10_RAG_Agent.py](2_langchain/L10_RAG_Agent.py) 
 | 19 | [3_rag_from_scratch/part4_2_answer_with_citations.py](3_rag_from_scratch/part4_2_answer_with_citations.py) | gate 与 citation |
 | 20 | [3_rag_from_scratch/part5_multi_query.py](3_rag_from_scratch/part5_multi_query.py) | `RunnableLambda`、`.map()` |
 | 21 | [3_rag_from_scratch/part15_reciprocal_rank_fusion_reranking.py](3_rag_from_scratch/part15_reciprocal_rank_fusion_reranking.py) | `batch()`、RRF |
+| 22 | [5_langgraph_agentic_rag/README.md](5_langgraph_agentic_rag/README.md) | `StateGraph`、条件路由、重试、Persistence、HITL |
 
 ## 18. 一页速记
 
@@ -2306,3 +2307,289 @@ Multi Query
 RRF
   = 多个检索排名 → 基于名次融合
 ```
+
+## 19. LangGraph 显式控制流
+
+[5_langgraph_agentic_rag/](5_langgraph_agentic_rag/) 不再只调用
+`create_agent()`，而是把 Agent 的状态和跳转显式写成 Graph。
+
+### 19.1 State、Node 与部分更新
+
+```python
+class LearningState(TypedDict, total=False):
+    question: str
+    route: str
+    answer: str
+
+
+def classify_question(state: LearningState) -> LearningState:
+    return {"route": "knowledge"}
+```
+
+`state` 是当前完整状态。Node 返回的字典是“本节点要更新的字段”，不要求手动复制完整 state。
+
+### 19.2 普通边与条件边
+
+```python
+workflow.add_edge(START, "classify_question")
+
+workflow.add_conditional_edges(
+    "classify_question",
+    choose_route,
+    {
+        "knowledge": "retrieve",
+        "smalltalk": END,
+    },
+)
+```
+
+- `add_edge(A, B)`：A 执行完固定进入 B。
+- `add_conditional_edges(...)`：先调用路由函数，再把返回值映射到不同节点。
+- `START` 和 `END` 是图的入口、出口，不是普通业务 Node。
+
+### 19.3 `MessagesState` 与消息累加
+
+```python
+class AgenticRAGState(MessagesState, total=False):
+    original_question: str
+    rewrite_count: int
+    used_evidence: list[dict]
+```
+
+`MessagesState` 已经定义了带消息 reducer 的 `messages` 字段。Node 返回：
+
+```python
+{"messages": [AIMessage(...)]}
+```
+
+表示把新消息追加到轨迹，而不是直接覆盖此前的 HumanMessage、AIMessage 和 ToolMessage。
+
+### 19.4 `ToolNode` 执行 Tool Call
+
+```python
+workflow.add_node(
+    "retrieve",
+    ToolNode([retrieval_tool]),
+)
+```
+
+真实顺序是：
+
+```text
+AIMessage.tool_calls
+  ↓ ToolNode
+调用本地 Python Tool
+  ↓
+ToolMessage(content=给模型看的文本, artifact=程序保留的结构化证据)
+```
+
+`bind_tools()` 只让模型知道 Tool Schema；`ToolNode` 才执行 Python Tool。
+
+### 19.5 有上限的改写循环
+
+```text
+retrieve
+  ↓
+assess_evidence
+  ├─ relevant → generate_answer
+  ├─ weak 且 rewrite_count < max_rewrites → rewrite_question
+  └─ weak 且达到上限 → refuse
+```
+
+图中有一条回边不代表无限循环。业务 state 必须保存计数，并提供明确结束分支。
+
+`RetryPolicy(max_attempts=2)` 与 `max_rewrites` 不是一回事：
+
+- `RetryPolicy` 处理同一个 Node 的暂时性执行错误。
+- `max_rewrites` 控制业务层“改写问题后重新检索”的循环次数。
+
+### 19.6 Checkpointer、`thread_id` 与人工确认
+
+```python
+graph = workflow.compile(checkpointer=InMemorySaver())
+config = {"configurable": {"thread_id": "thread-1"}}
+
+paused = graph.invoke(input_state, config=config)
+final = graph.invoke(
+    Command(resume={"decision": "approve"}),
+    config=config,
+)
+```
+
+Node 内的 `interrupt(payload)` 会暂停执行。恢复时必须使用同一个
+`thread_id`，checkpointer 才能找到原来的 checkpoint。
+
+`InMemorySaver` 只在当前进程有效；进程重启后数据消失。它适合教学和测试，不等于生产持久化。
+
+### 19.7 `used_evidence` 与引用 ID 校验
+
+目录 5 的生成顺序是：
+
+```text
+accepted Documents
+  ↓ 先受 max_context_chars 限制
+used_evidence
+  ↓ Prompt 标注真实 chunk_id
+answer + cited_chunk_ids
+  ↓ 程序校验 cited IDs 是 context IDs 的子集
+citations
+```
+
+模型只负责声明它使用了哪些 ID。`source`、`quote` 和分数仍由程序根据真实
+Document 构建；模型返回不存在的 ID 时不能生成 citation。
+
+### 19.8 Reducer 决定“覆盖”还是“合并”
+
+State 字段没有 Reducer 时，新值直接覆盖旧值。用 `Annotated` 给字段声明
+Reducer 后，LangGraph 会把旧值和本次 Node 返回的新值交给 Reducer：
+
+```python
+import operator
+from typing import Annotated, TypedDict
+
+from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
+
+
+class State(TypedDict, total=False):
+    steps: Annotated[list[str], operator.add]
+    messages: Annotated[list[BaseMessage], add_messages]
+```
+
+- `operator.add`：`旧 list + 新 list`，适合追加步骤或日志。
+- `add_messages`：新 ID 追加；相同 message ID 更新原消息。
+- Reducer 只定义单个字段的合并规则，不负责决定下一个 Node。
+
+### 19.9 v2 Streaming 与自定义进度
+
+```python
+for part in graph.stream(
+    input_state,
+    stream_mode=["updates", "custom"],
+    version="v2",
+):
+    print(part["type"], part["ns"], part["data"])
+```
+
+v2 每个流事件都有统一外壳：
+
+| 字段 | 含义 |
+| --- | --- |
+| `type` | `updates`、`values`、`custom` 等模式 |
+| `ns` | 当前图或子图的命名空间 |
+| `data` | 该模式的实际数据 |
+
+Node 可以发送不写入 State 的进度事件：
+
+```python
+from langgraph.config import get_stream_writer
+
+
+def retrieve(state):
+    writer = get_stream_writer()
+    writer({"stage": "retrieve", "message": "正在检索"})
+    return {"documents": [...]}
+```
+
+`custom` 事件用于 UI 进度；它不会自动成为可恢复的业务 State。需要恢复的
+数据仍应由 Node 返回并交给 checkpointer。
+
+### 19.10 RetryPolicy 与 `error_handler`
+
+```python
+from langgraph.errors import NodeError
+from langgraph.types import Command, RetryPolicy
+
+
+def recover(state, error: NodeError) -> Command:
+    return Command(
+        update={"status": f"compensated: {type(error.error).__name__}"},
+        goto="finalize",
+    )
+
+
+workflow.add_node(
+    "call_api",
+    call_api,
+    retry_policy=RetryPolicy(
+        max_attempts=3,
+        retry_on=ConnectionError,
+    ),
+    error_handler=recover,
+)
+```
+
+- `max_attempts=3` 包含第一次执行，不是“第一次再加三次”。
+- 只把短暂网络错误、限流等可恢复错误列为可重试。
+- 参数错误、权限错误等业务失败应走条件边或立即拒绝。
+- Node 抛异常时，本次返回更新不会写入 State。
+- 重试耗尽后才进入 `error_handler`；`NodeError` 保存失败节点和原异常。
+
+### 19.11 SQLite Checkpointer、历史、Replay 与 Fork
+
+SQLite checkpointer 是单独依赖：
+
+```bash
+pip install langgraph-checkpoint-sqlite
+```
+
+```python
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+config = {"configurable": {"thread_id": "thread-1"}}
+
+with SqliteSaver.from_conn_string("checkpoints.sqlite") as saver:
+    graph = workflow.compile(checkpointer=saver)
+    graph.invoke(input_state, config=config)
+    current = graph.get_state(config)
+    history = list(graph.get_state_history(config))
+```
+
+时间旅行的两个动作：
+
+```python
+# Replay：用旧 checkpoint 的 config 原样重新执行其后续节点
+replayed = graph.invoke(None, config=old_snapshot.config)
+
+# Fork：先修改旧 checkpoint，再从相同位置走一条新路径
+fork_config = graph.update_state(
+    old_snapshot.config,
+    {"amount": 10},
+)
+forked = graph.invoke(None, config=fork_config)
+```
+
+应选择 `snapshot.next` 仍有待执行 Node 的 checkpoint。最终 checkpoint 的
+`next == ()`，从它 `invoke(None, ...)` 不会重新执行任何 Node。
+
+### 19.12 受控多 Tool Graph 与服务合同
+
+“模型知道多个 Tool”不代表模型应拥有所有权限。可以先用显式条件边划分能力：
+
+```text
+knowledge → retrieval Tool
+business  → readonly metric Tool
+export    → interrupt → approve 后才调用 Tool
+smalltalk → 不调用 Tool
+```
+
+服务化时需要把 Graph 的运行语义映射到 HTTP：
+
+- 普通 `invoke` 返回 `completed` 或 `interrupted`。
+- 恢复接口必须携带原 `thread_id`。
+- 同一 `thread_id` 可以保留 `turn_count`、`last_question` 等会话字段；新一轮仍要显式清空上一轮 answer/citations 等结果字段。
+- SSE 可以传 `updates/custom/result`，但流本身不是 checkpoint。
+- 进程内 `InMemorySaver` 重启即丢失；多进程服务不能假设内存线程共享。
+
+### 19.13 Graph 评测先检查稳定合同
+
+确定性测试优先检查：
+
+1. 路由轨迹是否经过预期 Node。
+2. 已知问题是否有有效引用，未知问题是否拒答且引用为空。
+3. Tool 参数和返回数据源是否符合白名单。
+4. 敏感动作是否先暂停。
+5. approve/reject 后是否执行或跳过对应 Tool。
+
+这些是程序可以严格判定的合同。回答文风、帮助程度等主观质量再单独使用模型
+评审或人工评审，不能替代权限和引用检查。

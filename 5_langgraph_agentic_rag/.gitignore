@@ -1,0 +1,6 @@
+/runtime/
+/reports/
+*.db
+*.sqlite
+*.sqlite3
+

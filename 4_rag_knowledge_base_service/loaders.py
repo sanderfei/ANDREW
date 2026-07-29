@@ -8,7 +8,6 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 
-
 SUPPORTED_SUFFIXES = {".md", ".markdown", ".pdf"}
 
 
@@ -33,6 +32,7 @@ def _markdown_title(text: str, fallback: str) -> str:
         if stripped.startswith("#"):
             return stripped.lstrip("#").strip() or fallback
     return fallback
+
 
 def _load_markdown(path: Path, source: str, source_sha256: str) -> list[Document]:
     # 文件字节无法按照 encoding="utf-8" 解码时，用替代字符 � 代替错误部分，然后继续读取。

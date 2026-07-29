@@ -1,4 +1,5 @@
 """持久化 Chroma 索引、稳定 chunk ID 与增量 manifest。"""
+
 # 把知识库文本转换成向量后保存起来，并建立能够快速寻找“最相似向量”的检索结构。
 # Chroma：向量数据库。
 # 索引：为了快速查找相似内容而建立的数据和检索结构。
@@ -46,6 +47,7 @@ class IndexingError(RuntimeError):
 class IndexConflictError(IndexingError):
     """配置指纹变化时，要求调用方明确确认 reset。"""
 
+
 # IndexStats 是一次 reindex() 执行结束后的“统计报告对象”，不保存 Chroma 的文档或向量。
 @dataclass(frozen=True)
 class IndexStats:
@@ -62,6 +64,7 @@ class IndexStats:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
 
 # 自定义的 dataclass 对象，用来保存：一个来源文件完成切块以后产生的全部 chunk 和对应 ID。
 @dataclass(frozen=True)
@@ -121,6 +124,7 @@ def _stable_chunk_id(
 #     "embedding": [0.012, -0.034, ...],  # 384 维
 # }
 
+
 # sources：manifest 中“已经纳入索引的来源文件状态表”。
 # "sources": {
 #     "rag_basics.md": {
@@ -167,7 +171,6 @@ class IncrementalIndexer:
             collection_metadata={"hnsw:space": "cosine"},
         )
 
-
     def _empty_manifest(self) -> dict[str, Any]:
         return {
             "format_version": self.manifest_version,
@@ -196,7 +199,10 @@ class IncrementalIndexer:
 
         # 没有 sources 时（还没有已经持久化的来源向量）直接返回 True；
         # 只有 sources 非空时才比较 fingerprint。
-        return not sources or active_manifest.get("index_fingerprint") == self.index_fingerprint
+        return (
+            not sources
+            or active_manifest.get("index_fingerprint") == self.index_fingerprint
+        )
 
     def ensure_compatible_manifest(self) -> None:
         if not self.manifest_matches_config():
@@ -230,6 +236,7 @@ class IncrementalIndexer:
                 os.unlink(temporary_path)
 
     # LoadedSource 转 ChunkedSource 对象
+    # 把 loader 读出的源文档切成可写入 Chroma 的 chunk Document
     def _chunk_source(self, loaded: LoadedSource) -> ChunkedSource:
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.settings.chunk_size,
@@ -304,12 +311,29 @@ class IncrementalIndexer:
     def reindex(self, *, reset: bool = False) -> IndexStats:
         """同步新增、变更和删除来源；所有来源可读取后才开始写向量库。"""
 
+        # 类型：list[LoadedSource]
+        # [LoadedSource(
+        #     source="rag_basics.md",
+        #     source_sha256="64e334...",
+        #     documents=[Document(...)],
+        # )]
         loaded_sources = load_sources(self.settings.source_dir)
+
+        # 类型：dict[str, ChunkedSource]
+        # 示例：{"rag_basics.md": ChunkedSource(documents=[...], chunk_ids=["00e78a..."])}
         chunked_sources = {
             source.source: self._chunk_source(source) for source in loaded_sources
         }
+
+        # 类型：dict[str, Any]
+        # {"format_version": 1, "index_fingerprint": "16fff...", "sources": {...}}
         old_manifest = self.read_manifest()
+
+        # 类型：dict[str, dict[str, Any]]
+        # {"rag_basics.md": {"sha256": "64e334...", "chunk_count": 1,
+        #                    "chunk_ids": ["00e78a..."]}}
         old_sources: dict[str, dict[str, Any]] = old_manifest["sources"]
+
         fingerprint_changed = (
             bool(old_sources)
             and old_manifest.get("index_fingerprint") != self.index_fingerprint
@@ -319,10 +343,23 @@ class IncrementalIndexer:
                 "chunk 或 embedding 配置已变化；请使用 reset=true 显式重建索引。"
             )
 
+        # 类型：dict[str, dict[str, Any]]
+        # {"rag_basics.md": {"sha256": "64e334...", "chunk_count": 1,
+        #                    "chunk_ids": ["00e78a..."]}}
         previous_sources = old_sources if not reset else {}
+
+        # 类型：set[str]
+        # 示例：{"evaluation.md", "rag_basics.md"}
         current_names = set(chunked_sources)
+
+        # 类型：set[str]
+        # 示例：{"old.md", "rag_basics.md"}
         previous_names = set(previous_sources)
-        # 新增 & 修改过的
+
+        # 新增 或者 修改过的
+        # 类型：list[str]
+        # 推导式中 name 是 str，source 是 ChunkedSource。
+        # 示例：["evaluation.md", "rag_basics.md"]
         changed_names = sorted(
             name
             for name, source in chunked_sources.items()
@@ -330,34 +367,55 @@ class IncrementalIndexer:
             or previous_sources[name].get("sha256") != source.source_sha256
         )
         # 集合的 - 表示差集：只保留左边有、右边没有的元素。
+        # 可以把 set 交给 sorted() 排序，但排序结果不是 set，而是一个新的 list。
+        # 类型：list[str]
+        # 示例：["old.md"]
         removed_names = sorted(previous_names - current_names)
 
+        # 类型：list[str]
+        # 初始示例：[]；收集后示例：["旧-chunk-id-1", "旧-chunk-id-2"]。
         delete_ids: list[str] = []
         if reset:
+            # entry 类型：dict[str, Any]，表示旧 manifest 中一个来源文件的状态。
             for entry in old_sources.values():
                 delete_ids.extend(entry.get("chunk_ids", []))
         else:
+            # name 类型：str，依次来自 changed_names 和 removed_names。
             for name in changed_names + removed_names:
                 delete_ids.extend(old_sources.get(name, {}).get("chunk_ids", []))
 
+        # 类型：langchain_chroma.Chroma
         store = self._store()
         deleted_chunks = self._delete_ids(store, delete_ids) if delete_ids else 0
+
         indexed_chunks = self._add_source_chunks(
             store, (chunked_sources[name] for name in changed_names)
         )
 
+        # 类型：dict[str, Any]
+        # {"format_version": 1, "index_fingerprint": "16fff...", "sources": {}}
         new_manifest = self._empty_manifest()
+
+        # 类型：dict[str, dict[str, Any]]
+        # 示例：{"rag_basics.md": {"sha256": "...", "chunk_count": 1,
+        #                            "chunk_ids": ["00e78a..."]}}
         new_manifest["sources"] = {
             name: self._manifest_source_entry(source)
+            # chunked_sources.items()类型为：list[tuple[str, ChunkedSource]]、
+            #  name, source直接写，这里发生了元组拆包：
             for name, source in sorted(chunked_sources.items())
         }
         self._write_manifest(new_manifest)
 
         added_files = sum(name not in previous_sources for name in changed_names)
         updated_files = len(changed_names) - added_files
+
         total_chunks = sum(
             entry["chunk_count"] for entry in new_manifest["sources"].values()
         )
+
+        # 返回类型：IndexStats
+        # 示例：IndexStats(scanned_files=5, added_files=1, indexed_chunks=2, ...)
         return IndexStats(
             reset=reset,
             scanned_files=len(loaded_sources),
