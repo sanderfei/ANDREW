@@ -2,12 +2,12 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-07-29
+> 最后更新：2026-07-30
 
 ## 当前学习主线
 
 - 目录：`5_langgraph_agentic_rag/`
-- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～10 课件已经按官方 LangGraph 主线完成本地适配并通过测试，但不等于用户已经逐课掌握；下一步从目录 5 的 README 和 Part 1 开始学习。
+- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～10 课件已经按官方 LangGraph 主线完成本地适配并通过测试；目前已经逐行学习 Part 1 的 Graph 基础，下一步进入 Part 2 的受控 Agentic RAG。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
@@ -28,7 +28,30 @@
 
 敏感配置只保存在两台电脑各自的根目录 `.env` 中；`.env` 已被 Git 忽略。本文和 Git 提交中不得出现任何 API Key 或 Token。
 
-## Part 1 已掌握
+## 目录 5 Part 1 已掌握
+
+### State、Node 与状态更新
+
+- `LearningState(TypedDict, total=False)` 描述整张图可使用的状态字段；运行时 State 仍是普通 `dict`。`total=False` 允许初始状态只提供部分字段，但节点通过 `state["字段"]` 直接访问时，该字段在运行到节点前必须存在。
+- Node 接收当前 State，只返回需要更新的部分字段。LangGraph 把节点返回值合并回图状态，因此节点不需要复制整个 State。
+- Part 1 没有配置 Reducer，`steps` 通过 `[*state.get("steps", []), "节点名"]` 手动创建新列表并保留历史；后续 Part 5 再学习 Reducer 的自动合并语义。
+- `graph.invoke({"question": "你好"})` 可以省略 `steps`，因为节点使用 `state.get("steps", [])` 从空列表开始；`question` 不能省略，因为分类节点使用 `state["question"]`，缺少时会触发 `KeyError`。
+
+### Node 注册、固定边和条件边
+
+- `workflow.add_node("节点名称", Python函数)` 把 LangGraph 节点名称注册到真正执行的 callable；条件边映射右侧填写的是已注册节点名称，不是直接调用函数。
+- 条件边目标节点必须在 `workflow.compile()` 之前完成注册，但不强制在 `add_conditional_edges()` 之前注册；先注册全部节点再添加边更容易阅读。
+- `workflow.add_edge(START, "classify_question")` 设置固定入口；`add_conditional_edges("classify_question", choose_route, mapping)` 在分类节点完成后，根据路由函数返回值选择目标节点。
+- `add_edge()` 与 `add_conditional_edges()` 的代码书写顺序不决定运行顺序，真正顺序由图中 `START → 源节点 → 目标节点 → END` 的连接关系决定。
+
+### compile 与 invoke
+
+- `StateGraph` 是图的定义或设计稿；`workflow.compile()` 检查连接关系并返回可运行的 `CompiledStateGraph`。
+- `add_node()`、`add_edge()` 和 `add_conditional_edges()` 只描述图，调用 `graph.invoke(initial_state)` 时才真正从 `START` 执行节点。
+- 当前 Part 1 没有 Checkpointer，两次 `invoke()` 是相互独立的执行，不会自动继承上一次 State。
+- 根目录新增 `LangGraph基础语法笔记.md`，后续学习到新的 LangGraph API 和运行机制时继续去重补充。
+
+## 目录 3 Part 1 已掌握
 
 ### RAG 主流程
 
@@ -85,7 +108,7 @@ context + question -> Prompt -> Model -> str
 - `list` 可修改；`tuple` 不可修改。
 - 类型注解描述允许的值，不等于运行时赋值；例如 `Embeddings | None` 与 `= None` 分别承担不同作用。
 
-## Part 2 已掌握
+## 目录 3 Part 2 已掌握
 
 ### Indexing 与 Embedding 调用关系
 
@@ -128,7 +151,7 @@ list[float]
 - `embed_documents()` 用于写入文档，返回 `list[list[float]]`；`embed_query()` 用于查询，返回单个 `list[float]`。
 - Python 调用处的 `**config` 会把字典展开成关键字参数；函数定义中的单个 `*` 表示后续参数只能按名称传递。`enumerate(matches, start=1)` 为结果添加从 1 开始的序号，并可与 `(document, score)` 同时解包。
 
-## Part 3 已掌握
+## 目录 3 Part 3 已掌握
 
 ### Retriever API 与批量调用
 
@@ -147,7 +170,7 @@ list[float]
 - `similarity_search_with_score()` 返回 `(Document, score)`；当前本地 InMemoryVectorStore 的 score 是余弦相似度，不是答案概率。
 - Top-k 即使面对知识库无法回答的问题也会返回候选；`accepted = score >= threshold` 和 `answerable` 是本地程序增加的 gate，不是 Retriever 自动理解“有没有答案”。
 
-## Part 4 已掌握
+## 目录 3 Part 4 已掌握
 
 ### Generation 与固定两步 RAG
 
@@ -278,6 +301,9 @@ list[float]
 # 目录 5：Part 1～4 原有冒烟
 .venv/bin/python 5_langgraph_agentic_rag/scripts/smoke.py
 
+# 目录 5：单独运行 Part 1 Graph 基础
+.venv/bin/python 5_langgraph_agentic_rag/part1_graph_basics.py
+
 # 目录 5：Part 5～10 高级冒烟
 .venv/bin/python 5_langgraph_agentic_rag/scripts/smoke_advanced.py
 
@@ -291,14 +317,14 @@ list[float]
 git diff --check
 ```
 
-已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答。2026-07-28 再次验证 Hash + offline 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过；local + live 黄金集也为 `20/20`，其中 4 条仅因模型同义改写产生 warning，在线回答仍保持 `embedding_mode=local`。目录 3 的 10 个入口以及目录 4 评估/CLI 参数帮助检查全部通过，两个目录全量编译和 `git diff --check` 通过。2026-07-29 验证目录 5 的原有冒烟和高级冒烟均通过：Part 5～10 覆盖 Reducer/Streaming、重试与补偿、SQLite 恢复/replay/fork、受控 RAG+SQL+HITL、同 thread 多轮状态、FastAPI/SSE，以及 6 个评测用例、31 项合同检查；Part 1～4 文件哈希保持不变。
+已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答。2026-07-28 再次验证 Hash + offline 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过；local + live 黄金集也为 `20/20`，其中 4 条仅因模型同义改写产生 warning，在线回答仍保持 `embedding_mode=local`。目录 3 的 10 个入口以及目录 4 评估/CLI 参数帮助检查全部通过，两个目录全量编译和 `git diff --check` 通过。2026-07-29 验证目录 5 的原有冒烟和高级冒烟均通过：Part 5～10 覆盖 Reducer/Streaming、重试与补偿、SQLite 恢复/replay/fork、受控 RAG+SQL+HITL、同 thread 多轮状态、FastAPI/SSE，以及 6 个评测用例、31 项合同检查；Part 1～4 文件哈希保持不变。2026-07-30 单独运行目录 5 Part 1 成功，`smalltalk` 与 `knowledge` 两条条件分支输出正确；最小输入只传 `question` 时会自动生成完整 `steps`。本次提交前再次验证目录 5 基础冒烟和高级冒烟均通过，高级冒烟保持 6 个评测用例、31 项合同检查全部通过；目录 5 全量编译、Markdown 代码块/相对链接、敏感信息扫描和 `git diff --check` 均通过。
 
 ## 下一步
 
-从 `5_langgraph_agentic_rag` 开始逐课学习，不重复目录 3 和目录 4 已掌握的 RAG 基础，也不要因为代码已通过测试就把目录 5 标记为已学会：
+继续逐课学习 `5_langgraph_agentic_rag`，不重复目录 3 和目录 4 已掌握的 RAG 基础，也不要因为代码已通过测试就把尚未讲解的章节标记为已学会：
 
-1. 先读目录 5 README，再学习 `part1_graph_basics.py` 的 State、Node、Edge 和条件边。
-2. 学习 `part2_agentic_rag.py`，重点追踪消息类型、ToolNode、检索 artifact、证据判断、改写回边和引用校验。
+1. Part 1 的 State、Node、Edge、条件边、`compile()` 和 `invoke()` 已学习完成。
+2. 下一步学习 `part2_agentic_rag.py`，重点追踪消息类型、ToolNode、检索 artifact、证据判断、改写回边和引用校验。
 3. 学习 Part 3～4 的 `thread_id`、interrupt/resume、Tool Schema 与 SQL 三层只读边界。
 4. 学习 Part 5～7 的 Reducer、v2 Streaming、RetryPolicy/error_handler、SQLite checkpoint、历史、replay 和 fork。
 5. 学习 Part 8～10 的受控多工具图、同 thread 多轮状态、FastAPI/SSE/恢复接口与确定性合同评测。
@@ -313,7 +339,7 @@ git diff --check
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
 不要重复 3_rag_from_scratch 和目录 4 已掌握的内容。
-目录 5 代码已经通过测试，但我还没有逐课学完；从“下一步”的 Part 1 开始。
+目录 5 代码已经通过测试，Part 1 已学习完成；从“下一步”的 Part 2 开始。
 先分析，不要修改代码。
 ```
 
@@ -327,6 +353,6 @@ git diff --check
 
 ## 跨机器边界
 
-- GitHub 同步：代码、`AGENTS.md`、本交接文档。
+- GitHub 同步：代码、`AGENTS.md`、本交接文档以及根目录的 Python、LangChain、LangGraph 基础语法笔记。
 - 每台机器单独配置：`.env`、Python 虚拟环境、本地模型缓存、Codex 插件和账号授权；具体步骤见 [新电脑环境搭建](setup-new-machine.md)。
 - 不同步到 Git：`~/.codex/sessions/`、`~/.codex/memories/`、`auth.json`、原始聊天记录。
