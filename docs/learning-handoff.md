@@ -2,12 +2,12 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-07-30
+> 最后更新：2026-08-04
 
 ## 当前学习主线
 
 - 目录：`5_langgraph_agentic_rag/`
-- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～10 课件已经按官方 LangGraph 主线完成本地适配并通过测试；目前已经逐行学习 Part 1 的 Graph 基础，下一步进入 Part 2 的受控 Agentic RAG。
+- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1 Graph 基础已学习完成；Part 2 已学习到 `AgenticRAGState`、图的节点与边、消息输入、Tool Call 路由、结构化证据评分、relevance gate，以及 `retrieval_trace` / `used_evidence` / `citations` 数据合同。下一步从 `ToolNode` 的真实执行和 `ToolMessage.artifact` 继续。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
@@ -50,6 +50,32 @@
 - `add_node()`、`add_edge()` 和 `add_conditional_edges()` 只描述图，调用 `graph.invoke(initial_state)` 时才真正从 `START` 执行节点。
 - 当前 Part 1 没有 Checkpointer，两次 `invoke()` 是相互独立的执行，不会自动继承上一次 State。
 - 根目录新增 `LangGraph基础语法笔记.md`，后续学习到新的 LangGraph API 和运行机制时继续去重补充。
+
+## 目录 5 Part 2 当前已掌握
+
+### `AgenticRAGState` 与部分状态更新
+
+- `AgenticRAGState(MessagesState, total=False)` 是整张图的状态合同；它继承的 `messages` 字段近似为 `Annotated[list[AnyMessage], add_messages]`，因此节点可以返回 `{"messages": [AIMessage(...)]}`，由 Reducer 追加到消息历史。
+- 节点入参是执行到该节点时的当前 State，返回值是部分状态更新。Part 1 的 `-> LearningState` 与 Part 2 的 `-> dict[str, Any]` 在运行时都是普通字典；区别主要是类型标注严格程度。
+- `update: dict[str, Any] = {"messages": [response]}` 先保存两个路由分支都需要的模型响应，再用普通 Python `dict.update()` 添加分支字段；不存在的 key 新增，已存在的 key 覆盖，方法本身返回 `None`。
+- 检索分支必须把包含 `tool_calls` 的 `AIMessage` 写入 `messages`，因为后续 `ToolNode` 要从最新消息中读取 Tool 名称、参数和 call ID。
+
+### 图结构、消息与模型输出
+
+- `build_agentic_rag_graph()` 注册 `generate_query_or_respond`、`retrieve`、`assess_evidence`、`rewrite_question`、`generate_answer` 和 `refuse`；固定边与条件边组成 `retrieve → assess → generate/rewrite/refuse`，其中 `rewrite → generate_query_or_respond` 是有次数上限的回边。
+- `model.bind_tools([retrieval_tool])` 只把 Retriever Tool Schema 绑定给聊天模型，不会立即执行 Tool。`model_with_tools.invoke([SystemMessage(...), *messages])` 传入按角色和时间排序的平铺消息列表，返回 `AIMessage`。
+- `*messages` 是 Python 列表解包；首次调用的实际输入近似为 `[SystemMessage, HumanMessage]`，重写后可能包含 Human、AI、Tool 和新的 HumanMessage。没有 `*` 会形成不符合 ChatModel 输入合同的嵌套列表。
+- 知识问题的典型 `response` 为 `AIMessage(content="", tool_calls=[{"name": "retrieve_context", "args": {"query": ...}, ...}])`；空 `content` 不表示无结果，而是模型选择用结构化 Tool Call 表达下一步。
+- `model.with_structured_output(GradeDocuments, method="function_calling")` 返回新的 Runnable，不会立即调用模型。执行 `grader.invoke(messages)` 后，Tool Call 参数由 `PydanticToolsParser` 转换为 `GradeDocuments(binary_score="yes" | "no")`，不经过 `ToolNode`，也不执行同名 Python 函数。
+- `include_raw=False` 直接返回 Pydantic 对象；改为 `include_raw=True` 后返回包含 `raw`、`parsed` 和 `parsing_error` 的字典，调用方读取路径也必须随之调整。
+
+### 检索 gate、证据和引用
+
+- 本地 Retriever 先保留 Chroma Top-K `matches`，再用绝对相关度、词面重合、相对最佳分数和技术词命中四个条件形成 `accepted`；综合分数仍为 `0.25 * vector_score + 0.75 * lexical_overlap`。
+- `retrieval_trace` 保存每次检索的 `query`、全部 `matches` 和通过 gate 的 `accepted`，发生 rewrite 后会追加新的检索记录。
+- `used_evidence` 从最新 accepted 中按 `max_context_chars` 选择真正进入回答 Prompt 的文本，并新增 `included_text`；只有这批证据的 chunk IDs 可以成为引用候选。
+- `citations` 是通过允许 ID 校验后从真实 `used_evidence` 构造的对外精简结构，保留来源、定位、quote 和分数，不携带完整 `content` / `included_text`。
+- `data_demo.txt` 保存上述三组 State 字段和典型 `AIMessage.tool_calls` 的缩略数据示例。`part2.py` 是当前学习过程中拆写到 `route_on_tool_calls` 的草稿，能够编译但尚未注册完整图，也不是运行入口；完整可运行入口仍是 `part2_agentic_rag.py`。
 
 ## 目录 3 Part 1 已掌握
 
@@ -304,6 +330,17 @@ list[float]
 # 目录 5：单独运行 Part 1 Graph 基础
 .venv/bin/python 5_langgraph_agentic_rag/part1_graph_basics.py
 
+# 目录 5：Part 2 参数与启动帮助
+.venv/bin/python 5_langgraph_agentic_rag/part2_agentic_rag.py --help
+
+# 目录 5：Part 2 Hash 检索 + 离线确定性 Agentic RAG
+.venv/bin/python 5_langgraph_agentic_rag/part2_agentic_rag.py \
+  --mode offline --embedding hash --max-rewrites 0
+
+# 目录 5：Part 2 本地 MiniLM 检索 + 离线确定性回答
+.venv/bin/python 5_langgraph_agentic_rag/part2_agentic_rag.py \
+  --mode offline --embedding local
+
 # 目录 5：Part 5～10 高级冒烟
 .venv/bin/python 5_langgraph_agentic_rag/scripts/smoke_advanced.py
 
@@ -317,18 +354,19 @@ list[float]
 git diff --check
 ```
 
-已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答。2026-07-28 再次验证 Hash + offline 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过；local + live 黄金集也为 `20/20`，其中 4 条仅因模型同义改写产生 warning，在线回答仍保持 `embedding_mode=local`。目录 3 的 10 个入口以及目录 4 评估/CLI 参数帮助检查全部通过，两个目录全量编译和 `git diff --check` 通过。2026-07-29 验证目录 5 的原有冒烟和高级冒烟均通过：Part 5～10 覆盖 Reducer/Streaming、重试与补偿、SQLite 恢复/replay/fork、受控 RAG+SQL+HITL、同 thread 多轮状态、FastAPI/SSE，以及 6 个评测用例、31 项合同检查；Part 1～4 文件哈希保持不变。2026-07-30 单独运行目录 5 Part 1 成功，`smalltalk` 与 `knowledge` 两条条件分支输出正确；最小输入只传 `question` 时会自动生成完整 `steps`。本次提交前再次验证目录 5 基础冒烟和高级冒烟均通过，高级冒烟保持 6 个评测用例、31 项合同检查全部通过；目录 5 全量编译、Markdown 代码块/相对链接、敏感信息扫描和 `git diff --check` 均通过。
+已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答。2026-07-28 再次验证 Hash + offline 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过；local + live 黄金集也为 `20/20`，其中 4 条仅因模型同义改写产生 warning，在线回答仍保持 `embedding_mode=local`。目录 3 的 10 个入口以及目录 4 评估/CLI 参数帮助检查全部通过，两个目录全量编译和 `git diff --check` 通过。2026-07-29 验证目录 5 的原有冒烟和高级冒烟均通过：Part 5～10 覆盖 Reducer/Streaming、重试与补偿、SQLite 恢复/replay/fork、受控 RAG+SQL+HITL、同 thread 多轮状态、FastAPI/SSE，以及 6 个评测用例、31 项合同检查；Part 1～4 文件哈希保持不变。2026-07-30 单独运行目录 5 Part 1 成功，`smalltalk` 与 `knowledge` 两条条件分支输出正确；最小输入只传 `question` 时会自动生成完整 `steps`。本次提交前再次验证目录 5 基础冒烟和高级冒烟均通过，高级冒烟保持 6 个评测用例、31 项合同检查全部通过；目录 5 全量编译、Markdown 代码块/相对链接、敏感信息扫描和 `git diff --check` 均通过。2026-08-04 继续验证目录 5 Part 2：Hash + offline 已知问题在一次检索后进入 `grounded_answer`，本地 MiniLM + offline 也成功生成带真实 citations 的答案；未知问题在 `--max-rewrites 0` 时进入 `refused`，闲聊进入 `direct` 且不检索。`part2.py`、正式 Part 2 入口和相关模块均通过编译检查。同日提交前复跑目录 5 基础冒烟和高级冒烟，仍保持 6 个高级评测用例、31 项合同检查全部通过；全目录编译、Markdown 代码块与相对链接、敏感信息扫描和 `git diff --check` 均通过。
 
 ## 下一步
 
 继续逐课学习 `5_langgraph_agentic_rag`，不重复目录 3 和目录 4 已掌握的 RAG 基础，也不要因为代码已通过测试就把尚未讲解的章节标记为已学会：
 
 1. Part 1 的 State、Node、Edge、条件边、`compile()` 和 `invoke()` 已学习完成。
-2. 下一步学习 `part2_agentic_rag.py`，重点追踪消息类型、ToolNode、检索 artifact、证据判断、改写回边和引用校验。
-3. 学习 Part 3～4 的 `thread_id`、interrupt/resume、Tool Schema 与 SQL 三层只读边界。
-4. 学习 Part 5～7 的 Reducer、v2 Streaming、RetryPolicy/error_handler、SQLite checkpoint、历史、replay 和 fork。
-5. 学习 Part 8～10 的受控多工具图、同 thread 多轮状态、FastAPI/SSE/恢复接口与确定性合同评测。
-6. 目录 5 学完后再进入独立的 LangSmith tracing/实验记录；多 Agent 不属于当前路线。目录 4 尚未处理的 Docker / CI 一致性留到第 11 周上线工程化阶段。
+2. Part 2 已学习 State 合同、Graph 构建、`generate_query_or_respond`、Tool Schema、消息列表、结构化输出、relevance gate 和三层证据数据。
+3. 下一步沿真实运行顺序学习 `ToolNode` 如何把 `AIMessage.tool_calls` 变成 `ToolMessage(content + artifact)`，再逐行完成 `assess_evidence`、rewrite 回边、`generate_answer` 和 citation ID 校验；学习草稿 `part2.py` 从当前 `route_on_tool_calls` 后继续。
+4. 学习 Part 3～4 的 `thread_id`、interrupt/resume、Tool Schema 与 SQL 三层只读边界。
+5. 学习 Part 5～7 的 Reducer、v2 Streaming、RetryPolicy/error_handler、SQLite checkpoint、历史、replay 和 fork。
+6. 学习 Part 8～10 的受控多工具图、同 thread 多轮状态、FastAPI/SSE/恢复接口与确定性合同评测。
+7. 目录 5 学完后再进入独立的 LangSmith tracing/实验记录；多 Agent 不属于当前路线。目录 4 尚未处理的 Docker / CI 一致性留到第 11 周上线工程化阶段。
 
 ## 新电脑继续学习时的启动提示
 
@@ -339,7 +377,7 @@ git diff --check
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
 不要重复 3_rag_from_scratch 和目录 4 已掌握的内容。
-目录 5 代码已经通过测试，Part 1 已学习完成；从“下一步”的 Part 2 开始。
+目录 5 代码已经通过测试，Part 1 已完成；Part 2 已学习到 generate_query_or_respond 和证据数据结构，从“下一步”的 ToolNode 真实执行继续。
 先分析，不要修改代码。
 ```
 

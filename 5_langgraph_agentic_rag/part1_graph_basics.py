@@ -22,6 +22,18 @@ OFFICIAL_SOURCE = (
     "https://docs.langchain.com/oss/python/langgraph/thinking-in-langgraph"
 )
 
+# Tool和Node的职责
+# Tool：一种可调用能力
+# 例如查询 Chroma、访问数据库、调用天气 API
+# Node：工作流中的一个步骤
+# Node 内部可以调用 LLM、Tool 或普通 Python 函数
+# Edge：规定 Node 之间允许怎么流转
+
+# LangGraph的设计思路：
+# LLM 可以提出建议
+# Graph 负责执行业务规则和权限边界
+# 如果把业务执行都注册为tool模型就会拥有较大的流程控制权。
+
 
 # TypedDict：给类型检查器和编辑器看，描述字典应该有哪些字段。
 # total=False 表示类型层面允许只提供部分字段：
@@ -35,6 +47,7 @@ class LearningState(TypedDict, total=False):
 
 
 # 没有返回 question，因为 LangGraph 会把这个结果作为“部分状态更新”合并回当前状态：
+# LearningState 是 TypedDict，运行时仍然就是普通 dict。由于使用了 total=False，所以允许只返回部分字段
 def classify_question(state: LearningState) -> LearningState:
     """Node 只返回需要更新的字段，不必复制整个 state。"""
 

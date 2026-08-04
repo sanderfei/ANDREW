@@ -26,8 +26,35 @@ from local_rag_adapter import (
     build_tutorial_settings,
 )
 
-
 DEFAULT_QUESTION = "本地知识库默认使用什么 Embedding 模型？"
+
+# Part 2 才开始体现设计意义
+# START
+#   ↓
+# generate_query_or_respond
+#   ├─ 闲聊 → END
+#   └─ 请求检索
+#        ↓
+#      Retriever Tool
+#        ↓
+#      assess_evidence
+#        ├─ 证据充分 → generate_answer → END
+#        ├─ 证据不足且未超限 → rewrite_question
+#        │                         ↓
+#        │                    重新检索
+#        └─ 证据不足且达到上限 → refuse → END
+
+
+# 证据不足时形成循环 这是 Graph 的“回边”。简单的 tool Agent 很难做到保证 顺序、改写次数、停止条件、拒答条件
+# retrieve
+#   ↓
+# assess_evidence
+#   ↓ weak
+# rewrite_question
+#   ↓
+# generate_query_or_respond
+#   ↓
+# 重新 retrieve
 
 
 def run(
@@ -53,9 +80,7 @@ def run(
         top_k=settings.default_top_k,
         max_context_chars=settings.max_context_chars,
     )
-    final_state = graph.invoke(
-        initial_state(question, max_rewrites=max_rewrites)
-    )
+    final_state = graph.invoke(initial_state(question, max_rewrites=max_rewrites))
     return {
         "official_source": OFFICIAL_TUTORIAL,
         "mode": settings.mode,
@@ -66,6 +91,16 @@ def run(
     }
 
 
+# 启动命令示例（本地 MiniLM 向量模型 + 在线 LLM）：
+# .venv/bin/python 5_langgraph_agentic_rag/part2_agentic_rag.py \
+#   --mode live --embedding local
+# 参数枚举：
+# --question <文本>                要提问的问题；默认使用 DEFAULT_QUESTION。
+# --mode {offline,live}            offline=确定性离线节点；live=根目录 .env 中的在线 LLM。
+# --embedding {hash,local,glm}      hash=教学基线；local=本地 MiniLM；glm=远程 Embedding。
+# --max-rewrites <非负整数>        证据不足时允许改写问题的最大次数；默认 1。
+# --reset                          清空当前 embedding 模式的目录 5 索引并完整重建。
+# --runtime-dir <目录路径>         指定运行目录；默认 runtime/<embedding>。
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="运行官方教程的本地受控 Agentic RAG 适配版"
@@ -114,4 +149,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

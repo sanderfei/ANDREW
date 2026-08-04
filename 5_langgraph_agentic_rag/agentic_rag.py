@@ -30,10 +30,7 @@ from pydantic import BaseModel, Field
 
 from local_rag_adapter import LocalKnowledgeRetriever, relevant_quote
 
-
-OFFICIAL_TUTORIAL = (
-    "https://docs.langchain.com/oss/python/langgraph/agentic-rag"
-)
+OFFICIAL_TUTORIAL = "https://docs.langchain.com/oss/python/langgraph/agentic-rag"
 REJECTION_ANSWER = "我不知道，当前知识库中没有足够相关资料。"
 CITATION_VALIDATION_FAILED = (
     "检索到了资料，但模型没有返回可验证的引用 ID，因此本次回答已被拒绝。"
@@ -64,26 +61,43 @@ ANSWER_SYSTEM_PROMPT = """你是谨慎的知识库问答助手。
 
 
 class AgenticRAGState(MessagesState, total=False):
-    """每个节点共享的 LangGraph 状态。"""
+    """每个节点共享的 LangGraph 状态；节点可以只返回需要更新的字段。"""
 
+    # 从 MessagesState 继承 messages：保存 HumanMessage、AIMessage、
+    # ToolMessage，并通过 add_messages Reducer 合并各节点返回的新消息。
+
+    # 用户首次输入的原始问题；问题改写时保持不变，最终回答仍以它为准。
     original_question: str
+    # 当前真正交给 Retriever Tool 的查询；初始等于原问题，改写后更新。
     active_query: str
+    # 对外返回的回答文本；可能是直接回复、证据回答、拒答或引用校验失败提示。
     answer: str
+    # 是否产生了通过证据与引用校验、可以交付的知识库回答。
     answerable: bool
+    # 最终回答是否由本次检索证据支撑并通过 citation ID 校验。
     grounded: bool
+    # 当前或最终业务路径，例如 start、retrieve、rewrite、grounded_answer、refused。
     route: str
+    # 已完成“检索后证据评估”的次数；每执行一次 assess_evidence 加 1。
     retrieval_attempts: int
+    # 已执行的问题改写次数；每执行一次 rewrite_question 加 1。
     rewrite_count: int
+    # 允许改写的最大次数；用于限制 rewrite -> retrieve 回路，避免无限循环。
     max_rewrites: int
+    # 最近一次 assess_evidence 判断证据是否相关且足以回答。
     grade_relevant: bool
+    # 每次检索的完整审计记录，包括 query、全部 matches 和 accepted 证据。
     retrieval_trace: list[dict[str, Any]]
+    # 从 accepted 中按原问题和上下文长度选出的、真正进入回答 Prompt 的证据。
     used_evidence: list[dict[str, Any]]
+    # 根据校验通过的 chunk_id 从真实 used_evidence 构造的对外引用。
     citations: list[dict[str, Any]]
+    # 模型声称引用、但不属于本次 allowed chunk IDs 的非法 ID，保留用于审计。
     invalid_cited_chunk_ids: list[str]
 
 
 class GradeDocuments(BaseModel):
-    """官方教程中的二元相关性判断结构。"""
+    """官方教程中的二元相关性判断结构。负责约束证据判断结果。"""
 
     binary_score: Literal["yes", "no"] = Field(
         description="检索证据相关且足以回答时为 yes，否则为 no。"
@@ -91,7 +105,7 @@ class GradeDocuments(BaseModel):
 
 
 class GroundedAnswer(BaseModel):
-    """答案文本和模型声称实际使用的证据 ID。"""
+    """答案文本和模型声称实际使用的证据 ID。负责约束最终模型输出："""
 
     answer: str = Field(description="只依据上下文生成的最终答案。")
     cited_chunk_ids: list[str] = Field(
@@ -197,9 +211,7 @@ def _select_used_evidence(
     selected: list[dict[str, Any]] = []
     used_chars = 0
     for raw in accepted:
-        prefix = (
-            f"[chunk_id={raw.get('chunk_id')} source={raw.get('source')}]\n"
-        )
+        prefix = f"[chunk_id={raw.get('chunk_id')} source={raw.get('source')}]\n"
         remaining = max_context_chars - used_chars
         content_room = remaining - len(prefix)
         if content_room <= 0:
@@ -252,10 +264,48 @@ def build_agentic_rag_graph(
 
     retrieval_tool = make_retrieval_tool(retriever, top_k=top_k)
     model_with_tools = model.bind_tools([retrieval_tool]) if model is not None else None
+    # 把普通聊天模型包装成一个“只能返回 GradeDocuments 结构”的 Runnable，用于判断检索证据是否足够回答问题
+    # 原始 model
+    #   +
+    # GradeDocuments Schema
+    #   +
+    # Pydantic 解析器
+    #   ↓
+    # grader
+    # LangChain 会先把 GradeDocuments 转换成类似下面的 Tool Schema：
+    # {
+    #   "type": "function",
+    #   "function": {
+    #     "name": "GradeDocuments",
+    #     "description": "官方教程中的二元相关性判断结构。负责约束证据判断结果。",
+    #     "parameters": {
+    #       "properties": {
+    #         "binary_score": {
+    #           "description": "检索证据相关且足以回答时为 yes，否则为 no。",
+    #           "enum": ["yes", "no"],
+    #           "type": "string"
+    #         }
+    #       },
+    #       "required": ["binary_score"],
+    #       "type": "object"
+    #     }
+    #   }
+    # }
+    # 然后要求模型选择：GradeDocuments 并把结果放进：tool_calls[0]["args"]
+    # 这里没有执行一个叫 GradeDocuments 的 Python 函数，只是借用 Tool Calling 的结构承载数据
     grader = (
         model.with_structured_output(
             GradeDocuments,
+            # 借用模型的 Tool Calling / Function Calling 协议，让模型按照指定参数结构返回结果。
             method="function_calling",
+            # False 调用直接得到：GradeDocuments(binary_score="yes")
+            # 如果配置为true 返回
+            # {
+            #     "raw": AIMessage(...),
+            #     "parsed": GradeDocuments(...),
+            #     "parsing_error": None,
+            # }
+            include_raw=False,
         )
         if model is not None
         else None
@@ -269,6 +319,7 @@ def build_agentic_rag_graph(
         else None
     )
 
+    # 决定直接回答还是产生 Tool Call
     def generate_query_or_respond(
         state: AgenticRAGState,
     ) -> dict[str, Any]:
@@ -276,10 +327,10 @@ def build_agentic_rag_graph(
         original_question = state["original_question"]
         active_query = state.get("active_query") or _latest_human_text(messages)
 
-        if model_with_tools is None:
-            if _is_smalltalk(original_question):
+        if model_with_tools is None:  # 离线模式
+            if _is_smalltalk(original_question):  # 闲聊
                 response = AIMessage(content="你好，我可以帮你查询本地知识库。")
-            else:
+            else:  # 知识问题：创建包含 tool_calls 的 AIMessage
                 response = AIMessage(
                     content="",
                     tool_calls=[
@@ -291,11 +342,12 @@ def build_agentic_rag_graph(
                         }
                     ],
                 )
-        else:
+        else:  # 在线模式
             response = model_with_tools.invoke(
                 [SystemMessage(content=ROUTER_SYSTEM_PROMPT), *messages]
             )
             # 受控适配：知识问题不允许模型绕过检索直接凭记忆回答。
+            # 模型认为不用检索 + 程序判断不是闲聊 -> 仍然强制检索 Tool Call。
             if not response.tool_calls and not _is_smalltalk(original_question):
                 response = AIMessage(
                     content="",
@@ -321,22 +373,23 @@ def build_agentic_rag_graph(
                         "name": retrieval_tool.name,
                         "args": {"query": active_query},
                         "id": str(
-                            requested_call.get("id")
-                            or f"retrieve-{uuid4().hex[:12]}"
+                            requested_call.get("id") or f"retrieve-{uuid4().hex[:12]}"
                         ),
                         "type": "tool_call",
                     }
                 ],
             )
 
+        # AgenticRAGState 继承了 MessagesState
+        # messages 字段本来就应该存放消息列表
         update: dict[str, Any] = {"messages": [response]}
         if response.tool_calls:
             query = response.tool_calls[0].get("args", {}).get("query")
+            # dict.update() 确实是批量更新方法：不存在新增，存在修改
             update.update(
                 {
-                    "active_query": (
-                        str(query).strip() if query else active_query
-                    ),
+                    "active_query": (str(query).strip() if query else active_query),
+                    # 记录路由信息: retrieve
                     "route": "retrieve",
                 }
             )
@@ -360,6 +413,7 @@ def build_agentic_rag_graph(
             return "retrieve"
         return "direct"
 
+    # 判断证据是否足够
     def assess_evidence(state: AgenticRAGState) -> dict[str, Any]:
         artifact = _latest_retrieval_artifact(list(state["messages"]))
         accepted = artifact.get("accepted", [])
@@ -372,6 +426,7 @@ def build_agentic_rag_graph(
         )
         grade_relevant = bool(used_evidence)
         if grade_relevant and grader is not None:
+            # 只有存在候选证据并且处于 live 模式时：模型调用
             grade = grader.invoke(
                 [
                     SystemMessage(content=GRADE_SYSTEM_PROMPT),
@@ -398,28 +453,26 @@ def build_agentic_rag_graph(
     def route_after_assessment(
         state: AgenticRAGState,
     ) -> Literal["generate", "rewrite", "refuse"]:
-        if state.get("grade_relevant") and state.get("used_evidence"):
+        if state.get("grade_relevant") and state.get("used_evidence"):  # 证据充分
             return "generate"
-        if state.get("rewrite_count", 0) < state.get("max_rewrites", 1):
+        if state.get("rewrite_count", 0) < state.get(
+            "max_rewrites", 1
+        ):  # 证据不足且未超限
             return "rewrite"
-        return "refuse"
+        return "refuse"  # 证据不足 AND 已达到改写上限
 
+    # 改写检索问题
     def rewrite_question(state: AgenticRAGState) -> dict[str, Any]:
         original = state["original_question"]
         current = state.get("active_query", original)
         if model is None:
-            rewritten = (
-                f"{original} 请检索与该问题直接相关的定义、配置和限制。"
-            )
+            rewritten = f"{original} 请检索与该问题直接相关的定义、配置和限制。"
         else:
             response = model.invoke(
                 [
                     SystemMessage(content=REWRITE_SYSTEM_PROMPT),
                     HumanMessage(
-                        content=(
-                            f"原始问题：{original}\n"
-                            f"上一条检索查询：{current}"
-                        )
+                        content=(f"原始问题：{original}\n" f"上一条检索查询：{current}")
                     ),
                 ]
             )
@@ -431,8 +484,10 @@ def build_agentic_rag_graph(
             "route": "rewrite",
         }
 
+    # 生成答案并校验引用
     def generate_answer(state: AgenticRAGState) -> dict[str, Any]:
         used_evidence = list(state["used_evidence"])
+        # 允许引用的 ID
         allowed_ids = [str(item["chunk_id"]) for item in used_evidence]
         if answer_model is None:
             answer = "根据本地知识库的相关片段：\n" + "\n\n".join(
@@ -466,7 +521,7 @@ def build_agentic_rag_graph(
             else:
                 invalid_ids.append(chunk_id)
 
-        if not valid_ids:
+        if not valid_ids:  # 如果没有任何有效 ID
             return {
                 "answer": CITATION_VALIDATION_FAILED,
                 "answerable": False,
@@ -476,12 +531,9 @@ def build_agentic_rag_graph(
                 "invalid_cited_chunk_ids": invalid_ids,
             }
 
-        evidence_by_id = {
-            str(item["chunk_id"]): item for item in used_evidence
-        }
+        evidence_by_id = {str(item["chunk_id"]): item for item in used_evidence}
         citations = [
-            _citation_from_evidence(evidence_by_id[chunk_id])
-            for chunk_id in valid_ids
+            _citation_from_evidence(evidence_by_id[chunk_id]) for chunk_id in valid_ids
         ]
         return {
             "answer": answer,
@@ -492,6 +544,7 @@ def build_agentic_rag_graph(
             "invalid_cited_chunk_ids": invalid_ids,
         }
 
+    # 返回固定拒答
     def refuse(_state: AgenticRAGState) -> dict[str, Any]:
         return {
             "answer": REJECTION_ANSWER,
@@ -512,7 +565,13 @@ def build_agentic_rag_graph(
     )
     workflow.add_node(
         "retrieve",
+        # handle_tool_errors=False 表示 Tool 异常直接向外抛出，不伪装成正常 ToolMessage。
         ToolNode([retrieval_tool], handle_tool_errors=False),
+        # ToolNode 自动完成: 读取最新 AIMessage.tool_calls
+        # → 找到 retrieve_context
+        # → 执行 Tool
+        # → 生成 ToolMessage
+        # → 追加到 messages
     )
     workflow.add_node(
         "assess_evidence",
@@ -540,6 +599,7 @@ def build_agentic_rag_graph(
             "direct": END,
         },
     )
+    # Tool 执行完成后，不能直接生成答案，必须先判断证据。
     workflow.add_edge("retrieve", "assess_evidence")
     workflow.add_conditional_edges(
         "assess_evidence",
@@ -550,7 +610,10 @@ def build_agentic_rag_graph(
             "refuse": "refuse",
         },
     )
-    workflow.add_edge("rewrite_question", "generate_query_or_respond")
+    workflow.add_edge(
+        "rewrite_question", "generate_query_or_respond"
+    )  # 固定边：改写后generate_query_or_respond，这就形成了 Graph 回路。
+    # 成功回答或拒答后结束
     workflow.add_edge("generate_answer", END)
     workflow.add_edge("refuse", END)
     return workflow.compile(checkpointer=checkpointer)
@@ -597,13 +660,10 @@ def public_result(state: AgenticRAGState) -> dict[str, Any]:
         "retrieval_attempts": int(state.get("retrieval_attempts", 0)),
         "rewrite_count": int(state.get("rewrite_count", 0)),
         "used_evidence_ids": [
-            str(item["chunk_id"])
-            for item in state.get("used_evidence", [])
+            str(item["chunk_id"]) for item in state.get("used_evidence", [])
         ],
         "citations": list(state.get("citations", [])),
-        "invalid_cited_chunk_ids": list(
-            state.get("invalid_cited_chunk_ids", [])
-        ),
+        "invalid_cited_chunk_ids": list(state.get("invalid_cited_chunk_ids", [])),
         "retrieval_trace": list(state.get("retrieval_trace", [])),
     }
 

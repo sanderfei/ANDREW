@@ -83,6 +83,53 @@ def classify_question(state: LearningState) -> LearningState:
 
 节点不需要复制并返回整个 State，只返回需要更新的字段即可。
 
+### 3.1 Part 1 与 Part 2 的节点返回类型
+
+Part 1 写成：
+
+```python
+def classify_question(state: LearningState) -> LearningState:
+    return {"route": "smalltalk"}
+```
+
+Part 2 写成：
+
+```python
+def assess_evidence(state: AgenticRAGState) -> dict[str, Any]:
+    return {"grade_relevant": True}
+```
+
+两者的 LangGraph 运行逻辑相同：
+
+1. 入参是该节点执行时的当前共享 State。
+2. 返回值是需要合并回 State 的局部更新字典。
+3. LangGraph 根据 `StateGraph(...)` 中声明的 State Schema 合并更新。
+
+`LearningState` 是 `TypedDict`，运行时仍然是普通 `dict`。而且它声明了
+`total=False`，所以 `-> LearningState` 允许返回只包含部分字段的字典。因此 Part 1
+并没有返回一个特殊的 State 对象。
+
+```text
+-> LearningState      更明确地检查字段名称和值类型
+-> dict[str, Any]     更宽松，只表示返回字符串键的字典
+```
+
+这两个返回类型标注不会重新定义图的状态结构。真正定义状态结构的是：
+
+```python
+StateGraph(LearningState)
+StateGraph(AgenticRAGState)
+```
+
+条件边的路由函数不属于上述“状态更新节点”协议。它读取 State，但返回的是分支标签：
+
+```python
+def choose_route(state: LearningState) -> Literal["knowledge", "smalltalk"]:
+    return state["route"]
+```
+
+这个字符串用于选择下一节点，不会合并进 State。
+
 ```text
 执行前 State
 {
@@ -116,6 +163,122 @@ workflow = StateGraph(LearningState)
 ```
 
 这行只是在创建图的设计稿，并指定图使用 `LearningState`。此时没有执行任何节点。
+
+### 4.1 `state_schema` 必须提供，业务字段可以自定义
+
+当前本地 LangGraph 的构造签名可以简化为：
+
+```python
+StateGraph(
+    state_schema,
+    context_schema=None,
+    *,
+    input_schema=None,
+    output_schema=None,
+)
+```
+
+因此 `StateGraph` 必须接收一个 `state_schema`：
+
+```python
+workflow = StateGraph(LearningState)
+```
+
+但 LangGraph 没有强制要求 State 必须包含 `question`、`route`、`answer`、
+`steps` 或 `messages`。这些都是开发者根据业务自定义的字段。
+
+例如订单审批图可以定义完全不同的 State：
+
+```python
+class OrderState(TypedDict, total=False):
+    order_id: str
+    amount: float
+    approved: bool
+    reason: str
+
+
+workflow = StateGraph(OrderState)
+```
+
+这时 LangGraph 管理的是 `order_id`、`amount`、`approved` 和 `reason`，不再是
+`LearningState` 中的问答字段。
+
+`StateGraph(LearningState)` 传入的是描述结构的类，不是具体状态值，也不会在这行
+创建一份业务数据。真正的初始值在执行时传给 `invoke()`：
+
+```python
+graph.invoke({"question": "你好"})
+```
+
+### 4.2 自定义不等于没有约束
+
+开发者可以定义业务字段和流程，但仍要遵守 LangGraph 的状态契约：
+
+1. 需要在节点之间流转、合并、持久化的字段，应先声明在 State Schema 中。
+2. Node 通常接收当前 State，并返回 `Partial<State>`，也就是部分状态更新。
+3. 默认情况下，同名字段的新值覆盖旧值；需要追加或合并时要为字段配置 Reducer。
+4. 节点直接读取 `state["字段"]` 时，该字段在运行到节点前必须存在。
+5. 节点、固定边、条件边和路由业务由开发者定义，但连接关系必须能通过
+   `compile()` 校验。
+
+当前本地 `langgraph 1.2.8` 的实测结果是：没有声明在 State Schema 中的输入字段
+和节点返回字段会被忽略，不会进入最终 State。例如：
+
+```python
+class OrderState(TypedDict, total=False):
+    order_id: str
+    approved: bool
+
+
+def approve(state: OrderState):
+    return {
+        "approved": True,
+        "undeclared": "不会进入最终 State",
+    }
+```
+
+执行：
+
+```python
+graph.invoke({
+    "order_id": "A-001",
+    "outside": 123,
+})
+```
+
+最终只保留 Schema 中声明过的字段：
+
+```python
+{
+    "order_id": "A-001",
+    "approved": True,
+}
+```
+
+因此不要把 `total=False` 理解成“允许任意字段”。它只表示 Schema 中已经声明的
+字段可以不全部出现在初始 State 中。
+
+### 4.3 框架和开发者分别负责什么
+
+```text
+开发者负责
+├─ State 中有哪些业务字段
+├─ 每个 Node 做什么
+├─ Router 如何判断分支
+└─ Node 之间如何连接
+
+LangGraph 负责
+├─ 按图的连接关系调度 Node
+├─ 把 Node 返回值合并到 State
+├─ 按 Reducer 处理字段更新
+├─ 在 compile() 时检查图结构
+└─ 在配置 Checkpointer 后保存和恢复 State
+```
+
+所以准确结论是：
+
+> 状态字段和业务流程主要由开发者定义；LangGraph 要求提供 State Schema，并按照
+> Schema、节点返回值、Reducer 和图连接规则管理这些业务状态。
 
 ## 5. `add_node()`：注册节点
 
@@ -423,3 +586,806 @@ Part 1 专门学习图的基本结构，因此当前没有：
 
 知识分支目前只返回说明文字。Part 2 才会在该位置接入真实的 Chroma
 Retriever Tool。
+
+## 13. Part 1 为什么看不出 LangGraph 的必要性
+
+Part 1 只有一个判断和两个终点：
+
+```text
+问题 → 判断是不是闲聊 → 闲聊回答或知识回答
+```
+
+这个规模使用普通 Python `if/else` 更直接：
+
+```python
+if is_smalltalk(question):
+    return answer_smalltalk(question)
+return answer_knowledge(question)
+```
+
+也可以把能力注册成 Tools，让 LLM 选择调用。但在这个例子中引入 LLM 会增加模型
+调用、延迟、费用和不确定性，并不会体现 LangGraph 的真正优势。因此 Part 1 的目的
+只是拆开学习 State、Node、Edge 和条件边，不是在证明简单分支必须使用 LangGraph。
+
+### 13.1 Tool 和 Node 不是同一职责
+
+可以先这样区分：
+
+```text
+Tool：提供一种可调用能力，例如检索 Chroma、查询数据库、发送请求
+Node：表示工作流中的一个步骤，可以调用模型、Tool 或普通 Python 函数
+Edge：规定步骤之间允许怎样流转
+```
+
+把两个函数都注册成 Tools，通常形成：
+
+```text
+用户问题
+  ↓
+LLM 自己选择 Tool
+  ↓
+执行 Tool
+  ↓
+结果返回 LLM
+  ↓
+LLM 决定是否继续调用或回答
+```
+
+模型拥有较大的流程决定权。显式 Graph 则可以把权限收回来：
+
+```text
+模型提出检索
+  ↓
+Graph 只允许进入指定 Retriever Tool
+  ↓
+程序检查证据
+  ├─ 合格 → 允许生成答案
+  ├─ 不足且未超上限 → 改写并重新检索
+  └─ 不足且达到上限 → 固定拒答
+```
+
+### 13.2 Part 2 开始出现设计意义
+
+Part 2 不只是让 LLM 从两个 Tools 中任选一个，而是显式实现：
+
+```text
+START
+  ↓
+generate_query_or_respond
+  ├─ 闲聊 → END
+  └─ tool_call
+       ↓
+     retrieve
+       ↓
+     assess_evidence
+       ├─ relevant → generate_answer → END
+       ├─ weak + 未超上限 → rewrite_question → 重新路由
+       └─ weak + 达到上限 → refuse → END
+```
+
+这里体现了单纯 Tool Calling 不会自动保证的业务规则：
+
+- Chroma Top-K 后还必须通过确定性 relevance gate。
+- 改写次数受 `max_rewrites` 限制，不能无限循环。
+- 只有真正进入 Prompt 的 `used_evidence` 才能成为引用候选。
+- 模型返回的 citation ID 必须是本次上下文 ID 的子集。
+- 证据始终不合格时必须拒答，不能由模型自由猜测。
+
+### 13.3 什么时候不需要 LangGraph
+
+以下情况通常优先使用普通函数、LCEL 或简单 Agent：
+
+- 只有一到两个固定步骤。
+- 没有循环、暂停恢复或人工审批。
+- 不需要持久化中间状态。
+- 不需要严格限制 Tool 的调用顺序。
+- 失败后不需要根据错误类型进入不同补偿分支。
+
+出现以下需求时，LangGraph 的价值才会明显：
+
+- 多个条件分支和循环。
+- 检索、判断、改写、重试、拒答必须按固定规则执行。
+- Checkpoint、跨进程恢复和时间旅行。
+- `interrupt()` 人工审批。
+- Tool 权限边界和确定性路由。
+- 需要观察每一步的状态和流式事件。
+
+因此学习顺序上，理解 Part 1 的基本名词和执行方式后就应该继续 Part 2，不必在
+Part 1 中寻找复杂系统才具备的优势。
+
+## 14. `AgenticRAGState`：Part 2 的状态契约
+
+Part 2 不再使用只有四个字段的 `LearningState`，而是继承 `MessagesState`：
+
+```python
+class AgenticRAGState(MessagesState, total=False):
+    original_question: str
+    active_query: str
+    answer: str
+    answerable: bool
+    grounded: bool
+    route: str
+    retrieval_attempts: int
+    rewrite_count: int
+    max_rewrites: int
+    grade_relevant: bool
+    retrieval_trace: list[dict[str, Any]]
+    used_evidence: list[dict[str, Any]]
+    citations: list[dict[str, Any]]
+    invalid_cited_chunk_ids: list[str]
+```
+
+### 14.1 继承的 `messages`
+
+`MessagesState` 已经声明 `messages` 字段，并为它配置 `add_messages` Reducer。
+因此 `AgenticRAGState` 不需要重复声明，但运行时仍然包含：
+
+```text
+messages: list[HumanMessage | AIMessage | ToolMessage | ...]
+```
+
+节点返回：
+
+```python
+{"messages": [new_message]}
+```
+
+LangGraph 会通过 Reducer 把新消息合并到消息历史，而不是简单覆盖整个列表。
+
+#### 为什么节点可以返回 `{"messages": [response]}`
+
+`AgenticRAGState` 是描述 State 各字段名称和类型的 `TypedDict`，不是要求字典中的
+每个 value 都是一个 `AgenticRAGState` 对象。它从 `MessagesState` 继承的字段近似为：
+
+```python
+messages: Annotated[list[AnyMessage], add_messages]
+```
+
+因此下面的类型关系完全匹配：
+
+```text
+response                         AIMessage
+[response]                       list[AIMessage]
+{"messages": [response]}         messages 字段的局部更新
+```
+
+Part 2 节点先创建两个分支都需要的公共更新：
+
+```python
+update: dict[str, Any] = {"messages": [response]}
+```
+
+再使用普通 Python `dict.update()` 添加分支专属字段：
+
+```python
+if response.tool_calls:
+    update.update({
+        "active_query": active_query,
+        "route": "retrieve",
+    })
+else:
+    update.update({
+        "answer": _message_text(response),
+        "answerable": False,
+        "grounded": False,
+        "route": "direct",
+        "citations": [],
+    })
+```
+
+此时只是修改节点内部的普通字典；执行 `return update` 后，LangGraph 才根据 State
+Schema 和 Reducer 把它合并回共享 State。
+
+检索分支必须保存这个 `AIMessage`，因为下一个 `ToolNode` 要从最新消息的
+`tool_calls` 中读取 Tool 名称、参数和 call ID。假设执行前是：
+
+```python
+state["messages"] = [HumanMessage(content="本地 Embedding 模型是什么？")]
+```
+
+节点返回：
+
+```python
+{
+    "messages": [AIMessage(content="", tool_calls=[...])],
+    "active_query": "本地 Embedding 模型是什么？",
+    "route": "retrieve",
+}
+```
+
+`add_messages` 合并后才是：
+
+```python
+state["messages"] = [
+    HumanMessage(content="本地 Embedding 模型是什么？"),
+    AIMessage(content="", tool_calls=[...]),
+]
+```
+
+这里使用 `dict[str, Any]` 作为返回类型，是在强调“返回部分 State 更新”；字典中
+不同 key 的 value 本来就可以分别是消息列表、字符串、布尔值或引用列表。
+
+### 14.2 字段含义
+
+| 字段 | 来源和用途 |
+| --- | --- |
+| `original_question` | 用户首次输入的问题；改写后仍保持不变，最终回答以它为准 |
+| `active_query` | 当前交给 Retriever Tool 的查询；初始等于原问题，改写后变化 |
+| `answer` | 最终对外文本，可能是直接回复、证据回答、拒答或校验失败提示 |
+| `answerable` | 是否产生通过证据和引用校验、可以交付的知识库回答 |
+| `grounded` | 回答是否由本次检索证据支撑并通过 citation ID 校验 |
+| `route` | 当前或最终业务路径，例如 `retrieve`、`rewrite`、`grounded_answer`、`refused` |
+| `retrieval_attempts` | 完成检索后证据评估的次数；每次 `assess_evidence` 加 1 |
+| `rewrite_count` | 已执行的问题改写次数；每次 `rewrite_question` 加 1 |
+| `max_rewrites` | 最大允许改写次数，用于限制 Graph 回路 |
+| `grade_relevant` | 最近一次证据评估是否判断为相关且足以回答 |
+| `retrieval_trace` | 每次检索的审计记录，包括 query、matches 和 accepted |
+| `used_evidence` | accepted 中真正进入回答 Prompt 的证据 |
+| `citations` | 根据校验通过的 chunk IDs 从真实证据构造的对外引用 |
+| `invalid_cited_chunk_ids` | 模型声称使用、但不属于本次允许集合的非法引用 ID |
+
+### 14.3 容易混淆的字段
+
+```text
+original_question：回答目标，始终不变
+active_query：检索用语，可以被 rewrite_question 改写
+```
+
+```text
+retrieval_trace：所有检索尝试的完整审计记录
+used_evidence：真正进入本次回答上下文的证据
+citations：最终通过 ID 校验后对外返回的引用
+```
+
+```text
+answerable=True：存在可交付的知识库答案
+grounded=True：答案由本次证据支撑且引用校验通过
+```
+
+闲聊分支虽然也可能有 `answer` 文本，但它不是知识库证据回答，因此当前实现中：
+
+```python
+answerable = False
+grounded = False
+```
+
+### 14.4 `retrieval_trace`、`used_evidence` 与 `citations` 数据示例
+
+以下结构来自 Part 2 使用本地 MiniLM 检索的真实运行结果。为方便阅读，正文和
+`chunk_id` 做了缩写。
+
+`retrieval_trace` 保存每次检索的完整审计信息。发生问题改写并重新检索时，列表中
+会继续追加新的检索记录：
+
+```python
+retrieval_trace = [
+    {
+        "query": "本地知识库默认使用什么 Embedding 模型？",
+        "matches": [
+            {
+                "rank": 1,
+                "chunk_id": "c763...15a9",
+                "source": "evaluation.md",
+                "page": None,
+                "relevance_score": 0.435075,
+                "vector_score": 0.406967,
+                "lexical_overlap": 0.444444,
+                "technical_match": True,
+                "accepted": True,
+                "content_preview": "# RAG 评估与可观测性 ...",
+            },
+            {
+                "rank": 2,
+                "chunk_id": "9cce...6559",
+                "source": "service_operations.md",
+                "page": None,
+                "relevance_score": 0.333141,
+                "vector_score": 0.332566,
+                "lexical_overlap": 0.333333,
+                "technical_match": True,
+                "accepted": False,
+                "content_preview": "# 知识库服务运行与增量更新 ...",
+            },
+        ],
+        "accepted": [
+            {
+                "chunk_id": "a534...b5b5",
+                "source": "local_runtime.md",
+                "source_type": "markdown",
+                "page": None,
+                "start_index": 0,
+                "content": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+                "quote": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+                "relevance_score": 0.487369,
+                "vector_score": 0.282809,
+                "lexical_overlap": 0.555556,
+            }
+        ],
+    }
+]
+```
+
+- `matches`：Chroma Top-K 返回的所有候选，无论是否通过 gate 都保留。
+- `accepted`：`matches` 中通过 relevance gate 的完整证据。
+
+`used_evidence` 从 `accepted` 中选择，并受 `max_context_chars` 上下文长度限制。
+它比 accepted Evidence 多出 `included_text`，表示真正放进回答 Prompt 的文本：
+
+```python
+used_evidence = [
+    {
+        "chunk_id": "a534...b5b5",
+        "source": "local_runtime.md",
+        "source_type": "markdown",
+        "page": None,
+        "start_index": 0,
+        "content": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+        "quote": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+        "relevance_score": 0.487369,
+        "vector_score": 0.282809,
+        "lexical_overlap": 0.555556,
+        "included_text": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+    }
+]
+```
+
+`citations` 只有在声称使用的 chunk IDs 通过允许 ID 校验后才生成：在线模式使用
+模型返回的 `cited_chunk_ids`，离线模式直接使用全部 allowed IDs。它是
+`used_evidence` 的对外精简结构，不再携带完整的 `content` 和 `included_text`：
+
+```python
+citations = [
+    {
+        "chunk_id": "a534...b5b5",
+        "source": "local_runtime.md",
+        "source_type": "markdown",
+        "page": None,
+        "start_index": 0,
+        "quote": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+        "relevance_score": 0.487369,
+        "vector_score": 0.282809,
+        "lexical_overlap": 0.555556,
+    }
+]
+```
+
+三者关系：
+
+```text
+retrieval_trace[*].matches
+  → relevance gate
+  → retrieval_trace[*].accepted
+  → 上下文预算选择
+  → used_evidence
+  → cited_chunk_ids 合法性校验
+  → citations
+```
+
+## 15. Part 2 推荐学习顺序
+
+Part 2 同时包含消息协议、Retriever Tool、证据判断、Graph 路由和 citation 校验，
+不适合从文件第一行开始逐个辅助函数阅读。先记住一条主数据流：
+
+```text
+HumanMessage
+  → AIMessage.tool_calls
+  → ToolNode
+  → ToolMessage.artifact
+  → accepted Evidence
+  → used_evidence
+  → answer + citations
+```
+
+### 15.1 第一遍先掌握四组数据结构
+
+1. 消息对象：
+
+   ```text
+   HumanMessage：用户问题或改写后的查询
+   AIMessage：模型回复，也可能携带 tool_calls
+   ToolMessage：Tool 执行结果，content 给模型看，artifact 给程序处理
+   ```
+
+2. `AgenticRAGState`：重点先看：
+
+   ```text
+   messages
+   original_question / active_query
+   rewrite_count / max_rewrites
+   grade_relevant
+   used_evidence
+   answer / citations
+   ```
+
+3. 本地检索结构：
+
+   ```text
+   Evidence：一条通过本地 relevance gate 的真实 Chroma chunk
+   RetrievalBundle：一次检索的 query、全部 matches、accepted Evidence
+   ```
+
+4. 模型结构化输出：
+
+   ```text
+   GradeDocuments.binary_score：证据是否足以回答
+   GroundedAnswer.answer：答案文本
+   GroundedAnswer.cited_chunk_ids：模型声称使用的证据 ID
+   ```
+
+### 15.2 第二遍按真实执行顺序看方法
+
+```text
+part2_agentic_rag.run
+  ↓ 创建配置、Retriever、模型
+build_agentic_rag_graph
+  ↓
+initial_state
+  ↓
+graph.invoke
+  ↓
+generate_query_or_respond
+  ↓
+route_on_tool_calls
+  ├─ direct → END
+  └─ retrieve
+       ↓
+     ToolNode(retrieval_tool)
+       ↓
+     assess_evidence
+       ↓
+     route_after_assessment
+       ├─ generate → generate_answer → END
+       ├─ rewrite → rewrite_question → 回到路由节点
+       └─ refuse → refuse → END
+  ↓
+public_result
+```
+
+推荐逐个阅读：
+
+1. `initial_state()`：先看一次执行从哪些初始值开始。
+2. `make_retrieval_tool()`：理解 `RetrievalBundle` 如何变成
+   `ToolMessage.content + artifact`。
+3. `generate_query_or_respond()`：理解 AIMessage 是否包含 `tool_calls`。
+4. `route_on_tool_calls()`：理解第一次条件分支。
+5. `assess_evidence()`：理解 artifact 如何变成 `used_evidence`。
+6. `route_after_assessment()`：理解 generate、rewrite、refuse 三条分支。
+7. `rewrite_question()`：理解 `active_query` 改变而 `original_question` 不变。
+8. `generate_answer()`：理解允许 ID、模型引用 ID 和最终 citations 的校验。
+9. 最后再看底部的 `add_node()`、Edge 和 Conditional Edge，把上述方法连成图。
+10. `public_result()`：理解完整内部 State 如何裁剪成 CLI/API 输出。
+
+### 15.3 每个主要 Node 的 State 输入和输出
+
+| Node | 重点读取 | 重点更新 |
+| --- | --- | --- |
+| `generate_query_or_respond` | `messages`、`original_question`、`active_query` | `messages`、`route`，或直接写 `answer` |
+| `ToolNode` | 最新 `AIMessage.tool_calls` | 追加包含 `content/artifact` 的 `ToolMessage` |
+| `assess_evidence` | `messages` 中最新 artifact、`original_question` | `retrieval_attempts`、`retrieval_trace`、`grade_relevant`、`used_evidence` |
+| `rewrite_question` | `original_question`、`active_query`、`rewrite_count` | `messages`、`active_query`、`rewrite_count`、`route` |
+| `generate_answer` | `original_question`、`used_evidence` | `answer`、`answerable`、`grounded`、`citations` |
+| `refuse` | 不依赖新的业务输入 | 固定拒答并清空证据与引用 |
+
+### 15.4 第一遍可以暂时跳过
+
+以下实现细节不会妨碍理解 Graph 主线，第一遍可以先跳过：
+
+- `_message_text()` 的 provider content blocks 兼容逻辑。
+- `_format_context()` 和 `_citation_from_evidence()` 的字符串拼装。
+- `_select_used_evidence()` 的上下文长度截断细节。
+- 四段 System Prompt 的具体措辞。
+- `RetryPolicy`。
+- `LocalKnowledgeRetriever.retrieve()` 内部的 Chroma 和 relevance 评分公式；目录 4
+  已经学习过，可以先把它视为 `query -> RetrievalBundle`。
+- `live` 模式的真实模型调用；先使用确定性的 `offline` 模式理解路径。
+
+### 15.5 用三类问题分别观察路径
+
+先关闭改写循环，观察最短路径：
+
+```bash
+# 已知知识问题：retrieve → assess → generate
+.venv/bin/python 5_langgraph_agentic_rag/part2_agentic_rag.py \
+  --max-rewrites 0
+
+# 未知问题：retrieve → assess → refuse
+.venv/bin/python 5_langgraph_agentic_rag/part2_agentic_rag.py \
+  --question "QUASAR_TIDE_9999 是什么？" \
+  --max-rewrites 0
+
+# 闲聊：direct → END，不调用 Retriever Tool
+.venv/bin/python 5_langgraph_agentic_rag/part2_agentic_rag.py \
+  --question "你好"
+```
+
+最后再把未知问题改成 `--max-rewrites 1`，单独观察：
+
+```text
+retrieve → assess → rewrite → retrieve → assess → refuse
+```
+
+## 16. `build_agentic_rag_graph()`：工作流、节点和边
+
+`build_agentic_rag_graph()` 是造图函数。它接收已经创建好的 Retriever、可选模型和
+Checkpointer，最后返回编译后的 `CompiledStateGraph`。
+
+### 16.1 构造参数
+
+```python
+def build_agentic_rag_graph(
+    retriever: LocalKnowledgeRetriever,
+    *,
+    model: Any | None = None,
+    checkpointer: Any | None = None,
+    top_k: int = 4,
+    max_context_chars: int = 6000,
+):
+```
+
+| 参数 | 作用 |
+| --- | --- |
+| `retriever` | 目录 4 能力的本地适配器，真正执行 Chroma 检索和 relevance gate |
+| `model` | `None` 时走确定性离线节点；有模型时负责 Tool 路由、证据评分、改写和回答 |
+| `checkpointer` | 传给 `compile()`；`None` 表示当前图不保存跨调用状态 |
+| `top_k` | Retriever Tool 每次从 Chroma 取多少候选 |
+| `max_context_chars` | `used_evidence` 进入回答 Prompt 时允许的最大字符预算 |
+
+### 16.2 造图阶段和运行阶段
+
+调用：
+
+```python
+graph = build_agentic_rag_graph(retriever, model=model)
+```
+
+造图阶段会执行：
+
+```text
+创建 retrieval_tool
+绑定 model_with_tools
+创建 grader 和 answer_model
+定义 Node 函数
+创建 StateGraph
+注册 Node 和 Edge
+compile()
+```
+
+造图阶段不会执行：
+
+```text
+不会检索 Chroma
+不会调用聊天模型
+不会执行任何 Node
+不会生成回答
+```
+
+真正运行发生在：
+
+```python
+final_state = graph.invoke(initial_state(...))
+```
+
+方法内部的 Node 是闭包，可以在真正执行时继续使用造图阶段准备好的
+`retrieval_tool`、`model`、`grader`、`answer_model` 和 `max_context_chars`。
+
+### 16.3 造图前准备三种模型接口
+
+```python
+retrieval_tool = make_retrieval_tool(retriever, top_k=top_k)
+model_with_tools = model.bind_tools([retrieval_tool])
+grader = model.with_structured_output(GradeDocuments)
+answer_model = model.with_structured_output(GroundedAnswer)
+```
+
+它们的职责不同：
+
+```text
+model_with_tools：返回普通 AIMessage 或带 tool_calls 的 AIMessage
+grader：返回 GradeDocuments(binary_score="yes" | "no")
+answer_model：返回 GroundedAnswer(answer, cited_chunk_ids)
+```
+
+`model=None` 时三者都不会调用在线模型，Node 使用确定性的离线分支。
+
+### 16.4 `workflow` 是图的 Builder
+
+```python
+workflow = StateGraph(AgenticRAGState)
+```
+
+`workflow` 此时是 `StateGraph` 设计稿，不是一次正在执行的任务，也不包含某个用户
+问题的具体 State。
+
+代码注册六个节点：
+
+| 节点名称 | 实际 callable | 职责 |
+| --- | --- | --- |
+| `generate_query_or_respond` | 同名闭包函数 | 直接回答闲聊，或生成 Retriever Tool Call |
+| `retrieve` | `ToolNode([retrieval_tool])` | 读取最新 AI Tool Call，执行检索并追加 ToolMessage |
+| `assess_evidence` | 同名闭包函数 | 读取 artifact，选择和判断证据 |
+| `rewrite_question` | 同名闭包函数 | 改写 `active_query` 并增加 `rewrite_count` |
+| `generate_answer` | 同名闭包函数 | 依据证据回答并校验 citation IDs |
+| `refuse` | 同名闭包函数 | 返回固定拒答并清空证据与引用 |
+
+`retrieve` 节点不是直接这样注册：
+
+```python
+workflow.add_node("retrieve", retrieval_tool)
+```
+
+而是：
+
+```python
+workflow.add_node(
+    "retrieve",
+    ToolNode([retrieval_tool], handle_tool_errors=False),
+)
+```
+
+因此它会按照 Message Tool Calling 协议工作：
+
+```text
+AIMessage.tool_calls
+  → ToolNode 找到 retrieve_context
+  → 调用 retrieval_tool.invoke(...)
+  → 生成 ToolMessage(content, artifact)
+  → 通过 messages Reducer 追加到 State
+```
+
+`handle_tool_errors=False` 表示 Tool 异常不会被包装成普通错误 ToolMessage，而是继续
+向外抛出。当前 `retrieve` 节点没有单独配置 `RetryPolicy`。
+
+### 16.5 RetryPolicy 绑定在 Node 上
+
+```python
+llm_retry = RetryPolicy(max_attempts=2)
+```
+
+它配置给：
+
+```text
+generate_query_or_respond
+assess_evidence
+rewrite_question
+generate_answer
+```
+
+这些节点在 live 模式下可能调用模型。`max_attempts=2` 表示一个符合重试条件的节点
+最多尝试两次。固定的 `refuse` 节点和当前 `ToolNode` 没有使用该策略。
+
+### 16.6 固定边与条件边
+
+完整拓扑：
+
+```text
+START
+  ↓ 固定边
+generate_query_or_respond
+  ├─ direct ───────────────────────────────→ END
+  └─ retrieve
+       ↓
+     ToolNode(retrieve)
+       ↓ 固定边
+     assess_evidence
+       ├─ generate → generate_answer ──────→ END
+       ├─ rewrite → rewrite_question ─┐
+       │                              │
+       └─ refuse → refuse ───────────→ END
+                                      │
+           generate_query_or_respond ←┘
+```
+
+固定边：
+
+```python
+workflow.add_edge(START, "generate_query_or_respond")
+workflow.add_edge("retrieve", "assess_evidence")
+workflow.add_edge("rewrite_question", "generate_query_or_respond")
+workflow.add_edge("generate_answer", END)
+workflow.add_edge("refuse", END)
+```
+
+含义分别是：
+
+```text
+图一定从路由节点开始
+Tool 执行后一定先评估证据
+改写后一定回到路由节点重新发起检索
+成功回答后结束
+拒答后结束
+```
+
+第一条条件边：
+
+```python
+workflow.add_conditional_edges(
+    "generate_query_or_respond",
+    route_on_tool_calls,
+    {
+        "retrieve": "retrieve",
+        "direct": END,
+    },
+)
+```
+
+执行顺序：
+
+```text
+generate_query_or_respond 更新 State
+  → route_on_tool_calls(更新后的 State)
+  → 检查最后一条 AIMessage 是否有 tool_calls
+  → 返回 retrieve 或 direct
+  → 映射到 retrieve 节点或 END
+```
+
+第二条条件边：
+
+```python
+workflow.add_conditional_edges(
+    "assess_evidence",
+    route_after_assessment,
+    {
+        "generate": "generate_answer",
+        "rewrite": "rewrite_question",
+        "refuse": "refuse",
+    },
+)
+```
+
+Router 的返回标签不必等于目标节点名称。例如：
+
+```text
+"generate" → "generate_answer"
+```
+
+左侧是 Router 返回值，右侧才是已经注册的 Graph Node 名称。
+
+### 16.7 `route` 字段不负责选择边
+
+Node 会把：
+
+```python
+{"route": "retrieve"}
+```
+
+写入 State，但当前两个 Router 真正检查的是：
+
+```text
+route_on_tool_calls：检查最后一条 AIMessage.tool_calls
+route_after_assessment：检查 grade_relevant、used_evidence、rewrite_count
+```
+
+因此当前 `state["route"]` 主要用于结果输出、测试和调试，不是 Graph 自动根据这个
+字段跳转。Graph 只认条件边配置的 Router 返回值。
+
+### 16.8 四道控制边界
+
+1. 知识问题不能绕过检索：模型没有发出 Tool Call 时，程序强制构造检索调用。
+2. Tool 执行后不能直接回答：固定边强制进入 `assess_evidence`。
+3. 证据不足不能生成答案：条件边只能进入 rewrite 或 refuse。
+4. 模型引用不能直接信任：`generate_answer` 校验
+   `cited_chunk_ids` 必须属于 `allowed_ids`。
+
+所以这张图的设计不是让 LLM 自由决定全部流程，而是：
+
+```text
+LLM 负责语义判断和内容生成
+Graph 负责允许的执行顺序
+程序负责 evidence gate、循环上限和 citation 校验
+```
+
+### 16.9 compile 边界
+
+```python
+return workflow.compile(checkpointer=checkpointer)
+```
+
+返回值是可以执行的 `CompiledStateGraph`：
+
+```text
+StateGraph          设计稿，可以继续 add_node/add_edge
+CompiledStateGraph  可执行对象，可以 invoke/stream
+```
+
+`checkpointer=None` 时，每次 `invoke()` 是独立状态；传入 Checkpointer 后，图才可以
+根据 thread 配置保存和恢复检查点。

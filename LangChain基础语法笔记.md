@@ -1555,6 +1555,108 @@ min_relevance_score  = 最低综合分数门槛
 min_lexical_overlap  = 最低问题词项覆盖率门槛
 ```
 
+#### 完整的 relevance gate
+
+`relevance gate` 可以读作“相关性准入门”。Chroma Top-K 只负责从向量库中找出
+相对更接近的候选，即使问题完全不属于知识库，也仍可能返回排在前面的文档。
+relevance gate 在 Top-K 之后决定哪些候选有资格进入回答流程。
+
+目录 5 的 `LocalKnowledgeRetriever.retrieve()` 复用目录 4 的规则，每条候选必须同时
+满足四个条件：
+
+```python
+is_accepted = (
+    relevance_score >= min_relevance_score
+    and lexical_overlap >= min_lexical_overlap
+    and relevance_score >= best_relevance * 0.85
+    and (not query_technical_tokens or technical_match)
+)
+```
+
+当前默认阈值：
+
+```text
+min_relevance_score = 0.10
+min_lexical_overlap = 0.12
+```
+
+四道条件分别表示：
+
+1. 综合相关度至少达到绝对下限 `0.10`。
+2. 问题词项覆盖率至少达到绝对下限 `0.12`。
+3. 当前候选至少达到本次最佳候选分数的 `85%`，过滤明显落后的候选。
+4. 问题包含 ASCII 技术标识时，候选正文也必须命中至少一个技术标识；纯中文问题的
+   `query_technical_tokens` 为空集合，这一项自动通过。
+
+数据分层：
+
+```text
+Chroma Top-K
+  ↓ 全部候选计算三种分数
+matches：保留全部候选和 accepted=True/False，供审计
+  ↓ relevance gate
+accepted：只保留四项条件全部通过的 Evidence
+```
+
+例如本地 Hash 模式下，已知问题的最佳候选为：
+
+```text
+vector_score    = 0.253427
+lexical_overlap = 0.555556
+relevance_score = 0.25 × 0.253427 + 0.75 × 0.555556
+                ≈ 0.480023
+best × 0.85     ≈ 0.408020
+technical_match = True
+```
+
+四项全部通过，所以进入 `accepted`。同一次检索中另一候选即使
+`relevance_score=0.363357` 高于绝对下限，也因为：
+
+```text
+0.363357 < 0.408020
+```
+
+没有达到最佳候选的 `85%`，因此不会进入 `accepted`。
+
+未知问题 `QUASAR_TIDE_9999 是什么？` 的本地实测最佳候选为：
+
+```text
+vector_score    = 0.074536
+lexical_overlap = 0
+relevance_score = 0.018634
+technical_match = False
+```
+
+它无法通过绝对综合分数、词面覆盖和技术词匹配条件，因此：
+
+```python
+accepted == []
+```
+
+需要区分 relevance gate 和 Part 2 后面的 evidence grader：
+
+```text
+relevance gate
+  = 本地确定性 Python 规则，先过滤每个 Chroma 候选
+
+evidence grader
+  = accepted 证据形成 used_evidence 后，判断整组证据是否足够回答原问题
+```
+
+流程是：
+
+```text
+Chroma Top-K
+→ relevance gate
+→ accepted
+→ used_evidence
+→ 可选模型 grader
+→ generate / rewrite / refuse
+```
+
+通过 relevance gate 只表示“这条 chunk 有资格继续参与回答”，不表示最终答案一定
+正确，也不表示模型已经实际使用了它。
+
 包装成 Retriever：
 
 ```python
@@ -2023,6 +2125,169 @@ result["messages"]             # 完整执行轨迹
 
 即使 `tools=[]`，结构化输出实现也可能在轨迹中出现 Schema 相关 Tool Call；它不是在执行天气或数据库业务工具。
 
+### 11.3 `model.with_structured_output()`
+
+目录 5 的证据评分器：
+
+```python
+class GradeDocuments(BaseModel):
+    binary_score: Literal["yes", "no"] = Field(
+        description="检索证据相关且足以回答时为 yes，否则为 no。"
+    )
+
+
+grader = model.with_structured_output(
+    GradeDocuments,
+    method="function_calling",
+)
+```
+
+执行 `with_structured_output()` 时只创建一个新的 Runnable，不会立即请求模型。
+当前本地 `ChatOpenAI` 实现会把 Pydantic Schema 转换成 OpenAI Tool Schema：
+
+```json
+{
+  "type": "function",
+  "function": {
+    "name": "GradeDocuments",
+    "parameters": {
+      "properties": {
+        "binary_score": {
+          "type": "string",
+          "enum": ["yes", "no"]
+        }
+      },
+      "required": ["binary_score"],
+      "type": "object"
+    }
+  }
+}
+```
+
+内部逻辑可以近似理解为：
+
+```python
+model_with_schema = model.bind_tools(
+    [GradeDocuments],
+    tool_choice="GradeDocuments",
+    parallel_tool_calls=False,
+)
+
+parser = PydanticToolsParser(
+    tools=[GradeDocuments],
+    first_tool_only=True,
+)
+
+grader = model_with_schema | parser
+```
+
+这里的 `function_calling` 是模型输出协议，不表示执行了一个名为
+`GradeDocuments` 的真实 Python 业务函数。它只要求模型把结果放进 Schema Tool Call
+的参数中。
+
+真正调用发生在：
+
+```python
+grade = grader.invoke(messages)
+```
+
+数据流：
+
+```text
+list[SystemMessage | HumanMessage]
+  ↓ model_with_schema
+AIMessage(
+    content="",
+    tool_calls=[
+        {
+            "name": "GradeDocuments",
+            "args": {"binary_score": "yes"},
+        }
+    ],
+)
+  ↓ PydanticToolsParser
+GradeDocuments(binary_score="yes")
+```
+
+因此：
+
+```python
+type(grade) is GradeDocuments
+grade.binary_score  # "yes" 或 "no"
+```
+
+当前代码没有传 `include_raw=True`，所以调用方直接得到解析后的 Pydantic 对象，
+看不到包装前的 `AIMessage`。如果模型给出不符合 `Literal["yes", "no"]` 的值，
+Pydantic 解析会失败，而不是把任意文本当成有效分支结果。
+
+`include_raw=True` 要在创建结构化输出 Runnable 时传入，而不是传给 `invoke()`：
+
+```python
+grader = model.with_structured_output(
+    GradeDocuments,
+    method="function_calling",
+    include_raw=True,
+)
+
+result = grader.invoke(messages)
+```
+
+此时 `result` 不再直接是 `GradeDocuments`，而是一个字典：
+
+```python
+result = {
+    "raw": AIMessage(...),
+    "parsed": GradeDocuments(binary_score="yes"),
+    "parsing_error": None,
+}
+
+raw_message = result["raw"]
+grade = result["parsed"]
+error = result["parsing_error"]
+```
+
+- `raw`：模型未经 Pydantic 解析的原始 `AIMessage`，可以查看 `tool_calls`。
+- `parsed`：解析成功时为 `GradeDocuments`；解析失败时为 `None`。
+- `parsing_error`：解析成功时为 `None`；解析失败时保存异常对象。
+
+因此原来直接访问字段的代码：
+
+```python
+grade.binary_score
+```
+
+开启 `include_raw=True` 后需要改为：
+
+```python
+result["parsed"].binary_score
+```
+
+更稳妥的业务写法是先判断解析是否成功：
+
+```python
+result = grader.invoke(messages)
+if result["parsing_error"] is not None:
+    raise result["parsing_error"]
+
+grade = result["parsed"]
+assert grade is not None
+binary_score = grade.binary_score
+```
+
+需要与真正 Tool 执行区分：
+
+```text
+with_structured_output(GradeDocuments)
+  → 借用 Tool Call 格式承载结构化数据
+  → PydanticToolsParser 解析
+  → 不经过 ToolNode，不执行 Python Tool
+
+ToolNode([retrieval_tool])
+  → 读取 AIMessage.tool_calls
+  → 真正执行 retrieve_context
+  → 返回 ToolMessage
+```
+
 ## 12. `create_agent()`、Memory 与状态流
 
 ### 12.1 创建和调用 Agent
@@ -2069,6 +2334,94 @@ answer = final_message.content
 查看全部 `messages` 才能确认 Agent 是否真的调用了 Tool。
 
 当前 LangChain 也能根据普通 Python 函数的签名和 docstring 自动创建简单 Tool；需要 `args_schema` 或 `content_and_artifact` 时使用 `@tool(...)` 更明确。
+
+#### `ChatModel.invoke()` 为什么接收消息列表
+
+目录 5 的路由模型调用：
+
+```python
+messages = list(state["messages"])
+response = model_with_tools.invoke(
+    [SystemMessage(content=ROUTER_SYSTEM_PROMPT), *messages]
+)
+```
+
+本地 `BaseChatModel.invoke()` 的 `input` 可以接收三类数据：
+
+```text
+str
+PromptValue
+Sequence[BaseMessage]
+```
+
+这里使用 `list[BaseMessage]`，是因为 ChatModel 需要同时知道每条消息的角色和顺序。
+第一次调用时可以近似理解为：
+
+```python
+messages = [
+    HumanMessage(content="本地知识库默认使用什么 Embedding 模型？")
+]
+
+model_input = [
+    SystemMessage(content=ROUTER_SYSTEM_PROMPT),
+    HumanMessage(content="本地知识库默认使用什么 Embedding 模型？"),
+]
+```
+
+- `SystemMessage`：只为本次路由模型调用提供规则。
+- `messages`：LangGraph State 中已经积累的 Human、AI 和 Tool 消息历史。
+- `*messages`：Python 列表解包，把历史消息逐项放到 SystemMessage 后面。
+
+如果写成下面这样：
+
+```python
+[SystemMessage(content=ROUTER_SYSTEM_PROMPT), messages]
+```
+
+第二项会是完整的子列表，而不是一条 `BaseMessage`，不符合这里需要的平铺消息序列。
+
+`model_with_tools` 虽然通过 `bind_tools()` 绑定了工具，但输入协议仍然是 ChatModel 的
+消息输入协议；它返回一个 `AIMessage`，其中可能包含 `tool_calls`。
+
+对于“本地知识库默认使用什么 Embedding 模型？”这个知识问题，模型决定调用检索
+Tool 时，`response` 可以近似为下面的对象。`id`、token 用量和 provider metadata
+每次请求都可能不同：
+
+```python
+response = AIMessage(
+    content="",
+    id="run-demo-001",
+    tool_calls=[
+        {
+            "name": "retrieve_context",
+            "args": {
+                "query": "本地知识库默认使用什么 Embedding 模型？",
+            },
+            "id": "call-demo-001",
+            "type": "tool_call",
+        }
+    ],
+    usage_metadata={
+        "input_tokens": 320,
+        "output_tokens": 18,
+        "total_tokens": 338,
+    },
+)
+```
+
+读取结果：
+
+```python
+type(response)                         # AIMessage
+response.content                      # ""
+bool(response.tool_calls)              # True
+response.tool_calls[0]["name"]         # "retrieve_context"
+response.tool_calls[0]["args"]         # {"query": "本地知识库默认使用什么 Embedding 模型？"}
+response.tool_calls[0]["id"]           # "call-demo-001"
+```
+
+`content=""` 并不表示模型没有返回结果。这里模型返回的是结构化 Tool Call，而不是
+自然语言；后续 `ToolNode` 才会真正执行 `retrieve_context`。
 
 ### 12.2 Memory
 

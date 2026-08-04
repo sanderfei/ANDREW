@@ -12,7 +12,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-
 PROJECT_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = PROJECT_DIR.parent
 RAG_SERVICE_DIR = REPOSITORY_ROOT / "4_rag_knowledge_base_service"
@@ -44,9 +43,7 @@ def relevant_quote(text: str, question: str, limit: int = 420) -> str:
     terms = grounding_tokens(question)
     lowered = normalized.lower()
     positions = [
-        position
-        for term in terms
-        if (position := lowered.find(term.lower())) >= 0
+        position for term in terms if (position := lowered.find(term.lower())) >= 0
     ]
     if not positions:
         return _preview(normalized, limit)
@@ -60,6 +57,7 @@ def relevant_quote(text: str, question: str, limit: int = 420) -> str:
     return prefix + normalized[start:end] + suffix
 
 
+# 一条通过 relevance gate 的真实 Chroma chunk
 @dataclass(frozen=True)
 class Evidence:
     """一条通过本地可回答性 gate 的真实 Chroma 文档块。"""
@@ -79,6 +77,7 @@ class Evidence:
         return asdict(self)
 
 
+# 一次检索的完整结果
 @dataclass(frozen=True)
 class RetrievalBundle:
     """一次检索的审计结果和通过 gate 的证据。"""
@@ -202,14 +201,10 @@ class LocalKnowledgeRetriever:
                     Evidence(
                         chunk_id=match["chunk_id"],
                         source=match["source"],
-                        source_type=str(
-                            metadata.get("source_type", "unknown")
-                        ),
+                        source_type=str(metadata.get("source_type", "unknown")),
                         page=match["page"],
                         start_index=(
-                            int(start_index)
-                            if isinstance(start_index, int)
-                            else None
+                            int(start_index) if isinstance(start_index, int) else None
                         ),
                         content=document.page_content.strip(),
                         quote=relevant_quote(document.page_content, query),
@@ -234,4 +229,3 @@ __all__ = [
     "build_tutorial_settings",
     "relevant_quote",
 ]
-

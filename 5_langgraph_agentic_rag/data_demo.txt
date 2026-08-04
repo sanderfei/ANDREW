@@ -1,0 +1,109 @@
+retrieval_trace = [
+    {
+        "query": "本地知识库默认使用什么 Embedding 模型？",
+
+        # Chroma Top-K 返回的全部候选
+        "matches": [
+            {
+                "rank": 1,
+                "chunk_id": "c763...15a9",
+                "source": "evaluation.md",
+                "page": None,
+                "relevance_score": 0.435075,
+                "vector_score": 0.406967,
+                "lexical_overlap": 0.444444,
+                "technical_match": True,
+                "accepted": True,
+                "content_preview": "# RAG 评估与可观测性 ...",
+            },
+            {
+                "rank": 2,
+                "chunk_id": "9cce...6559",
+                "source": "service_operations.md",
+                "page": None,
+                "relevance_score": 0.333141,
+                "vector_score": 0.332566,
+                "lexical_overlap": 0.333333,
+                "technical_match": True,
+                "accepted": False,
+                "content_preview": "# 知识库服务运行与增量更新 ...",
+            },
+        ],
+
+        # matches 中通过 relevance gate 的证据
+        "accepted": [
+            {
+                "chunk_id": "a534...b5b5",
+                "source": "local_runtime.md",
+                "source_type": "markdown",
+                "page": None,
+                "start_index": 0,
+                "content": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+                "quote": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+                "relevance_score": 0.487369,
+                "vector_score": 0.282809,
+                "lexical_overlap": 0.555556,
+            }
+        ],
+    }
+]
+
+
+used_evidence = [
+    {
+        "chunk_id": "a534...b5b5",
+        "source": "local_runtime.md",
+        "source_type": "markdown",
+        "page": None,
+        "start_index": 0,
+
+        # 原始完整 chunk
+        "content": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+
+        # 适合向用户展示的短引用
+        "quote": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+
+        "relevance_score": 0.487369,
+        "vector_score": 0.282809,
+        "lexical_overlap": 0.555556,
+
+        # 真正放进回答 Prompt 的文本
+        "included_text": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+    }
+]
+
+citations = [
+    {
+        "chunk_id": "a534...b5b5",
+        "source": "local_runtime.md",
+        "source_type": "markdown",
+        "page": None,
+        "start_index": 0,
+        "quote": "本机默认 embedding 是 MiniLM-L12-v2 ...",
+        "relevance_score": 0.487369,
+        "vector_score": 0.282809,
+        "lexical_overlap": 0.555556,
+    }
+]
+
+response = {
+    "content": "",
+    "type": "ai",
+    "id": "run-demo-001",
+    "tool_calls": [
+        {
+            "name": "retrieve_context",
+            "args": {
+                "query": "本地知识库默认使用什么 Embedding 模型？"
+            },
+            "id": "call-demo-001",
+            "type": "tool_call"
+        }
+    ],
+    "invalid_tool_calls": [],
+    "usage_metadata": {
+        "input_tokens": 320,
+        "output_tokens": 18,
+        "total_tokens": 338
+    }
+}

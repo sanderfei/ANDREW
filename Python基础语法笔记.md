@@ -1141,6 +1141,36 @@ description = schema.pop("description", None)
 | `mapping.setdefault(key, default)` | 写入并返回 `default` | 是 |
 | `mapping.pop(key, default)` | 返回 `default` | key 存在时会删除 |
 
+#### `dict.update()` 把其他键值对写入当前字典
+
+```python
+update = {"messages": ["AIMessage"]}
+update.update(
+    {
+        "active_query": "本地 Embedding 模型是什么？",
+        "route": "retrieve",
+    }
+)
+```
+
+执行后，原来的 `update` 字典被原地修改为：
+
+```python
+{
+    "messages": ["AIMessage"],
+    "active_query": "本地 Embedding 模型是什么？",
+    "route": "retrieve",
+}
+```
+
+如果新键值对与旧字典存在同名 key，新值会覆盖旧值。`dict.update()` 的返回值是
+`None`，因此通常先执行修改，再单独 `return update`：
+
+```python
+result = update.update({"route": "retrieve"})
+result is None  # True
+```
+
 ### 4.11 `set`、成员判断和保序去重
 
 集合经常与列表配合进行保序去重：
@@ -3942,6 +3972,7 @@ result = dict(row)
 | `*` | `def f(*, key)` | 后面是仅限关键字参数 |
 | `*` | `def f(*args)` | 收集位置参数 |
 | `*` | `f(*values)` | 拆开序列作为位置参数 |
+| `*` | `[first, *values]` | 在列表字面量中逐项展开可迭代对象 |
 | `**` | `def f(**kwargs)` | 收集关键字参数 |
 | `**` | `f(**config)` | 拆开字典作为关键字参数 |
 | `|` | `str | None` | 联合类型 |
@@ -3959,6 +3990,32 @@ str | None                  # 联合类型
 
 Python 运算符会根据两侧对象的类型执行不同操作；自定义类也可以通过特殊方法重载
 运算符。
+
+### 17.3 列表字面量中的 `*` 解包
+
+```python
+messages = ["用户消息", "工具消息"]
+combined = ["系统消息", *messages]
+
+# 等价结果：
+# ["系统消息", "用户消息", "工具消息"]
+```
+
+`*messages` 会把 `messages` 中的元素逐项放入新列表，并且不会修改原列表。它近似
+等价于：
+
+```python
+combined = ["系统消息"] + messages
+```
+
+如果不写 `*`：
+
+```python
+nested = ["系统消息", messages]
+# ["系统消息", ["用户消息", "工具消息"]]
+```
+
+此时第二项是完整的子列表，结构变成了嵌套列表。
 
 ## 18. 语法速查
 
