@@ -15,7 +15,20 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import RetryPolicy
 from pydantic import BaseModel, Field
-from agentic_rag import _is_smalltalk, ROUTER_SYSTEM_PROMPT
+
+from agentic_rag import (
+    ANSWER_SYSTEM_PROMPT,
+    CITATION_VALIDATION_FAILED,
+    GRADE_SYSTEM_PROMPT,
+    REJECTION_ANSWER,
+    REWRITE_SYSTEM_PROMPT,
+    ROUTER_SYSTEM_PROMPT,
+    _citation_from_evidence,
+    _format_context,
+    _is_smalltalk,
+    _latest_retrieval_artifact,
+    _select_used_evidence,
+)
 from local_rag_adapter import LocalKnowledgeRetriever, relevant_quote
 
 
@@ -218,3 +231,146 @@ def build_agentic_rag_graph(
         if isinstance(last_message, AIMessage) and last_message.tool_calls:
             return "retrieve"
         return "direct"
+
+    def assess_evidence(state: AgenticRAGState) -> dict[str, Any]:
+        """评估检索到的证据是否相关且足以回答。"""
+        artifact = _latest_retrieval_artifact(list(state["messages"]))
+        accepted = artifact.get("accepted", [])
+        if not isinstance(accepted, list):
+            accepted = []
+        used_evidence = _select_used_evidence(
+            accepted,
+            max_context_chars=max_context_chars,
+            question=state["original_question"],
+        )
+
+        grade_relevant = bool(used_evidence)
+        if grade_relevant and grader is not None:
+            grade = grader.invoke(
+                [
+                    SystemMessage(content=GRADE_SYSTEM_PROMPT),
+                    HumanMessage(
+                        content=(
+                            f"原始问题：{state['original_question']}\n\n"
+                            f"<context>\n{_format_context(used_evidence)}\n"
+                            "</context>"
+                        )
+                    ),
+                ]
+            )
+            grade_relevant = grade.binary_score == "yes"
+
+        traces = list(state.get("retrieval_trace", []))
+        traces.append(artifact)
+
+        return {
+            "retrieval_attempts": state.get("retrieval_attempts", 0) + 1,
+            "retrieval_trace": traces,
+            "grade_relevant": grade_relevant,
+            "used_evidence": used_evidence if grade_relevant else [],
+        }
+
+    def route_after_assessment(
+        state: AgenticRAGState,
+    ) -> Literal["generate", "rewrite", "refuse"]:
+        if state.get("grade_relevant") and state.get("used_evidence"):
+            return "generate"
+        if state.get("rewrite_count", 0) < state.get("max_rewrites", 1):
+            return "rewrite"
+        return "refuse"
+
+    def rewrite_question(state: AgenticRAGState) -> dict[str, Any]:
+        """改写检索问题。"""
+        original = state["original_question"]
+        current = state.get("active_query", original)
+        if model is None:
+            rewritten = f"{original} 请检索与该问题直接相关的定义、配置和限制。"
+        else:
+            response = model.invoke(
+                [
+                    SystemMessage(content=REWRITE_SYSTEM_PROMPT),
+                    HumanMessage(
+                        content=(f"原始问题：{original}\n" f"上一条检索查询：{current}")
+                    ),
+                ]
+            )
+            rewritten = _message_text(response) or current
+
+        return {
+            "messages": [HumanMessage(content=rewritten)],
+            "active_query": rewritten,
+            "rewrite_count": state.get("rewrite_count", 0) + 1,
+            "route": "rewrite",
+        }
+
+    def generate_answer(state: AgenticRAGState) -> dict[str, Any]:
+        used_evidence = list(state["used_evidence"])
+        allowed_ids = [str(item["chunk_id"]) for item in used_evidence]
+        if answer_model is None:
+            answer = "根据本地知识库的相关片段：\n" + "\n\n".join(
+                str(item["quote"]) for item in used_evidence[:2]
+            )
+            claimed_ids = allowed_ids
+        else:
+            generated = answer_model.invoke(
+                [
+                    SystemMessage(content=ANSWER_SYSTEM_PROMPT),
+                    HumanMessage(
+                        content=(
+                            f"<allowed_chunk_ids>{allowed_ids}</allowed_chunk_ids>\n"
+                            f"<context>\n{_format_context(used_evidence)}\n"
+                            f"</context>\n\n问题：{state['original_question']}"
+                        )
+                    ),
+                ]
+            )
+            answer = generated.answer.strip()
+            claimed_ids = generated.cited_chunk_ids
+
+        allowed = set(allowed_ids)
+        valid_ids: list[str] = []
+        invalid_ids: list[str] = []
+        for raw_id in claimed_ids:
+            chunk_id = str(raw_id)
+            if chunk_id in allowed:
+                if chunk_id not in valid_ids:
+                    valid_ids.append(chunk_id)
+            else:
+                invalid_ids.append(chunk_id)
+
+        if not valid_ids:  # 如果没有任何有效 ID
+            return {
+                "answer": CITATION_VALIDATION_FAILED,
+                "answerable": False,
+                "grounded": False,
+                "route": "citation_validation_failed",
+                "citations": [],
+                "invalid_cited_chunk_ids": invalid_ids,
+            }
+
+        evidence_by_id = {str(item["chunk_id"]): item for item in used_evidence}
+        citations = [
+            _citation_from_evidence(evidence_by_id[chunk_id]) for chunk_id in valid_ids
+        ]
+        return {
+            "answer": answer,
+            "answerable": True,
+            "grounded": True,
+            "route": "grounded_answer",
+            "citations": citations,
+            "invalid_cited_chunk_ids": invalid_ids,
+        }
+
+    def refuse(_state: AgenticRAGState) -> dict[str, Any]:
+        return {
+            "answer": REJECTION_ANSWER,
+            "answerable": False,
+            "grounded": False,
+            "route": "refused",
+            "used_evidence": [],
+            "citations": [],
+            "invalid_cited_chunk_ids": [],
+        }
+
+    workflow = StateGraph(AgenticRAGState)
+    llm_retry = RetryPolicy(max_attempts=2)

@@ -1389,3 +1389,35 @@ CompiledStateGraph  可执行对象，可以 invoke/stream
 
 `checkpointer=None` 时，每次 `invoke()` 是独立状态；传入 Checkpointer 后，图才可以
 根据 thread 配置保存和恢复检查点。
+
+### 16.10 Router SystemMessage 是每次模型请求的临时输入
+
+```python
+messages = list(state["messages"])
+response = model_with_tools.invoke(
+    [SystemMessage(content=ROUTER_SYSTEM_PROMPT), *messages]
+)
+```
+
+`[SystemMessage(...), *messages]` 会新建一个传给模型的列表，不会修改
+`state["messages"]`。因此每次进入 `generate_query_or_respond` 都会把一条新的
+Router `SystemMessage` 放在本次模型请求的最前面，但它不会被追加到 Graph
+State。
+
+首次路由请求近似为：
+
+```text
+模型输入：[SystemMessage(router), HumanMessage(原问题)]
+State 合并响应后：[HumanMessage(原问题), AIMessage(响应)]
+```
+
+如果检索证据不足，经 `rewrite_question` 回到路由节点，第二次请求近似为：
+
+```text
+模型输入：[SystemMessage(router), HumanMessage(原问题),
+             AIMessage(Tool Call), ToolMessage(检索结果),
+             HumanMessage(改写查询)]
+```
+
+只有节点返回的 `{"messages": [response]}` 会通过 `add_messages` 合并进 State。
+如果首次路由已经走闲聊 `direct -> END`，同一次 Graph 执行不会再次进入该节点。

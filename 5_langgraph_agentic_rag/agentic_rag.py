@@ -189,6 +189,19 @@ def make_retrieval_tool(
     return retrieve_context
 
 
+# 获取的是最近一次检索执行完成后生成的 ToolMessage.artifact。数据demo如下：
+# {
+#   "type": "tool",
+#   "name": "retrieve_context",
+#   "tool_call_id": "call-retrieve-001",
+#   "content": "[chunk_id=milvus-001 source=milvus.md score=0.920000]\nMilvus 服务默认监听 19530 端口。",
+#   "artifact": {
+#     "query": "Milvus 默认端口",
+#     "matches": [{"chunk_id": "milvus-001","source": "milvus.md","content": "Milvus 服务默认监听 19530 端口。","relevance_score": 0.7925}],
+#     "accepted": [{"chunk_id": "milvus-001","source": "milvus.md","content": "Milvus 服务默认监听 19530 端口。","relevance_score": 0.7925}
+#     ]
+#   }
+# }
 def _latest_retrieval_artifact(
     messages: list[BaseMessage],
 ) -> dict[str, Any]:
@@ -200,6 +213,21 @@ def _latest_retrieval_artifact(
     return {"query": "", "matches": [], "accepted": []}
 
 
+# accepted 是 artifact["accepted"] 中通过 relevance gate 的证据列表，数据 demo 如下：
+# [
+#   {
+#     "chunk_id": "milvus-001",
+#     "source": "milvus.md",
+#     "source_type": "markdown",
+#     "page": None,
+#     "start_index": 128,
+#     "content": "Milvus 服务默认监听 19530 端口。",
+#     "quote": "Milvus 服务默认监听 19530 端口。",
+#     "relevance_score": 0.7925,
+#     "vector_score": 0.92,
+#     "lexical_overlap": 0.75
+#   }
+# ]
 def _select_used_evidence(
     accepted: list[dict[str, Any]],
     *,
@@ -381,7 +409,8 @@ def build_agentic_rag_graph(
             )
 
         # AgenticRAGState 继承了 MessagesState
-        # messages 字段本来就应该存放消息列表
+        # 本节点只返回一条新 AIMessage；LangGraph 使用 add_messages
+        # Reducer 把它合并到历史，后续 ToolNode 再追加 ToolMessage。
         update: dict[str, Any] = {"messages": [response]}
         if response.tool_calls:
             query = response.tool_calls[0].get("args", {}).get("query")
@@ -414,8 +443,19 @@ def build_agentic_rag_graph(
         return "direct"
 
     # 判断证据是否足够
+    # Retriever 取 Top-K 候选
+    # matches：全部候选，可能相关也可能不相关
+    # 本地数值 gate
+    # accepted：通过本地相关性规则的候选
+    # _select_used_evidence()
+    # 控制上下文长度、截断正文、生成 quote
+    # 候选 used_evidence
+    # 在线 LLM Grader 判断是否相关且足以回答
+    # 通过：保存到 state["used_evidence"]
     def assess_evidence(state: AgenticRAGState) -> dict[str, Any]:
         artifact = _latest_retrieval_artifact(list(state["messages"]))
+        # dict.get() 的默认值只在 key 不存在时生效；key 存在但
+        # value 是 None、字符串或字典等错误类型时，仍需要单独收窄。
         accepted = artifact.get("accepted", [])
         if not isinstance(accepted, list):
             accepted = []
@@ -424,6 +464,7 @@ def build_agentic_rag_graph(
             max_context_chars=max_context_chars,
             question=state["original_question"],
         )
+        # 先以存在候选证据为前提；live 模式下再由 grader 覆盖这个判断。
         grade_relevant = bool(used_evidence)
         if grade_relevant and grader is not None:
             # 只有存在候选证据并且处于 live 模式时：模型调用
@@ -444,9 +485,13 @@ def build_agentic_rag_graph(
         traces = list(state.get("retrieval_trace", []))
         traces.append(artifact)
         return {
+            # 证据评估的次数
             "retrieval_attempts": state.get("retrieval_attempts", 0) + 1,
+            # 每次检索的完整审计记录
             "retrieval_trace": traces,
+            # 最近一次评估答案 yes or no
             "grade_relevant": grade_relevant,
+            #  从 accepted 中按原问题和上下文长度选出的、真正进入回答 Prompt 的证据
             "used_evidence": used_evidence if grade_relevant else [],
         }
 
@@ -455,10 +500,8 @@ def build_agentic_rag_graph(
     ) -> Literal["generate", "rewrite", "refuse"]:
         if state.get("grade_relevant") and state.get("used_evidence"):  # 证据充分
             return "generate"
-        if state.get("rewrite_count", 0) < state.get(
-            "max_rewrites", 1
-        ):  # 证据不足且未超限
-            return "rewrite"
+        if state.get("rewrite_count", 0) < state.get("max_rewrites", 1):
+            return "rewrite"  # 证据不足且未超限
         return "refuse"  # 证据不足 AND 已达到改写上限
 
     # 改写检索问题
@@ -508,9 +551,9 @@ def build_agentic_rag_graph(
                 ]
             )
             answer = generated.answer.strip()
-            claimed_ids = generated.cited_chunk_ids
+            claimed_ids = generated.cited_chunk_ids  # 模型声称自己使用的 ID
 
-        allowed = set(allowed_ids)
+        allowed = set(allowed_ids)  # 程序确认可以引用的 ID
         valid_ids: list[str] = []
         invalid_ids: list[str] = []
         for raw_id in claimed_ids:

@@ -1109,6 +1109,27 @@ else:
 scores[key] = old_score + 1.0 / (rank + k)
 ```
 
+`get(key, default)` 的默认值只在 key 不存在时生效，不会校验已存在 value
+的类型：
+
+```python
+{}.get("accepted", [])                       # []
+{"accepted": ["chunk-1"]}.get("accepted", [])  # ["chunk-1"]
+{"accepted": None}.get("accepted", [])     # None
+{"accepted": "wrong"}.get("accepted", [])  # "wrong"
+```
+
+因此读取来自 Tool、JSON 或其他外部边界的数据时，可以再做类型收窄：
+
+```python
+accepted = artifact.get("accepted", [])
+if not isinstance(accepted, list):
+    accepted = []
+```
+
+第二步不是重复处理“key 缺失”，而是把 key 存在但值为 `None`、字符串、
+字典等非 `list` 情况统一降级为空列表。
+
 另一个例子：
 
 ```python
