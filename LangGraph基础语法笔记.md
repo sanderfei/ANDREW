@@ -310,6 +310,30 @@ workflow.add_node("smalltalk_node", answer_smalltalk)
 
 ## 6. `add_edge()`：添加固定边
 
+当前 `StateGraph.add_edge()` 的核心签名是：
+
+```python
+add_edge(start_key: str | list[str], end_key: str)
+```
+
+- `start_key`：起点 Node 的注册名称；也可以传多个起点名称组成的列表。
+- `end_key`：终点 Node 的注册名称。
+- 传单个起点时，起点 Node 执行完成后再执行终点 Node。
+- 传多个起点时，要等列表里的所有起点 Node 都执行完成，才执行终点 Node。
+
+最常见的单起点写法就是添加一条从 Node A 到 Node B 的有向边：
+
+```python
+workflow.add_edge("node_a", "node_b")
+```
+
+```text
+node_a → node_b
+```
+
+这里传的是通过 `add_node()` 注册的**节点名称**，不是直接传节点函数对象。
+`START` 和 `END` 则是可以分别作为起点和终点使用的特殊标记。
+
 ```python
 workflow.add_edge(START, "classify_question")
 ```
@@ -463,6 +487,43 @@ result = graph.invoke({
 ```
 
 此时才会真正从 `START` 开始执行节点。
+
+更准确地说，普通首次调用的入参要符合图的 **Input Schema**：
+
+```python
+workflow = StateGraph(LearningState)
+graph = workflow.compile()
+
+# 没有单独指定 input_schema，因此输入结构默认使用 LearningState
+result = graph.invoke({"question": "你好"})
+```
+
+`LearningState` 是 `TypedDict` 时，传入的是字段结构符合要求的普通 `dict`，不是必须
+创建某种特殊的 State 实例。类型标注主要用于静态检查；运行时哪些字段必须存在，
+还取决于 Schema 是否把字段声明为可选，以及后续 Node 会不会直接读取该字段。
+
+如果构图时单独指定了 `input_schema`，`invoke()` 则以 Input Schema 为准，不要求
+调用者提供完整的内部 State：
+
+```python
+class InputState(TypedDict):
+    question: str
+
+
+class OverallState(InputState, total=False):
+    answer: str
+
+
+workflow = StateGraph(
+    OverallState,
+    input_schema=InputState,
+)
+graph = workflow.compile()
+graph.invoke({"question": "你好"})
+```
+
+另外，从 `interrupt()` 恢复图时是特殊情况：此时可以向 `invoke()` 传
+`Command(resume=...)`，而不是再次传初始状态字典。
 
 `invoke()` 的输入字段应该来自 `LearningState`，但不表示每次都要把所有字段传入。
 当前 `LearningState` 使用了 `total=False`，所以可以只传本次执行需要的部分状态。
@@ -1660,6 +1721,11 @@ decision.get("decision")            str，例如 "approve"
 恢复时，LangGraph 会从 `human_review` 节点开头重新执行。第二次运行到同一个
 `interrupt()` 时，它不再暂停，而是返回 `resume` 中的字典：
 
+这里重启的是**发生中断的整个 Node 函数**，不是从 `START` 重跑整张图。因此本例
+通常不会再次执行已经成功完成的 `prepare_report()`；它会从 Checkpointer 恢复已有
+State，重新调用 `human_review(state)`，再次执行该函数中位于 `interrupt()` 之前的
+代码，然后让 `interrupt()` 返回恢复值并继续执行其后代码。
+
 ```python
 decision == {
     "decision": "approve",
@@ -2194,6 +2260,26 @@ stream，不是只创建生成器但完全不遍历。
 
 当前是根 Graph，所以 `ns == ()`。代码只读取 `type` 和 `data`。
 
+当前 LangGraph 把 v2 事件标注为 `StreamPart`。它是
+`ValuesStreamPart | UpdatesStreamPart | CustomStreamPart | ...` 组成的 `TypedDict`
+联合类型；运行时每个 `event` 仍然是普通 Python `dict`：
+
+```python
+type(event) is dict  # True
+```
+
+`event["type"]` 是判别字段，决定 `event["data"]` 的结构：
+
+| `event["type"]` | 当前示例中 `data` 的结构 |
+| --- | --- |
+| `"values"` | Reducer 合并后的完整 `StreamingState` 字典 |
+| `"updates"` | `{节点名称: 该节点返回的局部更新}` |
+| `"custom"` | `writer(payload)` 发送的原始 payload；本例是字典 |
+
+因此代码先读取并判断 `event_type`，再用对应方式处理 `data`。`custom` 模式在框架层面
+允许任意 payload，所以即使本例发送的是字典，仍使用 `isinstance(data, dict)` 做运行时
+保护。当前 `values` 事件还包含 `interrupts` 字段，但这段演示没有读取它。
+
 ### 19.5 `values`、`updates`、`custom` 的区别
 
 #### `values`：Reducer 合并后的完整 State
@@ -2261,8 +2347,16 @@ writer = get_stream_writer()
 writer({"stage": "draft", "detail": "正在生成确定性草稿"})
 ```
 
+`get_stream_writer()` 从当前 LangGraph 运行上下文取得一个 `StreamWriter`。它本质上是
+`Callable[[Any], None]`：`writer(payload)` 接收一份数据并发送到输出流，调用方不使用
+它的返回值。`stage`、`detail` 都是本例开发者自定义的字典 key，LangGraph 不会把
+`"draft"` 自动解释成某种内置阶段。
+
 传给 `writer(...)` 的对象会成为 `custom` 事件的 `data`。它不是 Node 的返回值，不会
 通过 Reducer 写入 State，也不会因为发出了进度事件就出现在最终 State 中。
+
+外层必须使用包含 `"custom"` 的 `stream_mode` 才能收到这份数据；如果本次执行没有
+订阅 custom stream，运行上下文中的 Writer 相当于 no-op，不会把 payload 写入 State。
 
 当前只有 `write_draft` 和 `polish_answer` 发送进度，因此：
 
@@ -2316,6 +2410,19 @@ Streaming 只是观察这一次 Graph 的执行过程，不等于 Checkpointer�
 ```text
 START -> collect_topic -> write_draft -> polish_answer -> END
 ```
+
+一次正常执行会经过 4 条 Edge，并执行 3 个通过 `add_node()` 注册的业务 Node：
+
+```text
+Edge 1  START -> collect_topic
+Edge 2  collect_topic -> write_draft
+Edge 3  write_draft -> polish_answer
+Edge 4  polish_answer -> END
+```
+
+`START` 和 `END` 是特殊标记，不计入这 3 个业务 Node。当前订阅的 `values`、
+`updates`、`custom` 模式也不会为每条 Edge 单独发送事件；9 个事件分别来自初始
+State、3 个 Node 的局部更新/完整状态，以及其中 2 个 Node 主动发送的 custom 进度。
 
 #### `collect_topic`
 

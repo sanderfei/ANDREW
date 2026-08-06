@@ -46,7 +46,8 @@ def collect_topic(state: StreamingState) -> StreamingState:
         "messages": [HumanMessage(content=topic, id="question")],
     }
 
-
+# writer 这两行是在 Node 内发送一条“自定义实时进度”
+# 可以理解成向外层 graph.stream() 发消息：
 def write_draft(state: StreamingState) -> StreamingState:
     writer = get_stream_writer()
     writer({"stage": "draft", "detail": "正在生成确定性草稿"})
@@ -57,7 +58,7 @@ def write_draft(state: StreamingState) -> StreamingState:
         ],
     }
 
-
+# polish 草稿润色
 def polish_answer(state: StreamingState) -> StreamingState:
     writer = get_stream_writer()
     writer({"stage": "polish", "detail": "正在替换同 ID 的草稿消息"})
@@ -90,6 +91,12 @@ def _message_summary(message: BaseMessage) -> dict[str, str | None]:
     }
 
 
+def _event_json_default(value: Any) -> Any:
+    if isinstance(value, BaseMessage):
+        return value.model_dump(mode="json")
+    return str(value)
+
+
 def run_demo(topic: str = "LangGraph State") -> dict[str, Any]:
     graph = build_streaming_graph()
     event_counts: dict[str, int] = {}
@@ -98,11 +105,36 @@ def run_demo(topic: str = "LangGraph State") -> dict[str, Any]:
     final_state: StreamingState = {}
 
     # graph.stream(...) 是 LangGraph 提供的公开流式执行接口，返回一个 generator
+    # Node 执行时，writer() 可以发送 custom，Node return 产生 updates，
+    # Reducer 合并后产生 values，Edge 再决定下一个 Node。
+    # event 在类型标注层面叫 StreamPart，是多种 TypedDict 的联合类型：
+    # event["type"] 决定 event["data"] 的具体结构。
+    # ├─ type：事件种类
+    # ├─ ns：图命名空间；根图通常是 ()
+    # ├─ data：事件实际数据，结构由 type 决定
+    # └─ interrupts：部分事件类型具有的额外字段
+    # values 的 data 是 Reducer 合并后的完整 State；updates 的 data 是
+    # Node 名称到该 Node 局部状态更新的映射；custom 的 data 是传给 writer 的原始字典。
+    # 当前图的事件顺序：
+    # 1. Graph 接收输入，产生 values。
+    # 2. collect_topic 返回 updates，合并后产生 values。
+    # 3. write_draft 依次产生 custom、updates 和合并后的 values。
+    # 4. polish_answer 依次产生 custom、updates 和最终 values。
     for event in graph.stream(
         {"topic": topic, "steps": [], "messages": []},
         stream_mode=["updates", "values", "custom"],
         version="v2",
     ):
+        print(">>>>>>>>>>>>>>>>>>",type(event))
+        print(
+            json.dumps(
+                event,
+                ensure_ascii=False,
+                indent=2,
+                default=_event_json_default,
+            )
+        )
+
         event_type = str(event["type"])
         event_counts[event_type] = event_counts.get(event_type, 0) + 1
         data = event["data"]

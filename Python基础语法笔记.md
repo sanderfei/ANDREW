@@ -10,7 +10,7 @@
 
 | 想复习的问题 | 对应章节 |
 | --- | --- |
-| `Iterable`、`Sequence`、`tuple`、`object`、`Literal`、函数参数类型标注 | 第 1、3 节 |
+| `Iterable`、`Sequence`、`tuple`、`object`、`Literal`、`TypedDict`、函数参数类型标注 | 第 1、3 节 |
 | `zip()`、`enumerate()`、变量拆包 | 第 2、8 节 |
 | 列表、字典、元组、`set`、`frozenset`、嵌套列表、索引、切片、`range()` 分批 | 第 4、5 节 |
 | `dict.get()`、`setdefault()`、`pop()`、`items()`、`sorted()` | 第 4 节 |
@@ -524,7 +524,43 @@ metric = ["completed_revenue"]
 又把 `Literal` 转换成运行时 `enum` 校验，所以 Tool 输入非法字符串或列表时会直接
 产生 `ValidationError`。
 
-### 3.6 类型标注不会自动创建对象
+### 3.6 `TypedDict` 联合与判别字段
+
+多个运行时都是普通 `dict` 的事件，可以用不同 `TypedDict` 描述，并用一个固定值字段
+区分结构：
+
+```python
+from typing import Any, Literal, TypedDict
+
+
+class ValuesEvent(TypedDict):
+    type: Literal["values"]
+    data: dict[str, Any]
+
+
+class CustomEvent(TypedDict):
+    type: Literal["custom"]
+    data: Any
+
+
+Event = ValuesEvent | CustomEvent
+```
+
+`Event` 是联合类型，`type` 是判别字段：
+
+```python
+def consume(event: Event) -> None:
+    if event["type"] == "values":
+        state = event["data"]
+    elif event["type"] == "custom":
+        payload = event["data"]
+```
+
+类型检查器可以根据 `event["type"]` 的值缩小 `event` 和 `data` 的类型。运行时的
+`event` 仍是普通字典，`TypedDict` 不会创建一种新的字典对象，也不会自动执行运行时
+校验。这种写法常称为“带判别字段的联合类型”。
+
+### 3.7 类型标注不会自动创建对象
 
 ```python
 items: list[str]
@@ -2430,6 +2466,36 @@ formatter_class(...) 调用类
 ```
 
 入参是“类对象”，返回值是“这个类创建的实例”，不是同一个对象。
+
+函数也可以返回另一个可调用对象，先保存，再像普通函数一样调用：
+
+```python
+def get_writer():
+    return print
+
+
+writer = get_writer()       # 第一次调用：取得可调用对象
+writer({"stage": "draft"})  # 第二次调用：调用 writer，并传入一个 dict
+```
+
+因此下面两行不是重复调用同一个函数：
+
+```python
+writer = get_stream_writer()
+writer({"stage": "draft", "detail": "正在生成草稿"})
+```
+
+第一行调用 `get_stream_writer()` 并把返回的可调用对象保存到变量 `writer`；第二行才是
+调用这个 `writer`。如果用类型标注表达，它近似于：
+
+```python
+from typing import Any, Callable
+
+
+writer: Callable[[Any], None]
+```
+
+即接收一个任意对象作为参数，执行发送等操作，不靠返回值传递结果。
 
 ### 7.8 `lambda` 是匿名函数
 

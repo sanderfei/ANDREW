@@ -43,6 +43,7 @@ def prepare_report(state: ApprovalState) -> ApprovalState:
 
 
 # 恢复时不是简单地从 interrupt() 下一行继续，而是从 human_review() 开头重新执行。
+# 恢复时会从发生中断的 Node 开头重新执行
 # 所以：interrupt() 前面尽量不要放非幂等的外部副作用。
 def human_review(state: ApprovalState) -> ApprovalState:
     # interrupt() 会暂停图；传入的字典是发给图外审核者的信息。

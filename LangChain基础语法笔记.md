@@ -2947,7 +2947,33 @@ workflow.add_conditional_edges(
 - `add_conditional_edges(...)`：先调用路由函数，再把返回值映射到不同节点。
 - `START` 和 `END` 是图的入口、出口，不是普通业务 Node。
 
-### 19.3 `MessagesState` 与消息累加
+`StateGraph.add_edge()` 的核心签名是：
+
+```python
+add_edge(start_key: str | list[str], end_key: str)
+```
+
+通常可以直接理解为“添加一条从起点 Node 到终点 Node 的有向边”。两个参数填写的
+是 `add_node()` 注册的节点名称，不是节点函数对象。`start_key` 也可以是节点名称列表；
+此时会等待列表中的所有起点 Node 都完成，再执行 `end_key` 指向的终点 Node。
+
+### 19.3 `graph.invoke()` 与 Input Schema
+
+普通首次执行图时，`graph.invoke(...)` 的入参应符合图的 Input Schema。没有单独
+指定 `input_schema` 时，它默认就是 `StateGraph(StateType)` 中的 `StateType`：
+
+```python
+workflow = StateGraph(AgenticRAGState)
+graph = workflow.compile()
+result = graph.invoke({"original_question": "什么是 LangGraph？"})
+```
+
+如果 State 使用 `TypedDict` 定义，调用时通常传字段结构符合要求的普通 `dict`，
+不需要创建特殊的 State 实例。若构图时指定了
+`StateGraph(OverallState, input_schema=InputState)`，则 `invoke()` 的初始输入以
+`InputState` 为准；从人工中断恢复时还可以传入 `Command(resume=...)`。
+
+### 19.4 `MessagesState` 与消息累加
 
 ```python
 class AgenticRAGState(MessagesState, total=False):
@@ -2964,7 +2990,7 @@ class AgenticRAGState(MessagesState, total=False):
 
 表示把新消息追加到轨迹，而不是直接覆盖此前的 HumanMessage、AIMessage 和 ToolMessage。
 
-### 19.4 `ToolNode` 执行 Tool Call
+### 19.5 `ToolNode` 执行 Tool Call
 
 ```python
 workflow.add_node(
@@ -2985,7 +3011,7 @@ ToolMessage(content=给模型看的文本, artifact=程序保留的结构化证�
 
 `bind_tools()` 只让模型知道 Tool Schema；`ToolNode` 才执行 Python Tool。
 
-### 19.5 有上限的改写循环
+### 19.6 有上限的改写循环
 
 ```text
 retrieve
@@ -3003,7 +3029,7 @@ assess_evidence
 - `RetryPolicy` 处理同一个 Node 的暂时性执行错误。
 - `max_rewrites` 控制业务层“改写问题后重新检索”的循环次数。
 
-### 19.6 Checkpointer、`thread_id` 与人工确认
+### 19.7 Checkpointer、`thread_id` 与人工确认
 
 ```python
 graph = workflow.compile(checkpointer=InMemorySaver())
@@ -3019,9 +3045,14 @@ final = graph.invoke(
 Node 内的 `interrupt(payload)` 会暂停执行。恢复时必须使用同一个
 `thread_id`，checkpointer 才能找到原来的 checkpoint。
 
+恢复并不是从 `interrupt()` 的下一行恢复 Python 调用栈，而是从发生中断的 Node
+函数开头重新执行；再次运行到同一个 `interrupt()` 时，它返回 `Command.resume` 的
+值并继续向下执行。已成功完成的前序 Node 通常不会重跑，因此 `interrupt()` 前的
+代码要可重复执行，非幂等副作用最好移到审批后的独立 Node。
+
 `InMemorySaver` 只在当前进程有效；进程重启后数据消失。它适合教学和测试，不等于生产持久化。
 
-### 19.7 `used_evidence` 与引用 ID 校验
+### 19.8 `used_evidence` 与引用 ID 校验
 
 目录 5 的生成顺序是：
 
@@ -3079,6 +3110,10 @@ v2 每个流事件都有统一外壳：
 | `ns` | 当前图或子图的命名空间 |
 | `data` | 该模式的实际数据 |
 
+运行时的 `part` 是普通 `dict`；类型层面则是由多个 `TypedDict` 组成的 `StreamPart`
+联合类型。`part["type"]` 是判别字段：`"values"` 对应完整 State，`"updates"`
+对应按 Node 名组织的局部更新，`"custom"` 对应 Writer 发送的原始 payload。
+
 Node 可以发送不写入 State 的进度事件：
 
 ```python
@@ -3091,8 +3126,17 @@ def retrieve(state):
     return {"documents": [...]}
 ```
 
+`get_stream_writer()` 返回当前运行上下文中的可调用 `StreamWriter`；调用
+`writer(payload)` 会立即产生一条 custom stream 数据。payload 中的 key 和 value
+完全由开发者定义，框架不会自动理解 `stage` 的业务含义。外层没有订阅
+`stream_mode="custom"` 时，Writer 相当于 no-op。
+
 `custom` 事件用于 UI 进度；它不会自动成为可恢复的业务 State。需要恢复的
 数据仍应由 Node 返回并交给 checkpointer。
+
+以线性图 `START -> A -> B -> C -> END` 为例，一次正常执行经过 4 条 Edge、执行
+3 个业务 Node。`START`/`END` 不计入业务 Node；Edge 在 `values`、`updates`、
+`custom` 模式下也不会各自产生独立事件。
 
 ### 19.10 RetryPolicy 与 `error_handler`
 

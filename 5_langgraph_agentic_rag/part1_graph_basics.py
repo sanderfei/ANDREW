@@ -34,7 +34,7 @@ OFFICIAL_SOURCE = (
 # Graph 负责执行业务规则和权限边界
 # 如果把业务执行都注册为tool模型就会拥有较大的流程控制权。
 
-
+# state：图的输入 Schema
 # TypedDict：给类型检查器和编辑器看，描述字典应该有哪些字段。
 # total=False 表示类型层面允许只提供部分字段：
 class LearningState(TypedDict, total=False):
