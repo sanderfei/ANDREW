@@ -1390,6 +1390,35 @@ CompiledStateGraph  可执行对象，可以 invoke/stream
 `checkpointer=None` 时，每次 `invoke()` 是独立状态；传入 Checkpointer 后，图才可以
 根据 thread 配置保存和恢复检查点。
 
+Checkpointer 是 LangGraph 的 State 快照存储器，可以类比为游戏存档：
+
+```text
+checkpointer  存档后端
+thread_id     存档槽编号
+checkpoint    某个执行阶段的 State 快照和下一步位置
+```
+
+`compile(checkpointer=...)` 只是把存储器绑定给可执行图，此时不会执行 Node。
+运行时还要用 `thread_id` 识别对应会话：
+
+```python
+from langgraph.checkpoint.memory import InMemorySaver
+
+graph = workflow.compile(checkpointer=InMemorySaver())
+config = {"configurable": {"thread_id": "approval-001"}}
+
+paused = graph.invoke(initial_input, config=config)
+final_state = graph.invoke(Command(resume=decision), config=config)
+```
+
+两次 `invoke()` 使用同一个 `thread_id`，第二次才能找回第一次的暂停状态并
+继续执行。`InMemorySaver` 只在当前 Python 进程内有效；`SqliteSaver` 等持久化
+实现可以在进程重启后根据同一 `thread_id` 恢复。
+
+Checkpointer 保存的是 Graph State 和执行位置，不会保存 LLM 模型参数、Chroma
+向量库或 Retriever 本身。它也不是 `RetryPolicy`：前者负责状态持久化与恢复，
+后者负责 Node 异常后是否重试。
+
 ### 16.10 Router SystemMessage 是每次模型请求的临时输入
 
 ```python
@@ -1421,3 +1450,912 @@ State 合并响应后：[HumanMessage(原问题), AIMessage(响应)]
 
 只有节点返回的 `{"messages": [response]}` 会通过 `add_messages` 合并进 State。
 如果首次路由已经走闲聊 `direct -> END`，同一次 Graph 执行不会再次进入该节点。
+
+## 17. Part 3：Checkpointer、`interrupt()` 与人工恢复
+
+文件：`5_langgraph_agentic_rag/part3_persistence_hitl.py`
+
+Part 2 的重点是让 Graph 根据 Tool Call、证据评分等结果自动选择下一条边。Part 3
+不再调用 LLM、Retriever 或 Tool，而是专门演示一条工作流如何暂停，等待图外的人作出
+决定，然后从检查点继续执行。
+
+```text
+Part 2：一次 invoke 内自动路由，通常一直执行到 END
+Part 3：第一次 invoke 执行到 interrupt 后暂停
+        人工给出决定
+        第二次 invoke 使用 Command(resume=...) 恢复到 END
+```
+
+### 17.1 图结构本身仍然是固定边
+
+```text
+第一次 invoke：START -> prepare_report -> human_review -> interrupt -> PAUSED
+
+图外人工决定
+      ↓
+第二次 invoke：Command(resume=...) --相同 thread_id--> human_review 重新执行
+                                                         ↓
+                                                     finish -> END
+```
+
+注册代码中的边仍然是：
+
+```python
+START -> prepare_report -> human_review -> finish -> END
+```
+
+`interrupt()` 不会改变静态拓扑。它改变的是本次运行的生命周期：图虽然存在
+`human_review -> finish` 这条边，但第一次运行在 `human_review` 内暂停，所以此时还
+没有执行 `finish`。
+
+### 17.2 第一次 `invoke()` 的真实状态变化
+
+初始输入：
+
+```python
+{"request": "导出华东区已完成订单汇总"}
+```
+
+`prepare_report` 只返回一个部分更新：
+
+```python
+{
+    "report_preview": (
+        "准备执行：导出华东区已完成订单汇总。"
+        "这是教学预览，不包含真实客户数据。"
+    )
+}
+```
+
+`ApprovalState` 的这些字段没有配置 Reducer，所以普通字段采用覆盖更新；本次更新没有
+返回 `request`，原来的 `request` 仍然保留。进入 `human_review` 时，State 近似为：
+
+```python
+{
+    "request": "导出华东区已完成订单汇总",
+    "report_preview": (
+        "准备执行：导出华东区已完成订单汇总。"
+        "这是教学预览，不包含真实客户数据。"
+    ),
+}
+```
+
+第一次执行下面这行时，还没有恢复值：
+
+```python
+decision = interrupt(
+    {
+        "action": "export_business_report",
+        "preview": state["report_preview"],
+        "allowed_decisions": ["approve", "reject"],
+    }
+)
+```
+
+因此 `interrupt()` 暂停 Graph，把传入的字典作为“需要图外处理的信息”返回。第一次
+`graph.invoke(...)` 的实际结果近似为：
+
+```python
+{
+    "request": "导出华东区已完成订单汇总",
+    "report_preview": (
+        "准备执行：导出华东区已完成订单汇总。"
+        "这是教学预览，不包含真实客户数据。"
+    ),
+    "__interrupt__": [
+        Interrupt(
+            value={
+                "action": "export_business_report",
+                "preview": (
+                    "准备执行：导出华东区已完成订单汇总。"
+                    "这是教学预览，不包含真实客户数据。"
+                ),
+                "allowed_decisions": ["approve", "reject"],
+            },
+            id="框架生成的中断 ID",
+        )
+    ],
+}
+```
+
+`__interrupt__` 是 LangGraph 在本次 `invoke()` 结果中附加的运行信息，不是
+`ApprovalState` 自己声明的业务字段。代码使用下面这行读取它：
+
+```python
+interruptions = paused.get("__interrupt__", [])
+```
+
+这不是“捕获中断”的特殊语法，而是普通 Python `dict.get(key, default)`：
+
+```text
+paused 中存在 "__interrupt__" → 返回对应的 Interrupt 列表
+paused 中不存在该键            → 返回默认值 []
+```
+
+它不会触发暂停，也不会恢复工作流，只是在第一次 `invoke()` 返回以后读取并检查中断
+结果。可以把这一步称为“读取中断信息”“检查中断结果”或“检查待恢复的 Interrupt”。
+
+完整职责链是：
+
+```text
+节点调用 interrupt(...)
+  → LangGraph 内部发出 GraphInterrupt 控制信号
+  → LangGraph 运行时处理该信号、保存检查点并停止本轮执行
+  → graph.invoke() 返回带有 "__interrupt__" 的结果
+  → paused.get("__interrupt__", []) 读取中断信息
+```
+
+真正的 Python 异常捕获语法是 `try/except`；这里的业务代码没有自己捕获
+`GraphInterrupt`。`__interrupt__` 是 LangGraph 使用的双下划线框架保留键，也不是
+Python 魔术方法。后面的：
+
+```python
+if not interruptions:
+    raise AssertionError("图应当在 human_review 节点暂停。")
+```
+
+属于结果校验：这个演示预期一定暂停，如果没有任何中断信息，就说明实际执行结果不符合
+预期。
+
+此时检查点中的下一待执行节点仍是：
+
+```python
+("human_review",)
+```
+
+### 17.3 `Command(resume=...)` 把值送回暂停点
+
+恢复调用：
+
+```python
+final_state = graph.invoke(
+    Command(
+        resume={
+            "decision": "approve",
+            "note": "目录 5 自动化演示中的人工决定。",
+        }
+    ),
+    config=config,
+)
+```
+
+这里不是向 State 直接写入一个普通字典。`Command(resume=值)` 表示：找到这个 thread
+中尚未完成的中断，并把 `值` 作为对应 `interrupt()` 调用的结果。
+
+这里有两个不同作用域的变量都叫 `decision`，但类型不同：
+
+```python
+# run_approval_demo() 的参数
+decision: Literal["approve", "reject"] = "approve"
+# 运行时类型是 str
+
+# 传给第二次 graph.invoke() 的对象
+command = Command(
+    resume={
+        "decision": decision,
+        "note": "目录 5 自动化演示中的人工决定。",
+    }
+)
+# command 的运行时类型是 Command
+# command.resume 的运行时类型是 dict
+
+# human_review() 恢复执行后
+decision = interrupt(...)
+# 这里的 decision 等于 command.resume，运行时类型是 dict
+```
+
+完整类型对应关系：
+
+```text
+run_approval_demo 的 decision 参数   str，例如 "approve"
+Command(...)                         Command 对象
+Command.resume                      dict[str, str]
+human_review 的 decision 局部变量    dict[str, str]
+decision.get("decision")            str，例如 "approve"
+```
+
+因此 `interrupt()` 返回的不是整个 `Command` 对象。第二次 `invoke()` 先接收
+`Command`，LangGraph 再从中取出 `resume` 值，最后让 `interrupt()` 返回这个值。
+
+恢复时，LangGraph 会从 `human_review` 节点开头重新执行。第二次运行到同一个
+`interrupt()` 时，它不再暂停，而是返回 `resume` 中的字典：
+
+```python
+decision == {
+    "decision": "approve",
+    "note": "目录 5 自动化演示中的人工决定。",
+}
+```
+
+随后：
+
+```python
+selected = "approve"
+selected == "approve"  # True
+```
+
+`human_review` 返回：
+
+```python
+{
+    "approved": True,
+    "reviewer_note": "目录 5 自动化演示中的人工决定。",
+}
+```
+
+`finish` 读取更新后的 State，最终再写入：
+
+```python
+{"final_message": "人工已批准；教学报告可以继续生成。"}
+```
+
+如果恢复值中的 `decision` 是 `"reject"`，则 `approved` 为 `False`，最终消息为
+`"人工已拒绝；没有执行报告导出。"`。
+
+### 17.4 为什么恢复时必须使用相同的 `thread_id`
+
+```python
+graph = build_approval_graph()
+config = {"configurable": {"thread_id": "approval-001"}}
+
+paused = graph.invoke(initial_input, config=config)
+final_state = graph.invoke(Command(resume=decision), config=config)
+```
+
+三者的分工是：
+
+```text
+InMemorySaver  真正保存检查点的存储器
+thread_id      在存储器中区分工作流实例的键
+Command        告诉 Graph 本次调用是恢复，以及提供什么恢复值
+```
+
+`thread_id` 本身不保存 State。第二次调用必须能访问第一次写入的同一个 Checkpointer
+存储，并使用相同 `thread_id`，才能找到检查点。当前代码在
+`build_approval_graph()` 内部新建 `InMemorySaver`，所以它通过连续使用同一个已编译
+`graph` 来保证两次调用共享同一个 Saver。真实项目如果把数据库 Checkpointer 作为
+共享依赖传入，即使进程重启并重新构造 Graph，也可以从同一存储恢复。
+
+当前 `run_approval_demo()` 在一次 Python 进程中连续完成两次调用，因此
+`InMemorySaver` 足够。进程退出后，内存检查点就不存在了；真实的跨进程、跨重启人工
+审批需要数据库类 Checkpointer。
+
+### 17.5 节点重新执行带来的副作用风险
+
+恢复不是从这一行后面机械地继续：
+
+```python
+decision = interrupt(...)
+```
+
+而是从 `human_review` 函数开头重新执行，再让同一位置的 `interrupt()` 返回恢复值。
+所以 `interrupt()` 之前的代码可能执行两次：第一次暂停前一次，恢复后又一次。
+
+```python
+def human_review(state):
+    send_email()       # 不适合放这里：恢复时可能再次发送
+    decision = interrupt(...)
+```
+
+本例在 `interrupt()` 之前仅构造审核载荷，没有发送消息、导出报告或写外部系统，因此
+不会产生重复副作用。真正的外部操作应当放在审批完成后的单独节点中，并根据业务需要
+设计幂等保护。
+
+### 17.6 人工输入仍然必须由程序校验
+
+`resume` 值来自 Graph 外部，不能因为它叫“人工决定”就直接信任：
+
+```python
+if not isinstance(decision, dict):
+    raise ValueError(...)
+
+selected = decision.get("decision")
+if selected not in {"approve", "reject"}:
+    raise ValueError(...)
+```
+
+`Literal["approve", "reject"]` 主要帮助编辑器和静态类型检查器，不会自动验证运行时
+传入的数据。真正的运行时边界是上述 `isinstance` 和集合成员判断。
+
+### 17.7 用普通 Python 理解这两次调用
+
+概念上可以把 Part 3 理解为一个可持久化的状态机：
+
+```python
+saved = {
+    "state": {
+        "request": "导出华东区已完成订单汇总",
+        "report_preview": "准备执行：...",
+    },
+    "next": "human_review",
+    "waiting_for": "decision",
+}
+
+# 图外的人稍后给出决定
+resume_value = {"decision": "approve", "note": "同意"}
+
+# 根据 thread_id 找回 saved，再继续 human_review 和 finish
+saved["state"].update(
+    {
+        "approved": resume_value["decision"] == "approve",
+        "reviewer_note": resume_value["note"],
+    }
+)
+saved["state"]["final_message"] = "人工已批准；教学报告可以继续生成。"
+```
+
+LangGraph 比这段普通 Python 多做的关键工作，是自动保存 State 和执行位置、把
+`interrupt` 暴露给调用者，以及根据 `thread_id` 和 `Command(resume=...)` 恢复执行。
+
+## 18. 构建 State 时怎样选择 `TypedDict` 与 `MessagesState`
+
+严格来说，这两个类型不是完全对立的选项，因为 LangGraph 中的 `MessagesState`
+本身就是一个预先定义好的 `TypedDict`：
+
+```python
+class MessagesState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+```
+
+它只替开发者预先完成两件事：
+
+1. 声明标准的 `messages` 字段。
+2. 给这个字段绑定 `add_messages` Reducer。
+
+因此真正的选择是：当前 Graph 是否要把标准对话消息历史作为 State 的一部分。
+
+### 18.1 不需要消息历史：使用普通 `TypedDict`
+
+如果节点只传递业务数据，不需要保存 `HumanMessage`、`AIMessage`、`ToolMessage` 的
+执行历史，就直接声明普通 `TypedDict`：
+
+```python
+class ApprovalState(TypedDict, total=False):
+    request: str
+    report_preview: str
+    approved: bool
+    reviewer_note: str
+    final_message: str
+
+workflow = StateGraph(ApprovalState)
+```
+
+Part 3 属于这种情况。它保存的是报告请求、审批结果和最终提示，不需要模型读取历史
+消息，也没有 `ToolNode` 从 `AIMessage.tool_calls` 中找工具调用。
+
+普通字段没有单独配置 Reducer 时，节点返回同名字段会覆盖原值：
+
+```python
+# 原 State
+{"approved": False, "reviewer_note": ""}
+
+# 节点部分更新
+{"approved": True}
+
+# 合并后
+{"approved": True, "reviewer_note": ""}
+```
+
+即使工作流调用了 LLM，也不代表必须使用 `MessagesState`。例如只把
+`state["question"]` 临时传给模型，再把最终字符串写入 `state["answer"]`，且后续节点
+不需要对话历史时，普通 `TypedDict` 仍然足够。
+
+### 18.2 需要标准消息历史：使用 `MessagesState`
+
+当 Graph 需要持续保存下面这些对象时，适合使用 `MessagesState`：
+
+```text
+HumanMessage  用户消息
+AIMessage     模型回复或 Tool Call
+ToolMessage   Tool 执行结果
+```
+
+最小聊天 State 可以直接使用：
+
+```python
+workflow = StateGraph(MessagesState)
+```
+
+节点可以只返回本轮新增消息：
+
+```python
+return {"messages": [AIMessage(content="你好")]}
+```
+
+`add_messages` 会把它合并进原有消息历史。它不只是简单的列表相加：通常新 ID 会追加，
+相同消息 ID 可以更新原消息，还支持 LangGraph 的消息删除语义。
+
+典型适用场景包括：
+
+```text
+多轮聊天
+模型根据历史消息继续回答
+AIMessage 发出 Tool Call，ToolNode 随后读取它
+ToolMessage 写回工具结果，再让模型继续推理
+```
+
+### 18.3 既需要消息，又需要业务字段：继承 `MessagesState`
+
+Part 2 不仅需要消息链，还需要检索次数、当前查询、证据和引用等业务字段，因此采用：
+
+```python
+class AgenticRAGState(MessagesState, total=False):
+    original_question: str
+    active_query: str
+    answer: str
+    retrieval_attempts: int
+    used_evidence: list[dict[str, Any]]
+    citations: list[dict[str, Any]]
+```
+
+最终 State 同时拥有：
+
+```python
+{
+    "messages": [
+        HumanMessage(...),
+        AIMessage(tool_calls=[...]),
+        ToolMessage(...),
+    ],
+    "original_question": "...",
+    "active_query": "...",
+    "retrieval_attempts": 1,
+    "used_evidence": [...],
+    "citations": [...],
+}
+```
+
+其中只有 `messages` 使用继承来的 `add_messages` Reducer；其他没有单独声明 Reducer 的
+字段仍按普通覆盖规则更新。
+
+### 18.4 需要自定义消息字段时：显式声明 Reducer
+
+`MessagesState` 是便捷写法，近似等价于：
+
+```python
+from typing import Annotated, TypedDict
+
+from langchain_core.messages import AnyMessage
+from langgraph.graph.message import add_messages
+
+
+class CustomState(TypedDict, total=False):
+    messages: Annotated[list[AnyMessage], add_messages]
+    answer: str
+```
+
+需要更明确的字段结构或自定义 Reducer 时，可以使用这种完整写法，而不继承
+`MessagesState`。
+
+不要只写下面这样并期待框架自动追加：
+
+```python
+class WrongForHistory(TypedDict):
+    messages: list[AnyMessage]
+```
+
+这里没有 `add_messages` Reducer。节点返回：
+
+```python
+{"messages": [new_message]}
+```
+
+会把整个旧 `messages` 值覆盖掉，而不是自动追加历史。
+
+### 18.5 当前项目的选择结论
+
+```text
+Part 1 LearningState    普通 TypedDict
+原因                    简单业务路由，不需要消息链
+
+Part 2 AgenticRAGState  继承 MessagesState
+原因                    模型、Tool Call、ToolMessage 依赖消息链，且还有 RAG 业务字段
+
+Part 3 ApprovalState    普通 TypedDict
+原因                    只保存审批业务状态，不需要模型消息历史
+```
+
+可以用下面的判断顺序：
+
+```text
+后续节点是否需要 HumanMessage/AIMessage/ToolMessage 历史？
+├─ 否 → 普通 TypedDict
+└─ 是
+   ├─ 只有 messages → 直接 StateGraph(MessagesState)
+   ├─ messages + 业务字段 → 继承 MessagesState
+   └─ 需要自定义字段或 Reducer → TypedDict + Annotated[..., reducer]
+```
+
+`MessagesState` 也不是 Checkpointer。前者定义 State 中消息字段的结构和合并方式；后者
+负责把整份 State 和执行位置保存到存储中。普通 `TypedDict` 和 `MessagesState` 都可以
+配合 Checkpointer 使用。
+
+## 19. Part 5：State Reducer、v2 Streaming 与图可视化
+
+文件：`5_langgraph_agentic_rag/part5_state_reducers_streaming.py`
+
+Part 5 不调用 LLM、Tool 或网络，使用一条完全确定性的线性 Graph，专门观察两个问题：
+
+```text
+Node 返回局部更新后，State 的每个字段怎样合并？
+Graph 执行过程中，调用者怎样实时看到这些变化？
+```
+
+相对前面几课的新内容是：
+
+```text
+Part 1  手动读取旧 steps，再创建包含旧值和新值的新列表
+Part 2  通过 MessagesState 间接使用 add_messages
+Part 3  用 Checkpointer 保存暂停状态，跨两次 invoke 恢复
+Part 5  显式声明不同 Reducer，并用 stream 实时观察单次执行中的状态变化
+```
+
+### 19.1 `Annotated` 把字段类型和 Reducer 绑定
+
+```python
+class StreamingState(TypedDict, total=False):
+    topic: str
+    steps: Annotated[list[str], operator.add]
+    messages: Annotated[list[BaseMessage], add_messages]
+    answer: str
+```
+
+`Annotated[T, metadata]` 的基础类型仍然是 `T`。LangGraph 读取其中可调用的
+Reducer 元数据，并为这个 State 字段创建对应的合并通道。Reducer 的基本签名是：
+
+```python
+def reducer(old_value, new_value):
+    return merged_value
+```
+
+当前四个字段的更新方式不同：
+
+| 字段 | Reducer | 合并规则 |
+| --- | --- | --- |
+| `topic` | 无 | 新值覆盖旧值 |
+| `steps` | `operator.add` | `旧 list + 新 list` |
+| `messages` | `add_messages` | 新 ID 追加，相同 ID 替换 |
+| `answer` | 无 | 新值覆盖旧值 |
+
+Reducer 是单个 State 字段的合并函数，不决定 Graph 走哪个 Node，也不等于条件边。
+
+### 19.2 `operator.add` 自动累加步骤
+
+初始输入明确提供：
+
+```python
+{
+    "topic": "LangGraph State",
+    "steps": [],
+    "messages": [],
+}
+```
+
+三个 Node 分别只返回自己新增的一项：
+
+```python
+collect_topic  → {"steps": ["collect_topic"]}
+write_draft    → {"steps": ["write_draft"]}
+polish_answer  → {"steps": ["polish_answer"]}
+```
+
+LangGraph 每次都近似执行：
+
+```python
+state["steps"] = operator.add(
+    state["steps"],
+    node_update["steps"],
+)
+```
+
+具体变化为：
+
+```text
+[]
+  + ["collect_topic"]
+= ["collect_topic"]
+
+["collect_topic"]
+  + ["write_draft"]
+= ["collect_topic", "write_draft"]
+
+["collect_topic", "write_draft"]
+  + ["polish_answer"]
+= ["collect_topic", "write_draft", "polish_answer"]
+```
+
+Part 1 没有 Reducer，所以 Node 必须手动返回：
+
+```python
+{"steps": [*state.get("steps", []), "new_step"]}
+```
+
+Part 5 已由 Reducer 保留旧值，Node 只应返回本次新增部分。如果错误地再次返回完整历史：
+
+```python
+{"steps": [*state["steps"], "write_draft"]}
+```
+
+Reducer 还会把旧 State 与这份“完整历史”相加，导致旧步骤重复。
+
+### 19.3 `add_messages` 不是普通列表相加
+
+`collect_topic` 首先返回：
+
+```python
+HumanMessage(
+    content="LangGraph State",
+    id="question",
+)
+```
+
+消息历史变成：
+
+```text
+[
+  HumanMessage(id="question", content="LangGraph State")
+]
+```
+
+`write_draft` 再返回一个新 ID：
+
+```python
+AIMessage(
+    content="LangGraph State 的草稿答案",
+    id="shared-answer",
+)
+```
+
+新 ID 会追加：
+
+```text
+[
+  HumanMessage(id="question", content="LangGraph State"),
+  AIMessage(id="shared-answer", content="LangGraph State 的草稿答案")
+]
+```
+
+`polish_answer` 返回另一个内容不同、但 ID 相同的 `AIMessage`：
+
+```python
+AIMessage(
+    content=(
+        "LangGraph State：Node 返回部分状态，"
+        "Reducer 决定新旧值如何合并。"
+    ),
+    id="shared-answer",
+)
+```
+
+`add_messages` 根据 ID 找到旧草稿，在原位置替换它，而不是增加第三条消息。最终只有：
+
+```text
+[
+  HumanMessage(id="question", content="LangGraph State"),
+  AIMessage(
+    id="shared-answer",
+    content="LangGraph State：Node 返回部分状态，Reducer 决定新旧值如何合并。",
+  )
+]
+```
+
+所以：
+
+```python
+same_id_message_count == 1
+len(final_state["messages"]) == 2
+```
+
+可以把两个 Reducer 的差异概括为：
+
+```text
+operator.add  不认识元素 ID，只做 list + list
+add_messages  理解 Message ID，新 ID 追加，相同 ID 更新
+```
+
+### 19.4 `graph.stream()` 本身会执行 Graph
+
+```python
+for event in graph.stream(
+    {"topic": topic, "steps": [], "messages": []},
+    stream_mode=["updates", "values", "custom"],
+    version="v2",
+):
+    ...
+```
+
+不需要先调用一次 `invoke()`。`stream()` 一边执行 Node，一边 `yield` 事件；循环结束时
+Graph 已经执行到 `END`。
+
+同时请求多个模式时，v2 事件使用统一外壳：
+
+```python
+{
+    "type": "values" | "updates" | "custom",
+    "ns": (),
+    "data": ...,
+    # 某些事件类型还会包含 interrupts 等字段
+}
+```
+
+当前是根 Graph，所以 `ns == ()`。代码只读取 `type` 和 `data`。
+
+### 19.5 `values`、`updates`、`custom` 的区别
+
+#### `values`：Reducer 合并后的完整 State
+
+`values` 的 `data` 是当前完整 State，而不是本 Node 的局部返回值。本例共有 4 个：
+
+```text
+1. 初始输入 State
+2. collect_topic 合并后的 State
+3. write_draft 合并后的 State
+4. polish_answer 合并后的最终 State
+```
+
+因此：
+
+```python
+event_counts["values"] == 4
+```
+
+`run_demo()` 每次遇到 `values` 都覆盖局部变量：
+
+```python
+final_state = data
+```
+
+循环结束时，它自然保留最后一个完整 State。
+
+#### `updates`：Node 本次返回的局部更新
+
+`updates` 的 `data` 以 Node 名称为 key：
+
+```python
+{
+    "write_draft": {
+        "steps": ["write_draft"],
+        "messages": [AIMessage(id="shared-answer", content="...草稿...")],
+    }
+}
+```
+
+这里的 `steps` 只有本 Node 返回的一项，不是已经累加的完整步骤历史。本例三个 Node
+各产生一个 `updates`：
+
+```python
+event_counts["updates"] == 3
+update_nodes == [
+    "collect_topic",
+    "write_draft",
+    "polish_answer",
+]
+```
+
+下面的代码遍历 `data` 字典时得到的是 Node 名称：
+
+```python
+update_nodes.extend(str(name) for name in data)
+```
+
+#### `custom`：Node 主动发送的临时进度
+
+Node 内部获取当前运行上下文中的 Writer：
+
+```python
+writer = get_stream_writer()
+writer({"stage": "draft", "detail": "正在生成确定性草稿"})
+```
+
+传给 `writer(...)` 的对象会成为 `custom` 事件的 `data`。它不是 Node 的返回值，不会
+通过 Reducer 写入 State，也不会因为发出了进度事件就出现在最终 State 中。
+
+当前只有 `write_draft` 和 `polish_answer` 发送进度，因此：
+
+```python
+event_counts["custom"] == 2
+custom_events == [
+    {"stage": "draft", "detail": "正在生成确定性草稿"},
+    {"stage": "polish", "detail": "正在替换同 ID 的草稿消息"},
+]
+```
+
+典型用途是向 UI 或日志消费者报告“正在检索”“正在生成”“正在校验”，而需要暂停恢复的
+业务事实仍应由 Node 返回并存入 State。
+
+### 19.6 九个事件的真实先后顺序
+
+本例实际得到：
+
+```text
+1  values   初始完整 State
+2  updates  collect_topic 的局部更新
+3  values   collect_topic 合并后的完整 State
+4  custom   draft 进度
+5  updates  write_draft 的局部更新
+6  values   write_draft 合并后的完整 State
+7  custom   polish 进度
+8  updates  polish_answer 的局部更新
+9  values   最终完整 State
+```
+
+为什么 `custom` 出现在相应 `updates` 前面：Node 在函数体内部先调用 `writer(...)`，
+然后才执行 `return {...}`。自定义进度可以在 Node 完成前被调用者观察到。
+
+本例汇总计数为：
+
+```python
+{
+    "values": 4,
+    "updates": 3,
+    "custom": 2,
+}
+```
+
+Streaming 只是观察这一次 Graph 的执行过程，不等于 Checkpointer，也不会自动让状态跨
+进程持久化。
+
+### 19.7 三个 Node 的执行顺序
+
+图结构是固定线性边：
+
+```text
+START -> collect_topic -> write_draft -> polish_answer -> END
+```
+
+#### `collect_topic`
+
+```python
+topic = state["topic"].strip()
+if not topic:
+    raise ValueError("topic 不能为空。")
+```
+
+它负责校验去掉首尾空白后不是空字符串，并创建 HumanMessage。需要注意：当前 Node 没有
+返回 `{"topic": topic}`，所以去掉空白的 `topic` 只用于 HumanMessage；State 中原始
+`topic` 没有被更新。如果输入是 `"  Demo  "`，会出现：
+
+```text
+HumanMessage.content == "Demo"
+final_state["topic"] == "  Demo  "
+最终 answer 仍使用带空格的原始 topic
+```
+
+默认输入没有首尾空白，因此演示结果不受影响；如果要让后续 Node 都使用规范化值，应在
+这个 Node 的部分更新中同时返回 `"topic": topic`。
+
+#### `write_draft`
+
+它先发送 `custom` 进度，再返回本 Node 的步骤和草稿 AIMessage。这里没有调用模型，
+草稿字符串是确定性拼接出来的。
+
+#### `polish_answer`
+
+它先发送润色进度，再返回同 ID 的最终 AIMessage，并第一次写入普通 `answer` 字段。
+`answer` 没有 Reducer，因此以后若另一个 Node 再返回 `answer`，新值会覆盖旧值。
+
+### 19.8 `draw_mermaid()` 只生成图文本
+
+```python
+mermaid = graph.get_graph().draw_mermaid()
+```
+
+调用链含义是：
+
+```text
+CompiledStateGraph
+  → get_graph() 得到可绘制的图结构
+  → draw_mermaid() 生成 Mermaid 源码字符串
+```
+
+它不会调用 Graph Node，也不访问在线绘图服务。结果中包含：
+
+```mermaid
+graph TD
+    __start__ --> collect_topic
+    collect_topic --> write_draft
+    write_draft --> polish_answer
+    polish_answer --> __end__
+```
+
+这里只返回文本供 Markdown、前端或 Mermaid 渲染器使用，并没有生成 PNG 图片。

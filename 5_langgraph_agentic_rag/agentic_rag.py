@@ -600,6 +600,7 @@ def build_agentic_rag_graph(
         }
 
     workflow = StateGraph(AgenticRAGState)
+    # 为绑定了该策略的 Node 设置“最多尝试执行两次”，包括第一次正常执行。
     llm_retry = RetryPolicy(max_attempts=2)
     workflow.add_node(
         "generate_query_or_respond",
@@ -711,6 +712,7 @@ def public_result(state: AgenticRAGState) -> dict[str, Any]:
     }
 
 
+# `from agentic_rag import *` 只会导入 __all__ 中的符号，避免导入内部实现。
 __all__ = [
     "AgenticRAGState",
     "CITATION_VALIDATION_FAILED",

@@ -1,7 +1,8 @@
 """Part 5：State Reducer、消息更新、v2 Streaming 与图可视化。
 
-这几个概念都围绕“状态如何变化、变化如何被观察”，因此放在同一课。
-示例完全确定性，不调用模型和网络。
+Node 只返回局部更新，Reducer 决定这些更新如何合并；Streaming 让调用者实时观察
+Graph 执行过程。本课使用 Annotated 绑定 Reducer，用 operator.add 自动累加列表，
+并通过 get_stream_writer() 发送临时进度。draw_mermaid() 生成 Mermaid 文本。
 
 运行：
     .venv/bin/python 5_langgraph_agentic_rag/part5_state_reducers_streaming.py
@@ -26,10 +27,13 @@ OFFICIAL_SOURCES = [
 
 
 class StreamingState(TypedDict, total=False):
+    # 正常字段：新值覆盖旧值
     topic: str
-    # operator.add 表示每个 Node 返回的新 list 会追加，而不是覆盖旧 list。
+    # 使用 Annotated 给不同 State 字段绑定 Reducer。
+    # operator.add 表示每个 Node 返回的新 list 会追加。
     steps: Annotated[list[str], operator.add]
-    # add_messages 既能追加消息，也能根据 message id 替换已有消息。
+    # add_messages 按消息 ID 合并；没有就新增，相同 ID 就替换。
+    # 两个回答 Node 使用相同 ID，因此最终消息会替换草稿消息。
     messages: Annotated[list[BaseMessage], add_messages]
     answer: str
 
@@ -50,10 +54,7 @@ def write_draft(state: StreamingState) -> StreamingState:
     return {
         "steps": ["write_draft"],
         "messages": [
-            AIMessage(
-                content=f"{state['topic']} 的草稿答案",
-                id="shared-answer",
-            )
+            AIMessage(content=f"{state['topic']} 的草稿答案", id="shared-answer")
         ],
     }
 
@@ -61,9 +62,7 @@ def write_draft(state: StreamingState) -> StreamingState:
 def polish_answer(state: StreamingState) -> StreamingState:
     writer = get_stream_writer()
     writer({"stage": "polish", "detail": "正在替换同 ID 的草稿消息"})
-    final_answer = (
-        f"{state['topic']}：Node 返回部分状态，Reducer 决定新旧值如何合并。"
-    )
+    final_answer = f"{state['topic']}：Node 返回部分状态，Reducer 决定新旧值如何合并。"
     return {
         "steps": ["polish_answer"],
         # 与草稿使用同一个 id，因此 add_messages 会替换草稿，而不是再追加一条。

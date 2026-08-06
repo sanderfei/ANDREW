@@ -479,6 +479,51 @@ from typing import Literal
 
 编辑器和类型检查器可以据此发现拼写错误，但 Python 通常不会因为标注了 `Literal` 就自动做运行时校验。
 
+`Literal` 中列出多个字符串，不表示“字符串列表”，而是表示一个变量只能取其中一个
+单独的字符串值：
+
+```python
+MetricName = Literal[
+    "completed_order_count",
+    "completed_revenue",
+    "average_completed_order_value",
+]
+
+metric: MetricName = "completed_revenue"
+
+type(metric)  # str
+```
+
+这里需要区分“类型别名”和“变量值”：
+
+```text
+MetricName    一个 Literal 类型别名，不是实际业务字符串，也不是 list
+metric        使用该类型标注的变量，运行时值是一个 str
+```
+
+正确的单值和列表写法分别是：
+
+```python
+# 单个值，只能从三个字符串中选择一个
+metric: MetricName = "completed_revenue"
+
+# 多个值，列表中的每个元素都必须是允许的字符串之一
+metrics: list[MetricName] = [
+    "completed_order_count",
+    "completed_revenue",
+]
+```
+
+因此：
+
+```python
+metric = ["completed_revenue"]
+```
+
+不符合 `MetricName`，因为它是 `list[str]`，不是单个 `str`。在 Part 4 中，Pydantic
+又把 `Literal` 转换成运行时 `enum` 校验，所以 Tool 输入非法字符串或列表时会直接
+产生 `ValidationError`。
+
 ### 3.6 类型标注不会自动创建对象
 
 ```python
@@ -499,6 +544,41 @@ def build_model(model_class: type) -> object:
 ```
 
 它们用于阅读、编辑器提示和静态检查，不代表 Python 会自动初始化或转换对象。
+
+返回值类型标注也可以完全省略：
+
+```python
+# 有返回值类型标注
+def build_business_metric_tool(database_path: Path) -> BaseTool:
+    return query_business_metric
+
+
+# 没有返回值类型标注，运行行为不变
+def build_business_metric_tool(database_path: Path):
+    return query_business_metric
+```
+
+两种写法真正返回什么，都只由 `return` 后面的对象决定。Part 4 中
+`query_business_metric` 经过 `@tool` 装饰后，实际是一个 `StructuredTool` 对象；
+`StructuredTool` 是 `BaseTool` 的子类，所以写 `-> BaseTool` 是用父类型声明函数对外
+承诺的接口。
+
+省略 `-> BaseTool` 不会影响 `@tool`、Pydantic 参数校验或 `tool.invoke()`，但会减少：
+
+```text
+阅读代码时的返回类型说明
+编辑器对 .invoke()、.name 等属性的补全
+静态类型检查器对错误返回值的检查
+```
+
+即使标注写错，Python 默认也不会在运行时自动阻止返回：
+
+```python
+def example() -> int:
+    return "实际仍然返回字符串"
+```
+
+这里运行时返回的是 `str`；错误主要由编辑器或 mypy、pyright 等静态检查工具发现。
 
 ### 3.7 多个函数参数要分别读取各自的类型标注
 
@@ -3168,6 +3248,38 @@ item = item_class()
 ```
 
 变量可以指向普通值，也可以指向函数或类。
+
+### 11.6 `__all__` 声明模块的公开导出名称
+
+```python
+__all__ = [
+    "Evidence",
+    "LocalKnowledgeRetriever",
+    "RetrievalBundle",
+    "relevant_quote",
+]
+```
+
+`__all__` 是一个由名称字符串组成的特殊模块级变量，主要控制：
+
+```python
+from local_rag_adapter import *
+```
+
+这条通配符导入语句只会导入 `__all__` 列出的名称。如果没有 `__all__`，
+Python 默认导入模块中所有不以 `_` 开头的全局名称，可能把 `Path`、
+`dataclass` 等仅供模块内部使用的导入也意外暴露出去。
+
+`__all__` 表达的是“推荐的公开 API”，不是访问权限。即使某个名称没有列在
+`__all__` 中，仍然可以显式导入：
+
+```python
+from local_rag_adapter import _preview
+```
+
+所以它不会把 `_preview` 变成真正的私有函数，只是让通配符导入、IDE、
+文档工具和模块使用者更清楚地知道哪些名称是稳定对外接口。普通代码仍建议
+使用显式导入，而不是 `import *`。
 
 ## 12. `Path`、`__file__` 和路径拼接
 

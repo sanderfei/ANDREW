@@ -2501,6 +2501,253 @@ Middleware 给 Agent 增加文件系统、摘要、Skills、任务规划和子 A
 
 “只能执行只读 SQL”由数据库权限和 Tool 内部校验保证，不是 `create_agent()` 自动保证。
 
+#### 13.3.1 Part 4：白名单业务指标 Tool
+
+[part4_readonly_sql_tools.py](5_langgraph_agentic_rag/part4_readonly_sql_tools.py)
+没有创建 `StateGraph`、Node、Edge 或 `ToolNode`，也没有调用 LLM。它先单独构造并验证
+一个受控的 LangChain Tool，供后续多 Tool Graph 使用。
+
+执行关系是：
+
+```text
+run_demo
+  → 初始化固定教学 SQLite 数据
+  → build_business_metric_tool(database_path)
+  → 得到 StructuredTool
+  → metric_tool.invoke({metric, region})
+  → Pydantic 校验参数
+  → 程序从白名单选择固定 SELECT
+  → 只读 SQLite 连接执行
+  → Tool 返回 JSON 字符串
+```
+
+##### Tool Schema 是能力入口白名单
+
+```python
+MetricName = Literal[
+    "completed_order_count",
+    "completed_revenue",
+    "average_completed_order_value",
+]
+RegionName = Literal["all", "华东", "华南", "华北"]
+
+
+class BusinessMetricInput(BaseModel):
+    metric: MetricName = Field(description="允许查询的业务指标名称。")
+    region: RegionName = Field(default="all", description="区域过滤。")
+```
+
+对应 Tool JSON Schema 的关键内容近似为：
+
+```python
+{
+    "metric": {
+        "enum": [
+            "completed_order_count",
+            "completed_revenue",
+            "average_completed_order_value",
+        ]
+    },
+    "region": {
+        "default": "all",
+        "enum": ["all", "华东", "华南", "华北"],
+    },
+}
+```
+
+普通 Python 函数上的 `Literal` 主要是静态类型提示；这里因为把
+`BusinessMetricInput` 传给了 `@tool(args_schema=...)`，`tool.invoke()` 会先调用
+Pydantic 做运行时校验。因此下面两种输入都会在进入 SQL 函数体前抛出
+`ValidationError`：
+
+```python
+{"metric": "delete_all_orders", "region": "all"}
+{"metric": "completed_revenue", "region": "华东' OR 1=1 --"}
+```
+
+##### `@tool` 返回的是 `StructuredTool`
+
+```python
+@tool(args_schema=BusinessMetricInput)
+def query_business_metric(metric: MetricName, region: RegionName = "all") -> str:
+    """查询白名单内的订单指标；不能执行任意 SQL。"""
+    ...
+```
+
+装饰完成后的实际对象信息为：
+
+```text
+运行时类型    StructuredTool
+name          query_business_metric
+description   查询白名单内的订单指标；不能执行任意 SQL。
+args_schema   BusinessMetricInput
+```
+
+`build_business_metric_tool(database_path)` 中的 Tool 函数是嵌套函数，它读取外层的
+`database_path`。因此返回的 Tool 已经和一个确定的数据库文件绑定，调用者不需要也不能
+把任意数据库路径作为 Tool 参数传入。
+
+##### SQL 白名单不接收任意 SQL
+
+Tool 对外只接收 `metric` 和 `region`，不接收 `query` 或 `sql`：
+
+```python
+METRIC_SQL = {
+    "completed_order_count": (固定 COUNT SELECT, "orders"),
+    "completed_revenue": (固定 SUM SELECT, "CNY"),
+    "average_completed_order_value": (固定 AVG SELECT, "CNY/order"),
+}
+
+sql, unit = METRIC_SQL[metric]
+```
+
+这意味着调用者只能选择程序已经审查过的业务能力，不能临时生成：
+
+```sql
+DROP TABLE orders;
+SELECT * FROM arbitrary_sensitive_table;
+```
+
+`SUM` 和 `AVG` 使用 `COALESCE(..., 0)`，避免没有匹配行时返回 SQL `NULL`。
+
+区域过滤继续使用参数绑定：
+
+```python
+if region != "all":
+    sql += " AND region = ?"
+    parameters = (region,)
+
+connection.execute(sql, parameters)
+```
+
+`?` 是 SQL 占位符，`region` 作为数据单独传给 SQLite，不会被拼接成 SQL 代码。
+当前 Schema 已经限制区域枚举，参数绑定又形成第二道防线。
+
+##### SQLite 连接在数据库层强制只读
+
+```python
+uri = f"{path.resolve().as_uri()}?mode=ro"
+connection = sqlite3.connect(uri, uri=True)
+connection.execute("PRAGMA query_only = ON")
+```
+
+```text
+mode=ro               以 SQLite 只读 URI 模式打开已有数据库
+uri=True              告诉 sqlite3 按 URI 解释连接字符串
+PRAGMA query_only=ON  在当前连接上再次禁止写语句
+```
+
+实际通过该连接执行 `INSERT` 会得到：
+
+```text
+OperationalError: attempt to write a readonly database
+```
+
+因此 Part 4 的三层主要边界是：
+
+```text
+1. Tool Schema        只允许固定 metric 和 region
+2. SQL 构造           metric 映射固定 SELECT，region 使用参数绑定
+3. 数据库连接         mode=ro + PRAGMA query_only
+```
+
+前两层限制“允许查询什么”，第三层保证即使上层代码以后出现疏漏，这条连接也不能写库。
+
+##### 初始化连接和查询连接要分开
+
+`initialize_demo_database()` 会创建表并写入四条固定教学数据，所以它使用普通可写连接。
+它是受信任的启动初始化函数，不是暴露给模型或调用者的 Tool：
+
+```text
+初始化阶段  可写连接：建表、首次插入固定教学数据、commit
+查询阶段    只读连接：Tool 每次调用只执行白名单 SELECT
+```
+
+“只读 SQL Tool”不表示整个演示程序从未写文件，而是表示对外暴露的查询能力只能通过
+只读连接执行。数据库已有非空 `orders` 表时，初始化函数不会重新写入或重置数据。
+
+##### 两次真实查询的数据流
+
+固定教学数据中，已完成订单金额是：
+
+```text
+华东 120.5
+华北  80.0
+华南 200.0
+合计 400.5
+```
+
+全部区域收入：
+
+```python
+metric_tool.invoke({
+    "metric": "completed_revenue",
+    "region": "all",
+})
+```
+
+内部值近似为：
+
+```python
+sql = "SELECT COALESCE(SUM(amount), 0) FROM orders WHERE status = 'completed'"
+parameters = ()
+row = (400.5,)
+value = 400.5
+```
+
+华东已完成订单数：
+
+```python
+metric_tool.invoke({
+    "metric": "completed_order_count",
+    "region": "华东",
+})
+```
+
+内部值近似为：
+
+```python
+sql = "SELECT COUNT(*) FROM orders WHERE status = 'completed' AND region = ?"
+parameters = ("华东",)
+row = (1,)
+value = 1
+```
+
+Tool 本身返回 `str`：
+
+```python
+'{"metric": "completed_revenue", "region": "all", "value": 400.5, ...}'
+```
+
+`run_demo()` 再通过 `json.loads(...)` 把它转成 `dict`，最后组合 CLI 输出：
+
+```text
+metric_tool.invoke(...)  str
+json.loads(...)           dict
+run_demo(...)             dict[str, object]
+main 打印                  JSON 文本
+```
+
+返回结果同时包含 `unit` 和 `data_source="local_readonly_sqlite"`，便于调用方区分数值单位
+并审计结果是否真的来自受控数据库 Tool。
+
+##### Part 2 与 Part 4 的 Tool 调用方式不同
+
+```text
+Part 2
+模型生成 AIMessage.tool_calls
+  → ToolNode 根据 name/args/id 执行 Retriever Tool
+  → 生成 ToolMessage
+
+Part 4
+Python 代码直接 metric_tool.invoke({metric, region})
+  → StructuredTool 校验并执行
+  → 直接返回字符串
+```
+
+所以 Part 4 当前没有 `AIMessage`、`ToolMessage` 或 Graph State。它先验证 Tool 自身的
+输入合同、SQL 权限和确定性输出；到后续多 Tool Graph 才把这个 Tool 接进路由流程。
+
 ### 13.4 `RunnableGenerator`
 
 [L12_Voice_Agent.py](2_langchain/L12_Voice_Agent.py)：
