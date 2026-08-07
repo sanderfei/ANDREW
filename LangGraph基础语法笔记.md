@@ -2167,6 +2167,20 @@ for event in graph.stream(
 不需要先调用一次 `invoke()`。`stream()` 一边执行 Node，一边 `yield` 事件；循环结束时
 Graph 已经执行到 `END`。
 
+更精确地说，当前环境中 `graph.stream(...)` 返回的是惰性生成器：
+
+```python
+events = graph.stream(...)
+
+type(events)          # <class 'generator'>
+iter(events) is events  # True
+first_event = next(events)
+```
+
+创建 `events` 只得到生成器对象；`for event in events` 或 `next(events)` 开始消费它时，
+Graph 才真正向前执行并逐条产生事件。因此“`stream()` 会执行 Graph”指的是消费这条
+stream，不是只创建生成器但完全不遍历。
+
 同时请求多个模式时，v2 事件使用统一外壳：
 
 ```python
@@ -2359,3 +2373,116 @@ graph TD
 ```
 
 这里只返回文本供 Markdown、前端或 Mermaid 渲染器使用，并没有生成 PNG 图片。
+
+## 20. Part 6：Node 重试、错误处理与补偿
+
+文件：`5_langgraph_agentic_rag/part6_fault_tolerance.py`
+
+Part 6 把三类情况分开处理：
+
+| 情况 | Graph 机制 | 是否重试依赖 Node |
+| --- | --- | --- |
+| 请求不符合业务条件 | 条件边进入 `business_fallback` | 否 |
+| 指定的暂时性异常 | Node 上的 `RetryPolicy` | 是 |
+| Node 最终仍失败 | `error_handler(NodeError)` 返回 `Command` | 重试结束后补偿 |
+
+### 20.1 `RetryPolicy` 只重跑绑定它的 Node
+
+```python
+RetryPolicy(
+    initial_interval=0.01,
+    backoff_factor=1.0,
+    max_interval=0.01,
+    max_attempts=3,
+    jitter=False,
+    retry_on=TransientDependencyError,
+)
+```
+
+`max_attempts=3` 包含第一次调用，因此最多执行三次，不是“第一次加三次重试”。只有
+`retry_on` 匹配的异常才会重试；当前策略只绑定 `call_dependency`，之前已经成功执行的
+`validate_request` 不会跟着重跑。
+
+失败的 Node 调用没有返回 partial update，所以前两次失败不会各自产生一份 State 更新。
+但是 Graph 不会回滚 Node 已经产生的外部副作用；示例中的 `gateway.attempts` 是闭包外对象
+上的可变属性，因此会跨重试持续累加。真实写操作需要幂等键、去重或业务补偿。
+
+### 20.2 `NodeError` 与 `Command(update=..., goto=...)`
+
+重试耗尽后，错误处理器收到：
+
+```python
+NodeError(
+    node="call_dependency",
+    error=TransientDependencyError(...),
+)
+```
+
+其中 `node` 是失败节点名，`error` 是最后捕获的原始异常。处理器返回的 `Command` 同时表达：
+
+```text
+update  把补偿结果合并进 State
+goto    指定接下来执行 finalize
+```
+
+在 v2 `updates` 流中，这份更新的来源名称是
+`__error_handler__call_dependency`，不是普通的 `call_dependency` 成功更新。
+
+如果异常不匹配 `retry_on`，它不会重试；但当前 Node 仍注册了通用 `error_handler`，所以处理器
+会在第一次失败后立即收到该异常。实测 `ValueError` 只调用一次依赖，随后也进入补偿路径。
+
+### 20.3 `destinations` 不控制实际跳转
+
+```python
+workflow.add_node(
+    "call_dependency",
+    call_dependency,
+    retry_policy=retry_policy,
+    error_handler=dependency_error_handler,
+    destinations=("finalize",),
+)
+```
+
+`destinations` 只向图可视化声明该 Node 可能去哪里，不影响实际执行。当前两条真正的执行规则是：
+
+```text
+成功：workflow.add_edge("call_dependency", "finalize")
+失败：Command(goto="finalize")
+```
+
+### 20.4 本例字段没有 Reducer，partial update 采用覆盖
+
+`FaultState` 的字段都没有 `Annotated[..., reducer]`，因此每个 Node 只返回自己要修改的
+字段，同名字段使用新值覆盖。例如空请求路径先写入：
+
+```python
+{"status": "invalid_request"}
+```
+
+随后 `business_fallback` 返回：
+
+```python
+{"status": "business_fallback"}
+```
+
+最终 State 中只保留后一个 `status`。未出现在 partial update 中的字段继续保留原值。
+
+### 20.5 三条确定性路径
+
+```text
+有效请求，前两次失败：
+validate_request → call_dependency x 3 → finalize
+attempt_count=3, status=dependency_succeeded
+
+有效请求，三次都失败：
+validate_request → call_dependency x 3
+→ error_handler → finalize
+attempt_count=3, status=dependency_compensated
+
+空请求：
+validate_request → business_fallback → finalize
+attempt_count=0, status=business_fallback
+```
+
+重试解决的是暂时性技术失败；条件边处理的是可预期的业务结果；错误处理器负责把最终技术
+失败转换成 Graph 可以继续消费的补偿 State。三者不应混成同一种异常控制流。

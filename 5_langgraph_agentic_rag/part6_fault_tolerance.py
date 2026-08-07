@@ -6,6 +6,22 @@
 2. 暂时性依赖错误：RetryPolicy 只重跑失败 Node。
 3. 重试耗尽：error_handler 接收 NodeError，更新状态后转入补偿分支。
 
+它把“业务不满足”“暂时性技术失败”“重试后仍失败”分成三套机制处理，而不是全部依赖异常。
+空请求
+  → 条件边
+  → business_fallback
+  → finalize
+
+有效请求 + 前两次临时失败
+  → call_dependency 最多执行 3 次
+  → 第三次成功
+  → finalize
+
+有效请求 + 三次都失败
+  → error_handler(NodeError)
+  → Command(update=补偿状态, goto="finalize")
+  → finalize
+
 运行：
     .venv/bin/python 5_langgraph_agentic_rag/part6_fault_tolerance.py
 """
@@ -20,10 +36,11 @@ from langgraph.errors import NodeError
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, RetryPolicy
 
-
 OFFICIAL_SOURCE = "https://docs.langchain.com/oss/python/langgraph/fault-tolerance"
 
 
+# ConnectionError 是 Python 内置异常类；这里仅定义新的异常类型，不会抛异常。
+# 真正抛出异常的是 DemoGateway.call() 中的 raise。
 class TransientDependencyError(ConnectionError):
     """允许 RetryPolicy 重试的暂时性错误。"""
 
@@ -38,6 +55,10 @@ class FaultState(TypedDict, total=False):
     final_message: str
 
 
+# DemoGateway.call()
+#   → raise TransientDependencyError
+#   → call_dependency 没有返回 partial update
+#   → LangGraph 捕获异常
 @dataclass
 class DemoGateway:
     """先失败若干次再成功的确定性外部依赖替身。"""
@@ -48,6 +69,9 @@ class DemoGateway:
     def call(self, request: str) -> str:
         self.attempts += 1
         if self.attempts <= self.failures_before_success:
+            # 立即中断 DemoGateway.call() 并向上传导；
+            # 调用方 call_dependency() 也没有 try/except，
+            # 异常继续传给 LangGraph 的 Node 执行器
             raise TransientDependencyError(
                 f"temporary failure on attempt {self.attempts}"
             )
@@ -110,17 +134,27 @@ def build_fault_tolerant_graph(gateway: DemoGateway):
             )
         }
 
+    # max_attempts=3 不是三次重试
+    # = 第一次调用 + 最多两次重试
     retry_policy = RetryPolicy(
+        # 第一次重试前等待 0.01 秒
         initial_interval=0.01,
+        # 等待时间不递增
         backoff_factor=1.0,
+        # 最长等待 0.01 秒
         max_interval=0.01,
+        # 包含第一次调用，最多调用三次
         max_attempts=3,
+        # 不增加随机抖动
         jitter=False,
+        # 只有该异常触发重试
         retry_on=TransientDependencyError,
     )
 
     workflow = StateGraph(FaultState)
     workflow.add_node("validate_request", validate_request)
+    # 注册 RetryPolicy 后，LangGraph 检查 retry_on 是否匹配；
+    # 匹配时重新执行 call_dependency，耗尽后交给 error_handler。
     workflow.add_node(
         "call_dependency",
         call_dependency,

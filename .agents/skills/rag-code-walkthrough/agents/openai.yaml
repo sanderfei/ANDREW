@@ -1,0 +1,4 @@
+interface:
+  display_name: "RAG 代码执行讲解"
+  short_description: "按真实执行顺序讲解 Python、LangChain、LangGraph 与 RAG 代码"
+  default_prompt: "使用 $rag-code-walkthrough 按真实执行顺序讲解指定代码，并展示关键值、类型和普通 Python 等价写法。"

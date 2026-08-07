@@ -2893,6 +2893,56 @@ except ImportError as exc:
 
 排错时既能看到新的异常，也能看到最初的导入错误。
 
+### 9.9 自定义异常继承、`raise` 与父类捕获
+
+```python
+class TransientDependencyError(ConnectionError):
+    """表示暂时性的依赖连接错误。"""
+```
+
+`ConnectionError` 是 Python 内置异常类，继承关系是：
+
+```text
+ConnectionError → OSError → Exception → BaseException → object
+```
+
+上面的 `class` 语句只定义一个新的异常类型，不会立即抛出异常。下面这句也只是创建异常对象：
+
+```python
+error = TransientDependencyError("temporary failure")
+```
+
+真正中断当前正常执行流程的是 `raise`：
+
+```python
+raise TransientDependencyError("temporary failure")
+```
+
+执行到 `raise` 后，当前函数不会继续执行后面的 `return`，异常会沿调用栈向上传递，直到被
+匹配的 `except` 或框架错误处理机制捕获；始终无人处理时，程序打印 traceback 并以失败状态
+结束。
+
+因为子类对象也是父类对象，所以既可以精确捕获自定义类型，也可以通过父类统一捕获：
+
+```python
+try:
+    raise TransientDependencyError("temporary failure")
+except ConnectionError as error:
+    print(type(error).__name__)  # TransientDependencyError
+```
+
+对应关系为：
+
+```python
+issubclass(TransientDependencyError, ConnectionError)  # True
+isinstance(error, TransientDependencyError)             # True
+isinstance(error, ConnectionError)                      # True
+isinstance(error, OSError)                              # True
+```
+
+自定义子类的价值是让调用者既能只处理这一种具体故障，也能在需要时按更宽泛的连接错误统一
+处理。继承关系本身不决定是否重试；重试、记录、转换或继续抛出由调用方的控制逻辑决定。
+
 ## 10. 类、对象、方法、默认工厂和装饰器
 
 ### 10.1 `__init__` 在创建实例时初始化属性

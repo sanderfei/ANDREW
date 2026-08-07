@@ -2,12 +2,12 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-08-06
+> 最后更新：2026-08-07
 
 ## 当前学习主线
 
 - 目录：`5_langgraph_agentic_rag/`
-- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～5 已逐课学习完成：Part 2 已走通受控 Tool Call、`ToolNode`、证据评估、rewrite、引用校验和 `RetryPolicy`；Part 3 已学习 Checkpointer 与 HITL 暂停/恢复；Part 4 已学习只读 SQL Tool；Part 5 已学习 Reducer、v2 Streaming 和 Mermaid。下一步进入 Part 6 的重试边界与失败补偿。
+- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～6 已逐课学习完成：Part 2 已走通受控 Tool Call、`ToolNode`、证据评估、rewrite 与引用校验；Part 3 已学习 Checkpointer 与 HITL 暂停/恢复；Part 4 已学习只读 SQL Tool；Part 5 已学习 Reducer、v2 Streaming 和 Mermaid；Part 6 已学习业务分支、Node 重试、`NodeError`、`error_handler` 与失败补偿。下一步进入 Part 7 的 SQLite Checkpointer、恢复、replay 和 fork。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
@@ -105,10 +105,21 @@
 
 - `Annotated[list[str], operator.add]` 让每个 Node 只返回本次新增步骤，由 Reducer 自动执行旧列表加新列表；已有 Reducer 时不能再手动返回完整历史，否则会重复累加。
 - `Annotated[list[BaseMessage], add_messages]` 对新消息 ID 执行追加、对相同 ID 执行替换；草稿和最终回答共用 `shared-answer`，最终只保留一条 AIMessage。
-- `graph.stream()` 本身会执行 Graph。`version="v2"` 为多种模式提供统一事件外壳；`values` 是合并后的完整 State，`updates` 是 Node 局部更新，`custom` 是 `get_stream_writer()` 发出的临时进度且不写入 State。
+- `graph.stream()` 返回惰性生成器，`for` / `next()` 开始消费时才推进 Graph。`version="v2"` 为多种模式提供统一事件外壳；`values` 是合并后的完整 State，`updates` 是 Node 局部更新，`custom` 是 `get_stream_writer()` 发出的临时进度且不写入 State。
 - 当前确定性执行产生 4 个 `values`、3 个 `updates` 和 2 个 `custom` 事件；`custom` 在对应 Node return 前发出，最后一个 `values` 是最终 State。
 - `graph.get_graph().draw_mermaid()` 只生成 Mermaid 源码文本，不执行 Node，也不访问在线绘图服务。Streaming 用于观察单次执行，不等于 Checkpointer 持久化。
 - `collect_topic` 的 `.strip()` 当前只用于校验和 HumanMessage，没有把规范化 topic 写回 State；默认输入无首尾空格，因此演示不受影响。
+
+## 目录 5 Part 6 已掌握
+
+- `ConnectionError` 是 Python 内置异常类；`TransientDependencyError(ConnectionError)` 只定义更具体的自定义异常类型，真正中断函数的是 `raise TransientDependencyError(...)`。父类 `except ConnectionError` 也能捕获该子类对象。
+- 业务条件不满足应走普通条件边，不应伪装成技术异常。空请求由 `validate_request → business_fallback → finalize` 处理，网关调用次数保持 `0`。
+- `RetryPolicy(max_attempts=3)` 包含第一次调用，表示第一次加最多两次重试；策略只绑定 `call_dependency`，不会重跑已经成功的 `validate_request`。
+- 失败调用没有返回 partial update，因此前两次失败不会分别写入 State；但 `gateway.attempts` 是外部可变状态，仍会跨重试累加。真实写操作需要幂等、去重或业务补偿。
+- 三次仍失败时，`error_handler` 收到包含失败 Node 名和最后原始异常的 `NodeError`，再用 `Command(update=..., goto="finalize")` 同时更新补偿 State 和指定后继节点。
+- `destinations=("finalize",)` 只帮助图可视化，不控制实际跳转；成功路径由普通边控制，失败路径由 `Command.goto` 控制。State 中的 `route` 也只是记录字段，不直接驱动 Graph。
+- `FaultState` 没有字段 Reducer，同名字段采用新值覆盖；`business_fallback` 会把验证阶段的 `status="invalid_request"` 覆盖成 `status="business_fallback"`。
+- 三条确定性路径已实测：前两次失败后第三次成功得到 `dependency_succeeded/3`，三次失败后补偿得到 `dependency_compensated/3`，空请求得到 `business_fallback/0`。不匹配 `retry_on` 的 `ValueError` 不重试，但当前通用 `error_handler` 会在第一次失败后进入补偿。
 
 ## 目录 3 Part 1 已掌握
 
@@ -387,6 +398,9 @@ trap 'unlink -- "$part4_db"' EXIT
 # 目录 5：Part 5 Reducer、v2 Streaming 与 Mermaid
 .venv/bin/python 5_langgraph_agentic_rag/part5_state_reducers_streaming.py
 
+# 目录 5：Part 6 业务分支、Node 重试与失败补偿
+.venv/bin/python 5_langgraph_agentic_rag/part6_fault_tolerance.py
+
 # 目录 5：Part 5～10 高级冒烟
 .venv/bin/python 5_langgraph_agentic_rag/scripts/smoke_advanced.py
 
@@ -404,15 +418,16 @@ git diff --check
 
 2026-08-06 继续学习并验证目录 5 Part 3～5：Part 3 approve/reject 两条恢复路径和手写 `part.py` 草稿均通过；Part 4 临时 SQLite 返回全部已完成收入 `400.5 CNY`、华东已完成订单数 `1`；Part 5 返回 `values=4`、`updates=3`、`custom=2`，同 ID 草稿最终只保留一条消息。目录 5 基础冒烟通过；高级冒烟继续保持 Part 5～10 全部通过、评测 `6/6`、合同检查 `31/31`；目录 3～5 全量编译通过。
 
+2026-08-07 继续学习并验证目录 5 Part 5～6：确认 v2 Streaming 的 9 个事件及 `graph.stream()` 惰性生成器行为；Part 6 三条主路径分别得到 `dependency_succeeded/3`、`dependency_compensated/3` 和 `business_fallback/0`，并额外确认不匹配 `retry_on` 的异常不会重试、但仍可由当前 Node 的通用 `error_handler` 补偿。提交前已运行 Part 6、目录 5 基础/高级冒烟、目录 3～5 全量编译、补丁格式和敏感信息检查。
+
 ## 下一步
 
 继续逐课学习 `5_langgraph_agentic_rag`，不重复目录 3 和目录 4 已掌握的 RAG 基础，也不要因为代码已通过测试就把尚未讲解的章节标记为已学会：
 
-1. Part 1～5 已学习完成，不再重复 State/Edge 基础、Part 2 RAG 主流程、HITL、只读 SQL Tool 和 Reducer/Streaming。
-2. 下一步学习 Part 6：先区分业务不满足与暂时性异常，再逐行分析 `RetryPolicy(retry_on=...)`、最大尝试次数、只重跑失败 Node、`NodeError`、`error_handler` 和 `Command(update + goto)` 补偿分支。
-3. Part 6 完成后学习 Part 7 的 SQLite Checkpointer、跨 Graph 重建恢复、checkpoint 历史、replay 和 fork。
-4. 再学习 Part 8～10 的受控多工具图、同 thread 多轮状态、FastAPI/SSE/恢复接口与确定性合同评测。
-5. 目录 5 学完后再进入独立的 LangSmith tracing/实验记录；多 Agent 不属于当前路线。目录 4 尚未处理的 Docker / CI 一致性留到第 11 周上线工程化阶段。
+1. Part 1～6 已学习完成，不再重复 State/Edge 基础、Part 2 RAG 主流程、HITL、只读 SQL Tool、Reducer/Streaming 和 RetryPolicy/失败补偿。
+2. 下一步学习 Part 7：先理解 SQLite Checkpointer 的持久化边界，再逐行分析同一 `thread_id` 跨 Graph 重建恢复、checkpoint 历史、replay 和 fork。
+3. 再学习 Part 8～10 的受控多工具图、同 thread 多轮状态、FastAPI/SSE/恢复接口与确定性合同评测。
+4. 目录 5 学完后再进入独立的 LangSmith tracing/实验记录；多 Agent 不属于当前路线。目录 4 尚未处理的 Docker / CI 一致性留到第 11 周上线工程化阶段。
 
 ## 新电脑继续学习时的启动提示
 
@@ -423,7 +438,7 @@ git diff --check
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
 不要重复 3_rag_from_scratch 和目录 4 已掌握的内容。
-目录 5 代码已经通过测试，Part 1～5 已逐课学习完成；从“下一步”的 Part 6 RetryPolicy、错误分类与失败补偿继续。
+目录 5 代码已经通过测试，Part 1～6 已逐课学习完成；从“下一步”的 Part 7 SQLite Checkpointer、恢复、replay 与 fork 继续。
 先分析，不要修改代码。
 ```
 
