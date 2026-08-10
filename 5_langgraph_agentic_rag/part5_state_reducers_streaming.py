@@ -19,6 +19,7 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
+
 OFFICIAL_SOURCES = [
     "https://docs.langchain.com/oss/python/langgraph/graph-api",
     "https://docs.langchain.com/oss/python/langgraph/streaming",
@@ -104,22 +105,37 @@ def run_demo(topic: str = "LangGraph State") -> dict[str, Any]:
     custom_events: list[dict[str, Any]] = []
     final_state: StreamingState = {}
 
-    # graph.stream(...) 是 LangGraph 提供的公开流式执行接口，返回一个 generator
-    # Node 执行时，writer() 可以发送 custom，Node return 产生 updates，
-    # Reducer 合并后产生 values，Edge 再决定下一个 Node。
-    # event 在类型标注层面叫 StreamPart，是多种 TypedDict 的联合类型：
-    # event["type"] 决定 event["data"] 的具体结构。
-    # ├─ type：事件种类
-    # ├─ ns：图命名空间；根图通常是 ()
-    # ├─ data：事件实际数据，结构由 type 决定
-    # └─ interrupts：部分事件类型具有的额外字段
-    # values 的 data 是 Reducer 合并后的完整 State；updates 的 data 是
-    # Node 名称到该 Node 局部状态更新的映射；custom 的 data 是传给 writer 的原始字典。
-    # 当前图的事件顺序：
-    # 1. Graph 接收输入，产生 values。
-    # 2. collect_topic 返回 updates，合并后产生 values。
-    # 3. write_draft 依次产生 custom、updates 和合并后的 values。
-    # 4. polish_answer 依次产生 custom、updates 和最终 values。
+# 具体的 graph执行会产生 event 了解就行
+# Node 执行
+#   → writer() 可以发送 custom
+#   → Node return 产生 updates
+#   → Reducer 合并后产生 values
+#   → Edge 决定下一个 Node
+# event: dict在类型标注层面，它叫 StreamPart，是多种 TypedDict 的联合类型。
+# event["type"] 决定 event["data"] 的具体结构。
+# ├─ type：事件种类
+# ├─ ns：图命名空间；根图通常是 ()
+# ├─ data：事件实际数据，结构由 type 决定
+# └─ interrupts：部分事件类型具有的额外字段
+# values 事件 data 是 Reducer 合并后的完整 State
+# updates 事件 data 是 Node 名称 → 该 Node 返回的局部状态更新
+# custom 事件 data 就是之前传给 Writer 的原始字典
+# 如下是当前代码流程的event流程
+# | 顺序 | 执行位置 | Stream Event |
+# | --- | --- | --- |
+# | 1 | Graph 接收初始输入 | `values`：初始 State |
+# | — | `START → collect_topic` | Edge 不产生事件 |
+# | 2 | `collect_topic` 返回 | `updates`：局部更新 |
+# | 3 | 合并 `collect_topic` 更新 | `values`：完整 State |
+# | — | `collect_topic → write_draft` | Edge 不产生事件 |
+# | 4 | `write_draft` 调用 `writer()` | `custom`：draft 进度 |
+# | 5 | `write_draft` 返回 | `updates`：局部更新 |
+# | 6 | 合并 `write_draft` 更新 | `values`：完整 State |
+# | — | `write_draft → polish_answer` | Edge 不产生事件 |
+# | 7 | `polish_answer` 调用 `writer()` | `custom`：polish 进度 |
+# | 8 | `polish_answer` 返回 | `updates`：局部更新 |
+# | 9 | 合并 `polish_answer` 更新 | `values`：最终 State |
+# | — | `polish_answer → END` | Edge 不产生事件 |
     for event in graph.stream(
         {"topic": topic, "steps": [], "messages": []},
         stream_mode=["updates", "values", "custom"],
