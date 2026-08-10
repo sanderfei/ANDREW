@@ -2486,3 +2486,335 @@ attempt_count=0, status=business_fallback
 
 重试解决的是暂时性技术失败；条件边处理的是可预期的业务结果；错误处理器负责把最终技术
 失败转换成 Graph 可以继续消费的补偿 State。三者不应混成同一种异常控制流。
+
+## 21. Part 7：SQLite Checkpointer、历史、replay 与 fork
+
+文件：`5_langgraph_agentic_rag/part7_sqlite_persistence_time_travel.py`
+
+Part 3 已经演示过 `InMemorySaver + thread_id`。Part 7 的新增点是：把 checkpoint
+持久化到 SQLite，并通过旧 checkpoint 的精确配置回放历史或创建分支。本次实测环境为
+`langgraph 1.2.8`、`langgraph-checkpoint-sqlite 3.1.0`。
+
+### 21.1 State、Reducer 与本课的小图
+
+```python
+class CounterState(TypedDict, total=False):
+    amount: int
+    value: int
+    operations: Annotated[list[str], operator.add]
+```
+
+只有 `operations` 绑定了 `operator.add` Reducer：
+
+```text
+amount      无 Reducer，同名新值覆盖旧值
+value       无 Reducer，同名新值覆盖旧值
+operations  有 Reducer，旧列表与新列表相加
+```
+
+图只有一个业务 Node：
+
+```text
+START → apply_increment → END
+```
+
+`apply_increment()` 收到完整 State，但只返回 partial update：
+
+```python
+{
+    "value": old_value + amount,
+    "operations": [f"add {amount}"],
+}
+```
+
+LangGraph 再根据 State Schema 合并：`value` 覆盖，`operations` 追加，未返回的 `amount`
+保留原值。
+
+第一次 `invoke()` 时，输入中的 `operations: []` 可以省略：
+
+```python
+graph.invoke({"amount": 2}, config=config)
+# {"amount": 2, "value": 2, "operations": ["add 2"]}
+```
+
+`CounterState(total=False)` 表示这些键在类型上可以省略。在当前实测的 LangGraph
+版本中，`list[str]` 对应的 `operator.add` Reducer 会以 `list()`，也就是
+`[]` 作为初始值，所以节点返回后的合并等价于：
+
+```python
+[] + ["add 2"]
+# ["add 2"]
+```
+
+显式传入 `"operations": []` 只是让“新的 LangGraph `thread_id` 从空操作历史开始”更直观，不是必需。
+如果该 `thread_id` 已经有历史，传入空列表也不会清空旧值，因为 Reducer 执行的是
+`old_operations + []`。
+
+### 21.2 Builder、Compiled Graph、Checkpointer 和 config 的分工
+
+```python
+workflow = build_counter_workflow()
+
+with SqliteSaver.from_conn_string(str(database_path)) as checkpointer:
+    graph = workflow.compile(checkpointer=checkpointer)
+    graph.invoke(input_state, config=config)
+```
+
+运行时对象的实际类型为：
+
+```text
+workflow      langgraph.graph.state.StateGraph
+checkpointer  langgraph.checkpoint.sqlite.SqliteSaver
+graph         langgraph.graph.state.CompiledStateGraph
+config        dict
+invoke 返回值 dict
+```
+
+四者职责不同：
+
+```text
+StateGraph       保存节点和边的定义，不保存某个 thread 的运行状态
+Compiled Graph   执行图，并通过绑定的 checkpointer 读写 checkpoint
+SqliteSaver      把 checkpoint 和中间 writes 持久化到 SQLite 文件
+config           指定本次操作要访问哪个 thread 或具体 checkpoint
+```
+
+最初传入的配置只有：
+
+```python
+{"configurable": {"thread_id": "part7-inspect"}}
+```
+
+保存 checkpoint 后，快照里的配置会扩展成：
+
+```python
+{
+    "configurable": {
+        "thread_id": "part7-inspect",
+        "checkpoint_ns": "",
+        "checkpoint_id": "...",
+    }
+}
+```
+
+根 Graph 的 `checkpoint_ns` 是空字符串；子图会使用自己的 namespace。
+
+### 21.3 同一 thread 的多轮 State 累积
+
+第一轮输入：
+
+```python
+{"amount": 2, "operations": []}
+```
+
+节点执行后得到：
+
+```python
+{
+    "amount": 2,
+    "value": 2,
+    "operations": ["add 2"],
+}
+```
+
+第二轮仍使用同一个 `thread_id`，只传：
+
+```python
+{"amount": 3}
+```
+
+LangGraph 先读取第一轮保存的 State，再合并本轮输入。节点真正收到：
+
+```python
+{
+    "amount": 3,             # 本轮输入覆盖 2
+    "value": 2,              # 输入没提供，保留旧值
+    "operations": ["add 2"],
+}
+```
+
+节点返回 `value=5` 和 `operations=["add 3"]`，Reducer 合并后为：
+
+```python
+{
+    "amount": 3,
+    "value": 5,
+    "operations": ["add 2", "add 3"],
+}
+```
+
+普通 Python 可以近似理解为：
+
+```python
+state = {"amount": 2, "value": 2, "operations": ["add 2"]}
+state["amount"] = 3
+node_update = {"value": state["value"] + 3, "operations": ["add 3"]}
+state["value"] = node_update["value"]
+state["operations"] = state["operations"] + node_update["operations"]
+```
+
+### 21.4 关闭连接并重建 Graph 后为什么还能恢复
+
+第一段 `with` 结束后，SQLite 连接被关闭，旧的 Compiled Graph 也不再使用。但是数据库
+文件仍存在。第二段生命周期重新创建 `SqliteSaver`、重新编译 Graph，然后执行：
+
+```python
+snapshot = graph.get_state(config)
+```
+
+只提供同一个 `thread_id`、不提供 `checkpoint_id` 时，Saver 读取该 thread 的最新
+checkpoint。本例恢复出的 `value` 仍为 `5`。随后输入 `amount=1`，第三轮得到：
+
+```python
+{
+    "amount": 1,
+    "value": 6,
+    "operations": ["add 2", "add 3", "add 1"],
+}
+```
+
+因此跨重建恢复需要同时满足：
+
+```text
+相同的 SQLite 数据库 + 相同的 thread_id + 兼容的 Graph/State 定义
+```
+
+`thread_id` 只是存储分区键；真正的 State 位于 Checkpointer 中。
+
+### 21.5 `StateSnapshot` 不是普通 State 字典
+
+```python
+snapshot = graph.get_state(config)
+```
+
+返回类型是 `langgraph.types.StateSnapshot`，当前实现是一个 `NamedTuple`。常用字段为：
+
+| 字段 | 含义 |
+| --- | --- |
+| `values` | 该 checkpoint 的完整 State |
+| `next` | 下一步待执行的 Node 名称元组；`()` 表示已经结束 |
+| `config` | 精确定位当前 checkpoint 的配置 |
+| `metadata` | `source`、`step` 等执行元数据 |
+| `created_at` | checkpoint 创建时间 |
+| `parent_config` | 父 checkpoint 的配置，可用于查看分支关系 |
+| `tasks` | 这个 step 中待执行或已经尝试过的任务 |
+
+所以代码使用：
+
+```python
+dict(graph.get_state(config).values)
+```
+
+取出完整 State，并创建一个浅拷贝用于最终结果，而不是把整个 `StateSnapshot` 当 State。
+
+### 21.6 `get_state_history()` 与 checkpoint 顺序
+
+```python
+history = list(graph.get_state_history(config))
+```
+
+当前同步实现返回一个 `generator`，`list(...)` 才真正遍历并得到
+`list[StateSnapshot]`。历史按最新 checkpoint 在前排列。
+
+Checkpoint 保存在 super-step 边界，不是每次 `invoke()` 只保存一条。本例三轮顺序图在
+replay 前实测得到 9 条历史；数量来自输入、调度和节点完成等 step，不能推广成所有 Graph
+每轮固定三条。
+
+代码选择的旧快照满足：
+
+```python
+snapshot.values == {
+    "amount": 3,
+    "value": 2,
+    "operations": ["add 2"],
+}
+snapshot.next == ("apply_increment",)
+```
+
+它表达的时间点是：第二轮输入 `amount=3` 已经写入，但第二轮
+`apply_increment` 还处于下一待执行节点。
+
+### 21.7 replay：从旧位置重新执行，不是读取旧结果
+
+```python
+replayed = graph.invoke(None, config=before_second.config)
+```
+
+这里：
+
+```text
+None                  本次没有新的外部 State 输入
+before_second.config  精确指定旧 thread_id + checkpoint_id
+next                  指示接下来重新执行 apply_increment
+```
+
+节点重新读取旧快照中的 `value=2`、`amount=3`，所以 replay 结果仍为 `5`。这里得到相同
+结果只是因为 Node 是确定性的；真实 LLM、API 或随机 Node 会重新调用，结果可能不同，外部
+副作用也可能再次发生。
+
+本地版本实测 replay 新增两条 checkpoint：一条 `metadata.source="fork"` 的分支起点
+副本，以及一条 Node 重执行完成后的 `loop` checkpoint。原来的历史不会被删除。
+
+### 21.8 fork：`update_state()` 创建新 checkpoint，不修改旧 checkpoint
+
+```python
+fork_config = graph.update_state(
+    before_second.config,
+    {"amount": 10},
+)
+```
+
+`update_state()` 的返回值不是 State，而是新 checkpoint 的 `RunnableConfig` 字典。
+更新后的分支起点为：
+
+```python
+{
+    "amount": 10,
+    "value": 2,
+    "operations": ["add 2"],
+}
+```
+
+旧 checkpoint 仍然保持 `amount=3`。然后：
+
+```python
+forked = graph.invoke(None, config=fork_config)
+```
+
+从新 checkpoint 保存的执行位置继续运行：
+
+```python
+{
+    "amount": 10,
+    "value": 12,
+    "operations": ["add 2", "add 10"],
+}
+```
+
+这里是 `12` 而不是 `16`，因为 fork 的父节点是第二轮执行前的旧快照，当时 `value=2`；
+第三轮主路径上的 `value=6` 不会混入这个分支。
+
+`update_state()` 也遵守 State Reducer。如果更新带有
+`{"operations": ["manual"]}`，`operator.add` 会做追加；本例只更新无 Reducer 的
+`amount`，因此直接覆盖。
+
+### 21.9 三种标识不要混淆
+
+```text
+thread_id      一棵运行历史及其分支共享的线程分区
+checkpoint_id  线程中某一个精确时间点/快照的标识
+checkpoint_ns  区分根图与子图的 checkpoint 空间
+```
+
+只给 `thread_id` 时，通常读取当前最新 checkpoint；同时给出 `checkpoint_id` 时，读取或
+恢复那个精确历史位置。replay 和 fork 必须使用旧快照的完整 `config`，不能只凭 State
+数值猜测位置。
+
+### 21.10 SQLite Checkpointer 的使用边界
+
+当前 `SqliteSaver` 是同步、轻量级实现，适合本地教学和小型项目。异步 Graph 应使用对应
+的异步 Saver；多副本、高并发生产部署应选择支持相应并发模型的数据库 Checkpointer。
+
+Replay 和 fork 都可能重新执行 checkpoint 之后的 Node，因此 Node 中的写数据库、发消息、
+扣款等外部副作用仍需要幂等键、去重或补偿。Checkpoint 保存 Graph State 和执行位置，
+不等于自动回滚外部系统。

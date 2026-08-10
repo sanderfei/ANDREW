@@ -19,7 +19,6 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
-
 OFFICIAL_SOURCES = [
     "https://docs.langchain.com/oss/python/langgraph/graph-api",
     "https://docs.langchain.com/oss/python/langgraph/streaming",
@@ -98,6 +97,7 @@ def run_demo(topic: str = "LangGraph State") -> dict[str, Any]:
     custom_events: list[dict[str, Any]] = []
     final_state: StreamingState = {}
 
+    # graph.stream(...) 是 LangGraph 提供的公开流式执行接口，返回一个 generator
     for event in graph.stream(
         {"topic": topic, "steps": [], "messages": []},
         stream_mode=["updates", "values", "custom"],
@@ -130,6 +130,8 @@ def run_demo(topic: str = "LangGraph State") -> dict[str, Any]:
     }
 
 
+# 启动命令：.venv/bin/python 5_langgraph_agentic_rag/part5_state_reducers_streaming.py
+# 参数枚举：无命令行参数。
 def main() -> int:
     result = run_demo()
     print(

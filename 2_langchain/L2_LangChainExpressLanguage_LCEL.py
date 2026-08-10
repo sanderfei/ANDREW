@@ -321,6 +321,43 @@ async def demo_invoke_batch_stream_async(deps):
     }
 
 
+async def batch_stream_async_demo2(deps):
+    """并发执行 ainvoke、abatch 和 astream，展示 asyncio.gather 的真实并发。"""
+    ChatPromptTemplate = deps["ChatPromptTemplate"]
+    ChatOpenAI = deps["ChatOpenAI"]
+    StrOutputParser = deps["StrOutputParser"]
+
+    prompt = ChatPromptTemplate.from_template("Tell me a short joke about {topic}")
+    model = build_zhipu_chat_model(ChatOpenAI)
+    output_parser = StrOutputParser()
+    chain = prompt | model | output_parser
+
+    async def collect_stream(payload):
+        chunks = []
+        async for chunk in chain.astream(payload):
+            chunks.append(chunk)
+        return "".join(chunks)
+
+    invoke_task = chain.ainvoke({"topic": "bears"})
+    batch_task = chain.abatch([{"topic": "bears"}, {"topic": "frogs"}])
+    stream_task = collect_stream({"topic": "bears"})
+    another_task = chain.ainvoke({"topic": "programming"})
+
+    invoke_result, batch_result, stream_result, another_result = await asyncio.gather(
+        invoke_task,
+        batch_task,
+        stream_task,
+        another_task,
+    )
+
+    return {
+        "ainvoke": invoke_result,
+        "abatch": batch_result,
+        "astream": stream_result,
+        "another_ainvoke": another_result,
+    }
+
+
 def print_result(title, value):
     print(f"\n=== {title} ===")
     print(value)
@@ -345,6 +382,8 @@ async def run_async_demo(title, demo_func, deps):
         print_failure(title, exc)
 
 
+# 启动命令：.venv/bin/python 2_langchain/L2_LangChainExpressLanguage_LCEL.py
+# 参数枚举：无命令行参数；main() 依次运行 8 个 LCEL Demo。
 async def main():
     deps = load_langchain_dependencies()
 
@@ -355,6 +394,11 @@ async def main():
     run_demo("5. multi tool choice", demo_multi_tool_choice, deps)
     run_demo("6. JSON output with fallback", demo_json_output_with_fallback, deps)
     await run_async_demo("7. invoke/batch/stream/ainvoke", demo_invoke_batch_stream_async, deps)
+    await run_async_demo(
+        "8. concurrent ainvoke/abatch/astream",
+        batch_stream_async_demo2,
+        deps,
+    )
 
 
 if __name__ == "__main__":

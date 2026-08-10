@@ -357,8 +357,7 @@ contact = result["structured_response"]
 
 ## 十、L8：Deep Agent、Sandbox、Middleware 与子 Agent
 
-**概念文件：** [L8_Deep_Agent_From_Scratch.py](L8_Deep_Agent_From_Scratch.py)
-**本地可运行 Demo：** [L8.py](L8.py)
+**对应文件：** [L8_Deep_Agent_From_Scratch.py](L8_Deep_Agent_From_Scratch.py)
 
 L8 的核心不是更换模型，而是在普通 Agent 外增加受控环境和能力层。
 
@@ -392,7 +391,7 @@ Agent
 → 最终回答关键销售数据和报告路径
 ~~~
 
-L8.py 使用 safe_sandbox_path() 限制工具只能访问 .local_l8_sandbox，路径安全边界由 Python 工具代码强制，而不是只靠 Prompt。
+L8_Deep_Agent_From_Scratch.py 使用 safe_sandbox_path() 限制工具只能访问 .local_l8_sandbox，路径安全边界由 Python 工具代码强制，而不是只靠 Prompt。
 
 ### 核心代码：阻止路径逃逸
 
@@ -404,7 +403,7 @@ if candidate != root and root not in candidate.parents:
 return candidate
 ~~~
 
-远端 LangSmith sandbox 需要额外依赖、有效凭据及账号权限；学习和验证本地流程时，应以 L8.py 的本地 sandbox Demo 为准。
+远端 LangSmith sandbox 需要额外依赖、有效凭据及账号权限；学习和验证本地流程时，应以 L8_Deep_Agent_From_Scratch.py 的本地 sandbox Demo 为准。
 
 ## 十一、L9：语义搜索与知识库
 

@@ -2,12 +2,12 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-08-07
+> 最后更新：2026-08-10
 
 ## 当前学习主线
 
 - 目录：`5_langgraph_agentic_rag/`
-- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～6 已逐课学习完成：Part 2 已走通受控 Tool Call、`ToolNode`、证据评估、rewrite 与引用校验；Part 3 已学习 Checkpointer 与 HITL 暂停/恢复；Part 4 已学习只读 SQL Tool；Part 5 已学习 Reducer、v2 Streaming 和 Mermaid；Part 6 已学习业务分支、Node 重试、`NodeError`、`error_handler` 与失败补偿。下一步进入 Part 7 的 SQLite Checkpointer、恢复、replay 和 fork。
+- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～7 已逐课学习完成：Part 2 已走通受控 Tool Call、`ToolNode`、证据评估、rewrite 与引用校验；Part 3 已学习 Checkpointer 与 HITL 暂停/恢复；Part 4 已学习只读 SQL Tool；Part 5 已学习 Reducer、v2 Streaming 和 Mermaid；Part 6 已学习 Node 重试、`NodeError`、`error_handler` 与失败补偿；Part 7 已学习 SQLite Checkpointer、跨 Graph 恢复、checkpoint 历史、replay 和 fork。下一步进入 Part 8 的受控多工具图。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
@@ -91,7 +91,7 @@
 - 第一次 `graph.invoke()` 在 `human_review` 的 `interrupt(payload)` 处暂停，返回结果通过框架保留键 `__interrupt__` 暴露 `Interrupt` 信息；`paused.get("__interrupt__", [])` 只是读取结果，不是异常捕获语法。
 - 第二次使用相同 Checkpointer 和 `thread_id` 调用 `graph.invoke(Command(resume=value), ...)`；恢复时从 Node 开头重新执行，并让同一 `interrupt()` 返回 `resume` 值。
 - `interrupt()` 之前的代码可能重复执行，非幂等外部副作用应放到审批完成后的独立 Node；外部传入的 approve/reject 仍需运行时校验。
-- `part.py` 是手写 Part 3 流程的学习草稿，不是正式 CLI 入口；批准/拒绝演示仍运行 `part3_persistence_hitl.py`。
+- Part 3 的正式 CLI 入口是 `part3_persistence_hitl.py`；当前 `part.py` 已改为 Part 7 的手写学习草稿，不参与 Part 3 的批准/拒绝演示。
 
 ## 目录 5 Part 4 已掌握
 
@@ -120,6 +120,16 @@
 - `destinations=("finalize",)` 只帮助图可视化，不控制实际跳转；成功路径由普通边控制，失败路径由 `Command.goto` 控制。State 中的 `route` 也只是记录字段，不直接驱动 Graph。
 - `FaultState` 没有字段 Reducer，同名字段采用新值覆盖；`business_fallback` 会把验证阶段的 `status="invalid_request"` 覆盖成 `status="business_fallback"`。
 - 三条确定性路径已实测：前两次失败后第三次成功得到 `dependency_succeeded/3`，三次失败后补偿得到 `dependency_compensated/3`，空请求得到 `business_fallback/0`。不匹配 `retry_on` 的 `ValueError` 不重试，但当前通用 `error_handler` 会在第一次失败后进入补偿。
+
+## 目录 5 Part 7 已掌握
+
+- `SqliteSaver` 会把 State 和待执行位置持久化到 SQLite。两个 `with` 是同步顺序执行的资源管理块，不会创建线程：第一段退出时关闭连接，第二段重新连接同一文件并恢复原 `thread_id`。
+- `database_path.parent.mkdir(parents=True, exist_ok=True)` 不只检查目录，还会递归创建缺失的父目录；目录已存在时继续，权限、路径类型或文件系统异常仍会向外抛出。
+- `thread_id` 标识一组运行历史，`checkpoint_id` 精确定位其中一个时刻。`graph.get_state()` 只读取快照，`graph.get_state_history()` 返回可迭代的历史快照；它们都不会自动创建分支。
+- replay 没有独立的 `graph.replay()` API；本课用“旧 `checkpoint.config` + `graph.invoke(None, ...)`”重新执行当时待运行的 Node。`None` 表示不提供新外部 State，不是只读旧结果。
+- fork 由“旧 `checkpoint.config` + `graph.update_state(部分更新)` + `graph.invoke(None, ...)`”组成。`update_state()` 只创建修改后的新 checkpoint，不执行 Node；后续 `invoke()` 才从保存的 `next` 继续。本课从 `value=2` 分叉、把 `amount=3` 覆盖为 `10`，最终得到 `value=12` 和 `operations=["add 2", "add 10"]`。
+- `operations: Annotated[list[str], operator.add]` 在新 `thread_id` 中以空列表作为 Reducer 初值，因此第一轮输入可以省略 `"operations": []`。已有历史时传空列表执行的是 `old_operations + []`，不会清空历史。
+- replay 和 fork 都可能再次执行 Node 的外部副作用，因此真实写操作仍需要幂等、去重或补偿。`part7_sqlite_persistence_time_travel.py` 是正式 CLI 入口；`part.py` 是无 `main()` 的手写草稿。
 
 ## 目录 3 Part 1 已掌握
 
@@ -401,11 +411,18 @@ trap 'unlink -- "$part4_db"' EXIT
 # 目录 5：Part 6 业务分支、Node 重试与失败补偿
 .venv/bin/python 5_langgraph_agentic_rag/part6_fault_tolerance.py
 
+# 目录 5：Part 7 SQLite 持久化、恢复、replay 与 fork
+part7_db=$(mktemp /tmp/andrew-part7-checkpoint.XXXXXX)
+.venv/bin/python 5_langgraph_agentic_rag/part7_sqlite_persistence_time_travel.py \
+  --database "$part7_db"
+unlink -- "$part7_db"
+
 # 目录 5：Part 5～10 高级冒烟
 .venv/bin/python 5_langgraph_agentic_rag/scripts/smoke_advanced.py
 
-# 目录 3、目录 4、目录 5 Python 文件编译检查
+# 目录 2～5 Python 文件编译检查
 .venv/bin/python -m compileall -q \
+  2_langchain \
   3_rag_from_scratch \
   4_rag_knowledge_base_service \
   5_langgraph_agentic_rag
@@ -420,13 +437,15 @@ git diff --check
 
 2026-08-07 继续学习并验证目录 5 Part 5～6：确认 v2 Streaming 的 9 个事件及 `graph.stream()` 惰性生成器行为；Part 6 三条主路径分别得到 `dependency_succeeded/3`、`dependency_compensated/3` 和 `business_fallback/0`，并额外确认不匹配 `retry_on` 的异常不会重试、但仍可由当前 Node 的通用 `error_handler` 补偿。提交前已运行 Part 6、目录 5 基础/高级冒烟、目录 3～5 全量编译、补丁格式和敏感信息检查。
 
+2026-08-10 完成目录 5 Part 7 学习与代码整理：实测三轮累加为 `2 → 5 → 6`，重建 Graph 前恢复值为 `5`，旧 checkpoint replay 结果为 `5`，把 `amount` 覆盖为 `10` 的 fork 结果为 `12`，历史数量从 `9` 增加到 `13`；`part.py` 手写草稿通过 `7/7` 断言。同时删除 `2_langchain` 中与长文件重复的 `L2.py`～`L12.py`，将 L2 并发 async Demo 和 L8 本地 sandbox 独有内容合并到对应长文件；L2 离线并发契约通过，L8 离线入口及 sandbox `6/6` 断言通过。目录 5 基础冒烟通过，高级冒烟保持评测 `6/6`、合同检查 `31/31`；目录 2～5 全量编译、已改 Markdown 的 NUL/围栏/相对链接、删除文件引用、补丁格式与敏感信息检查均通过。
+
 ## 下一步
 
 继续逐课学习 `5_langgraph_agentic_rag`，不重复目录 3 和目录 4 已掌握的 RAG 基础，也不要因为代码已通过测试就把尚未讲解的章节标记为已学会：
 
-1. Part 1～6 已学习完成，不再重复 State/Edge 基础、Part 2 RAG 主流程、HITL、只读 SQL Tool、Reducer/Streaming 和 RetryPolicy/失败补偿。
-2. 下一步学习 Part 7：先理解 SQLite Checkpointer 的持久化边界，再逐行分析同一 `thread_id` 跨 Graph 重建恢复、checkpoint 历史、replay 和 fork。
-3. 再学习 Part 8～10 的受控多工具图、同 thread 多轮状态、FastAPI/SSE/恢复接口与确定性合同评测。
+1. Part 1～7 已学习完成，不再重复 State/Edge 基础、Part 2 RAG 主流程、HITL、只读 SQL Tool、Reducer/Streaming、RetryPolicy/失败补偿和 SQLite 时间旅行。
+2. 下一步学习 Part 8：逐行分析受控多工具图如何在 RAG、SQL、HITL 和拒答路径之间路由，并继续区分 State、Tool Call、`Command` 与 `interrupt()` 的职责。
+3. 再学习 Part 9～10 的同 `thread_id` 多轮状态、FastAPI/SSE/恢复接口与确定性合同评测。
 4. 目录 5 学完后再进入独立的 LangSmith tracing/实验记录；多 Agent 不属于当前路线。目录 4 尚未处理的 Docker / CI 一致性留到第 11 周上线工程化阶段。
 
 ## 新电脑继续学习时的启动提示
@@ -438,7 +457,7 @@ git diff --check
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
 不要重复 3_rag_from_scratch 和目录 4 已掌握的内容。
-目录 5 代码已经通过测试，Part 1～6 已逐课学习完成；从“下一步”的 Part 7 SQLite Checkpointer、恢复、replay 与 fork 继续。
+目录 5 代码已经通过测试，Part 1～7 已逐课学习完成；从“下一步”的 Part 8 受控多工具图继续。
 先分析，不要修改代码。
 ```
 

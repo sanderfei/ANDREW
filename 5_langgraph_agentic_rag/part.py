@@ -1,92 +1,105 @@
-"""Part 3 的手写学习草稿；正式可运行入口是 part3_persistence_hitl.py。"""
+from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+import argparse
+import json
+import operator
+from pathlib import Path
+from typing import Annotated, Any, TypedDict
 from uuid import uuid4
 
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Command, interrupt
+
+PROJECT_DIR = Path(__file__).resolve().parent
+OFFICIAL_SOURCES = [
+    "https://docs.langchain.com/oss/python/langgraph/persistence",
+    "https://docs.langchain.com/oss/python/langgraph/use-time-travel",
+]
 
 
-class ApprovalState(TypedDict, total=False):
-    request: str
-    report_preview: str
-    approved: bool
-    reviewer_note: str
-    final_message: str
+class CounterState(TypedDict, total=False):
+    amount: int
+    value: int
+    operations: Annotated[list[str], operator.add]
 
 
-def prepare_report(state: ApprovalState) -> ApprovalState:
+def apply_increment(state: CounterState) -> CounterState:
+    amount = int(state["amount"])
     return {
-        "report_preview": (
-            f"准备执行：{state['request']}。"
-            "这是教学预览，不包含真实客户数据。"
-        )
+        "value": int(state.get("value", 0)) + amount,
+        "operations": [f"add {amount}"],
     }
 
 
-def human_review(state: ApprovalState) -> ApprovalState:
-    decision = interrupt(
-        {
-            "action": "export_business_report",
-            "preview": state["report_preview"],
-            "allowed_decisions": ["approve", "reject"],
-        }
-    )
-    if not isinstance(decision, dict):
-        raise ValueError("恢复参数必须是包含 decision 的字典。")
-    selected = decision.get("decision")
-    if selected not in {"approve", "reject"}:
-        raise ValueError("decision 只允许 approve 或 reject。")
-    return {
-        "approved": selected == "approve",
-        "reviewer_note": str(decision.get("note", "")),
-    }
+def build_counter_workflow() -> StateGraph:
+    workflow = StateGraph(CounterState)
+    workflow.add_node("apply_increment", apply_increment)
+    workflow.add_edge(START, "apply_increment")
+    workflow.add_edge("apply_increment", END)
+    return workflow
 
 
-def finish(state: ApprovalState) -> ApprovalState:
-    if state["approved"]:
-        message = "人工已批准；教学报告可以继续生成。"
-    else:
-        message = "人工已拒绝；没有执行报告导出。"
-    return {"final_message": message}
+def _config(thread_id: str) -> dict[str, dict[str, str]]:
+    return {"configurable": {"thread_id": thread_id}}
 
 
-def build_approval_graph():
-    workflow = StateGraph(ApprovalState)
-    workflow.add_node("prepare_report", prepare_report)
-    workflow.add_node("human_review", human_review)
-    workflow.add_node("finish", finish)
-    workflow.add_edge(START, "prepare_report")
-    workflow.add_edge("prepare_report", "human_review")
-    workflow.add_edge("human_review", "finish")
-    workflow.add_edge("finish", END)
-    return workflow.compile(checkpointer=InMemorySaver())
+def _checkpoint_id(config: dict[str, Any]) -> str:
+    configurable = config.get("configurable", {})
+    return str(configurable.get("checkpoint_id", ""))
 
 
-def run_approval_demo(
-    decision: Literal["approve", "reject"] = "approve",
+def run_demo(
+    database_path: Path,
     *,
     thread_id: str | None = None,
 ) -> dict[str, Any]:
-    graph = build_approval_graph()
-    active_thread_id = thread_id or f"approval-{uuid4().hex}"
-    config = {"configurable": {"thread_id": active_thread_id}}
-    paused = graph.invoke(
-        {"request": "导出华东区已完成订单汇总"},
-        config=config,
-    )
-    interruptions = paused.get("__interrupt__", [])
-    if not interruptions:
-        raise AssertionError("图应当在 human_review 节点暂停。")
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    active_thread_id = thread_id or f"sqlite-persistence-{uuid4().hex}"
+    config = _config(active_thread_id)
+    workflow = build_counter_workflow()
 
-    final_state = graph.invoke(
-        Command(
-            resume={
-                "decision": decision,
-                "note": "目录 5 自动化演示中的人工决定。",
-            }
-        ),
-        config=config,
-    )
-    return dict(final_state)
+    with SqliteSaver.from_conn_string(str(database_path)) as checkpointer:
+        graph = workflow.compile(checkpointer=checkpointer)
+
+        first = graph.invoke({"amount": 2, "operations": []}, config=config)
+        second = graph.invoke({"amount": 3}, config=config)
+
+    with SqliteSaver.from_conn_string(str(database_path)) as checkpointer:
+        graph = workflow.compile(checkpointer=checkpointer)
+
+        recovered_before_third = dict(graph.get_state(config).values)
+        third = graph.invoke({"amount": 1}, config=config)
+
+        history = list(graph.get_state_history(config=config))
+        before_second = next(
+            snapshot
+            for snapshot in history
+            if snapshot.values.get("value") == 2
+            and snapshot.values.get("amount") == 3
+            and snapshot.next == ("apply_increment",)
+        )
+
+        replayed = graph.invoke(None, config=before_second.config)
+
+        fork_config = graph.update_state(
+            before_second.config,
+            {"amount": 10},
+        )
+        forked = graph.invoke(None, config=fork_config)
+
+        history_after_fork = list(graph.get_state_history(config))
+
+    return {
+        "database": str(database_path),
+        "thread_id": active_thread_id,
+        "first": first,
+        "second": second,
+        "recovered_after_graph_rebuild": recovered_before_third,
+        "third": third,
+        "history_count_before_fork": len(history),
+        "selected_checkpoint_id": _checkpoint_id(before_second.config),
+        "replayed_from_old_checkpoint": replayed,
+        "fork_checkpoint_id": _checkpoint_id(fork_config),
+        "forked_with_amount_10": forked,
+        "history_count_after_fork": len(history_after_fork),
+    }

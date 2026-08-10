@@ -102,6 +102,9 @@ def build_fault_tolerant_graph(gateway: DemoGateway):
             "status": "dependency_succeeded",
         }
 
+    # error handler :第一个参数接收当前完整 State。
+    # 第二个参数 参数名需要是 error，类型注解需要是 NodeError，LangGraph 才会自动注入错误对象
+    # 返回值可以是FaultState，由于要跳转到 finalize，返回值也可以是 Command（update用来更新state）。
     def dependency_error_handler(
         _state: FaultState,
         error: NodeError,
@@ -154,7 +157,9 @@ def build_fault_tolerant_graph(gateway: DemoGateway):
     workflow = StateGraph(FaultState)
     workflow.add_node("validate_request", validate_request)
     # 注册 RetryPolicy 后，LangGraph 检查 retry_on 是否匹配；
-    # 匹配时重新执行 call_dependency，耗尽后交给 error_handler。
+    # 如果 call_dependency 报错，并且抛出 TransientDependencyError，就一直重试 call_dependency，直到重试次数耗尽，就调用 error_handler
+    # 如果是其他异常就直接执行 error_handler
+
     workflow.add_node(
         "call_dependency",
         call_dependency,
@@ -202,6 +207,8 @@ def run_demo() -> dict[str, FaultState]:
     }
 
 
+# 启动命令：.venv/bin/python 5_langgraph_agentic_rag/part6_fault_tolerance.py
+# 参数枚举：无命令行参数。
 def main() -> int:
     print(
         json.dumps(
