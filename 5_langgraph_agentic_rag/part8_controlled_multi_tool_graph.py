@@ -10,6 +10,20 @@
 这里故意让显式 Graph 决定工具权限。知识问题只能进入检索节点，指标问题只能
 选择白名单参数，带“导出”的请求必须先暂停等待人工决定。
 
+START
+  ↓
+route_request
+  ├─ knowledge → retrieve_knowledge ───────────┐
+  ├─ business  → query_business_metric ───────┤
+  ├─ smalltalk → answer_smalltalk ────────────┤
+  └─ export → prepare_export → 人工审批        │
+                              ├─ approve → execute_export
+                              └─ reject  → reject_export
+                                               ↓
+                                         record_turn
+                                               ↓
+                                              END
+
 运行：
     .venv/bin/python \
       5_langgraph_agentic_rag/part8_controlled_multi_tool_graph.py \
@@ -45,7 +59,6 @@ from part4_readonly_sql_tools import (
     build_business_metric_tool,
     initialize_demo_database,
 )
-
 
 PROJECT_DIR = Path(__file__).resolve().parent
 OFFICIAL_SOURCES = [
@@ -110,10 +123,7 @@ def _metric_from_question(question: str) -> MetricName:
     lowered = question.lower()
     if any(term in lowered for term in ("平均", "客单价", "average")):
         return "average_completed_order_value"
-    if any(
-        term in lowered
-        for term in ("多少单", "订单数", "订单量", "数量", "count")
-    ):
+    if any(term in lowered for term in ("多少单", "订单数", "订单量", "数量", "count")):
         return "completed_order_count"
     return "completed_revenue"
 
@@ -156,6 +166,7 @@ def _append_audit(
     detail: str,
 ) -> list[dict[str, Any]]:
     return [
+        # 加 * 会展开旧列表；不加会把旧列表整体作为一个元素，形成嵌套列表。
         *state.get("audit_log", []),
         {"node": node, "detail": detail},
     ]
@@ -307,10 +318,7 @@ def build_controlled_assistant_graph(
             "audit_log": _append_audit(
                 state,
                 node="retrieve_knowledge",
-                detail=(
-                    f"tool={retrieval_tool.name}; "
-                    f"accepted={len(citations)}"
-                ),
+                detail=(f"tool={retrieval_tool.name}; " f"accepted={len(citations)}"),
             ),
         }
 
@@ -563,23 +571,24 @@ class ControlledAssistantService:
     ) -> Iterator[dict[str, Any]]:
         active_thread = thread_id or f"assistant-{uuid4().hex}"
         config = self.config(active_thread)
+        # 第一条手工事件先把 thread_id 交给正在遍历生成器的调用方。
         yield {
             "type": "metadata",
             "ns": (),
             "data": {"thread_id": active_thread},
         }
+        # 按调用方的迭代节奏，逐条转发 Graph 产生的 updates/custom 事件。
         yield from self.graph.stream(
             initial_request(question),
             config=config,
             stream_mode=["updates", "custom"],
             version="v2",
         )
+        # 内部事件流耗尽后才会继续执行并读取最终快照。
         snapshot = self.graph.get_state(config)
         final_state = dict(snapshot.values)
         task_interruptions = [
-            item
-            for task in snapshot.tasks
-            for item in getattr(task, "interrupts", ())
+            item for task in snapshot.tasks for item in getattr(task, "interrupts", ())
         ]
         if task_interruptions:
             final_state["__interrupt__"] = task_interruptions
@@ -622,6 +631,8 @@ def build_default_service(
     return build_tutorial_service(retriever, database_path)
 
 
+# 启动命令：.venv/bin/python 5_langgraph_agentic_rag/part8_controlled_multi_tool_graph.py [--question TEXT] [--decision approve|reject]
+# 参数枚举：--question TEXT 可选；--decision 可选 approve/reject，仅导出请求暂停后生效。
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="演示受控 RAG + SQL + HITL Graph")
     parser.add_argument(
@@ -637,6 +648,7 @@ def main(argv: list[str] | None = None) -> int:
     service = build_default_service()
     result = service.ask(args.question)
     if result["status"] == "interrupted" and args.decision:
+        # 启动命令带 --decision approve/reject 时，从 interrupt 恢复执行。
         result = service.resume(
             result["thread_id"],
             decision=args.decision,

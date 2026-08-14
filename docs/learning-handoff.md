@@ -2,12 +2,12 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-08-10
+> 最后更新：2026-08-14
 
 ## 当前学习主线
 
 - 目录：`5_langgraph_agentic_rag/`
-- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～7 已逐课学习完成：Part 2 已走通受控 Tool Call、`ToolNode`、证据评估、rewrite 与引用校验；Part 3 已学习 Checkpointer 与 HITL 暂停/恢复；Part 4 已学习只读 SQL Tool；Part 5 已学习 Reducer、v2 Streaming 和 Mermaid；Part 6 已学习 Node 重试、`NodeError`、`error_handler` 与失败补偿；Part 7 已学习 SQLite Checkpointer、跨 Graph 恢复、checkpoint 历史、replay 和 fork。下一步进入 Part 8 的受控多工具图。
+- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～8 已逐课学习完成；Part 9 已学习 FastAPI `invoke/stream/resume`、SSE 事件转换、request ID 中间件和 `yield from` 的顺序转发；Part 10 已完成确定性合同评测的整体定位，尚待逐用例细化学习。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
@@ -91,7 +91,7 @@
 - 第一次 `graph.invoke()` 在 `human_review` 的 `interrupt(payload)` 处暂停，返回结果通过框架保留键 `__interrupt__` 暴露 `Interrupt` 信息；`paused.get("__interrupt__", [])` 只是读取结果，不是异常捕获语法。
 - 第二次使用相同 Checkpointer 和 `thread_id` 调用 `graph.invoke(Command(resume=value), ...)`；恢复时从 Node 开头重新执行，并让同一 `interrupt()` 返回 `resume` 值。
 - `interrupt()` 之前的代码可能重复执行，非幂等外部副作用应放到审批完成后的独立 Node；外部传入的 approve/reject 仍需运行时校验。
-- Part 3 的正式 CLI 入口是 `part3_persistence_hitl.py`；当前 `part.py` 已改为 Part 7 的手写学习草稿，不参与 Part 3 的批准/拒绝演示。
+- Part 3 的正式 CLI 入口是 `part3_persistence_hitl.py`；曾用于 Part 7 手写练习的重复 `part.py` 已在确认正式入口覆盖其行为后删除。
 
 ## 目录 5 Part 4 已掌握
 
@@ -129,7 +129,26 @@
 - replay 没有独立的 `graph.replay()` API；本课用“旧 `checkpoint.config` + `graph.invoke(None, ...)`”重新执行当时待运行的 Node。`None` 表示不提供新外部 State，不是只读旧结果。
 - fork 由“旧 `checkpoint.config` + `graph.update_state(部分更新)` + `graph.invoke(None, ...)`”组成。`update_state()` 只创建修改后的新 checkpoint，不执行 Node；后续 `invoke()` 才从保存的 `next` 继续。本课从 `value=2` 分叉、把 `amount=3` 覆盖为 `10`，最终得到 `value=12` 和 `operations=["add 2", "add 10"]`。
 - `operations: Annotated[list[str], operator.add]` 在新 `thread_id` 中以空列表作为 Reducer 初值，因此第一轮输入可以省略 `"operations": []`。已有历史时传空列表执行的是 `old_operations + []`，不会清空历史。
-- replay 和 fork 都可能再次执行 Node 的外部副作用，因此真实写操作仍需要幂等、去重或补偿。`part7_sqlite_persistence_time_travel.py` 是正式 CLI 入口；`part.py` 是无 `main()` 的手写草稿。
+- replay 和 fork 都可能再次执行 Node 的外部副作用，因此真实写操作仍需要幂等、去重或补偿。`part7_sqlite_persistence_time_travel.py` 是唯一保留的正式 Part 7 CLI 入口。
+
+## 目录 5 Part 8 已掌握
+
+- Part 8 仍是单 Agent 的显式受控图，不是多 Agent。第一处条件边把 `route_request` 分为 knowledge/business/export/smalltalk，第二处条件边在人工审批后分为 execute/reject；所有终态路径汇合到 `record_turn -> END`。
+- `_classify()` 使用确定性关键词路由，适合教学、审计和高风险权限边界；真实场景可用结构化模型分类提高语义灵活性，但工具白名单和 export 审批仍应由 Graph 强制。
+- `initial_request(question)` 是业务 State 输入；`configurable.thread_id` 是 Checkpointer 的会话分区键，不会自动写入 `ControlledAssistantState`。
+- `allowed_decisions` 只是 `interrupt()` 交给调用方的提示数据。CLI 只有在状态为 `interrupted` 且传入 `--decision` 时才调用 `Command(resume=...)`；不带决定时会打印暂停结果并退出，不会阻塞等待。
+- `service.stream()` 按顺序产出手工 metadata、逐条转发 Graph `updates/custom`、再读取 snapshot 并产出 result。`yield from` 本身不创建并发，只在调用方继续迭代时推进内部生成器。
+
+## 目录 5 Part 9 当前已学习
+
+- `/v1/invoke` 执行普通请求，`/v1/stream` 把 Part 8 事件转为 SSE，`/v1/threads/{thread_id}/resume` 先检查 checkpoint 是否真在等待 interrupt，再使用同一 `thread_id` 恢复。
+- `_sse()` 中 `event.get("type", "message")` 只在 key 缺失时使用默认值；`str(...)` 把最终事件类型规范为字符串。
+- request ID 中间件的 UUID 和 Header 操作是同步代码，但 `call_next(request)` 返回可等待对象；因此中间件用 `async def` 和 `await` 先获取后续请求链的 Response，再添加响应 Header。
+
+## 目录 5 Part 10 已概览
+
+- Part 10 不新增 Agent 能力，而是对 Part 8 的路由轨迹、引用、只读 SQL 和审批权限做确定性合同评测。
+- 它用临时来源、Hash Embedding 和临时 SQLite 覆盖已知知识、未知拒答、业务指标、闲聊、导出批准和导出拒绝 6 条用例，不调用外部模型。
 
 ## 目录 3 Part 1 已掌握
 
@@ -417,6 +436,13 @@ part7_db=$(mktemp /tmp/andrew-part7-checkpoint.XXXXXX)
   --database "$part7_db"
 unlink -- "$part7_db"
 
+# 目录 5：Part 8 受控多工具图与导出审批
+.venv/bin/python 5_langgraph_agentic_rag/part8_controlled_multi_tool_graph.py \
+  --question "导出华东已完成订单营收" --decision approve
+
+# 目录 5：Part 10 确定性合同评测
+.venv/bin/python 5_langgraph_agentic_rag/part10_evaluate.py
+
 # 目录 5：Part 5～10 高级冒烟
 .venv/bin/python 5_langgraph_agentic_rag/scripts/smoke_advanced.py
 
@@ -433,19 +459,21 @@ git diff --check
 
 已验证结果：Part 1 默认本地资料产生 4 个 chunk，检索返回 2 个 `Document`；`--live` 可以由 `ep-qwen2.5-72b` 正常回答。Part 2 Indexing 退出码为 0，token 示例为 8、向量维度为 384、示例余弦相似度为 `0.706493`，本地资料产生 4 个 chunk 并检索返回 2 条。Part 2 chunking demo 连续运行两次均成功且 JSON 完全一致，五组分别产生 32、34、18、21、10 个 chunk，所有 `start_index` 均有效。Part 3-1、Part 3-2、Part 4-1、Part 4-2 使用重命名后的入口以默认本地模式运行，退出码均为 0。Part 4-2 在线模式由 `ep-qwen2.5-72b` 正常回答 citation 问题；天气问题的三个候选全部低于 `0.2`，在生成前返回 `answerable=false` 和空 citations，未调用在线模型。目录 4 已用本地 MiniLM 重建 5 个来源/5 个 chunk；重复 reindex 显示 5 个文件全部 unchanged、写入和删除均为 0；已知问题引用 `local_runtime.md`，天气问题正确拒答。2026-07-28 再次验证 Hash + offline 黄金集 `20/20`、FastAPI smoke 的 health/reindex/ask/refusal/update/delete 全部通过；local + live 黄金集也为 `20/20`，其中 4 条仅因模型同义改写产生 warning，在线回答仍保持 `embedding_mode=local`。目录 3 的 10 个入口以及目录 4 评估/CLI 参数帮助检查全部通过，两个目录全量编译和 `git diff --check` 通过。2026-07-29 验证目录 5 的原有冒烟和高级冒烟均通过：Part 5～10 覆盖 Reducer/Streaming、重试与补偿、SQLite 恢复/replay/fork、受控 RAG+SQL+HITL、同 thread 多轮状态、FastAPI/SSE，以及 6 个评测用例、31 项合同检查；Part 1～4 文件哈希保持不变。2026-07-30 单独运行目录 5 Part 1 成功，`smalltalk` 与 `knowledge` 两条条件分支输出正确；最小输入只传 `question` 时会自动生成完整 `steps`。本次提交前再次验证目录 5 基础冒烟和高级冒烟均通过，高级冒烟保持 6 个评测用例、31 项合同检查全部通过；目录 5 全量编译、Markdown 代码块/相对链接、敏感信息扫描和 `git diff --check` 均通过。2026-08-04 继续验证目录 5 Part 2：Hash + offline 已知问题在一次检索后进入 `grounded_answer`，本地 MiniLM + offline 也成功生成带真实 citations 的答案；未知问题在 `--max-rewrites 0` 时进入 `refused`，闲聊进入 `direct` 且不检索。`part2.py`、正式 Part 2 入口和相关模块均通过编译检查。同日提交前复跑目录 5 基础冒烟和高级冒烟，仍保持 6 个高级评测用例、31 项合同检查全部通过；全目录编译、Markdown 代码块与相对链接、敏感信息扫描和 `git diff --check` 均通过。
 
-2026-08-06 继续学习并验证目录 5 Part 3～5：Part 3 approve/reject 两条恢复路径和手写 `part.py` 草稿均通过；Part 4 临时 SQLite 返回全部已完成收入 `400.5 CNY`、华东已完成订单数 `1`；Part 5 返回 `values=4`、`updates=3`、`custom=2`，同 ID 草稿最终只保留一条消息。目录 5 基础冒烟通过；高级冒烟继续保持 Part 5～10 全部通过、评测 `6/6`、合同检查 `31/31`；目录 3～5 全量编译通过。
+2026-08-06 继续学习并验证目录 5 Part 3～5：Part 3 approve/reject 两条恢复路径和当时的手写 `part.py` 草稿均通过；Part 4 临时 SQLite 返回全部已完成收入 `400.5 CNY`、华东已完成订单数 `1`；Part 5 返回 `values=4`、`updates=3`、`custom=2`，同 ID 草稿最终只保留一条消息。目录 5 基础冒烟通过；高级冒烟继续保持 Part 5～10 全部通过、评测 `6/6`、合同检查 `31/31`；目录 3～5 全量编译通过。
 
 2026-08-07 继续学习并验证目录 5 Part 5～6：确认 v2 Streaming 的 9 个事件及 `graph.stream()` 惰性生成器行为；Part 6 三条主路径分别得到 `dependency_succeeded/3`、`dependency_compensated/3` 和 `business_fallback/0`，并额外确认不匹配 `retry_on` 的异常不会重试、但仍可由当前 Node 的通用 `error_handler` 补偿。提交前已运行 Part 6、目录 5 基础/高级冒烟、目录 3～5 全量编译、补丁格式和敏感信息检查。
 
-2026-08-10 完成目录 5 Part 7 学习与代码整理：实测三轮累加为 `2 → 5 → 6`，重建 Graph 前恢复值为 `5`，旧 checkpoint replay 结果为 `5`，把 `amount` 覆盖为 `10` 的 fork 结果为 `12`，历史数量从 `9` 增加到 `13`；`part.py` 手写草稿通过 `7/7` 断言。同时删除 `2_langchain` 中与长文件重复的 `L2.py`～`L12.py`，将 L2 并发 async Demo 和 L8 本地 sandbox 独有内容合并到对应长文件；L2 离线并发契约通过，L8 离线入口及 sandbox `6/6` 断言通过。目录 5 基础冒烟通过，高级冒烟保持评测 `6/6`、合同检查 `31/31`；目录 2～5 全量编译、已改 Markdown 的 NUL/围栏/相对链接、删除文件引用、补丁格式与敏感信息检查均通过。
+2026-08-10 完成目录 5 Part 7 学习与代码整理：实测三轮累加为 `2 → 5 → 6`，重建 Graph 前恢复值为 `5`，旧 checkpoint replay 结果为 `5`，把 `amount` 覆盖为 `10` 的 fork 结果为 `12`，历史数量从 `9` 增加到 `13`；当时的 `part.py` 手写草稿通过 `7/7` 断言，其行为后来已由正式 Part 7 入口完整覆盖并删除。同时删除 `2_langchain` 中与长文件重复的 `L2.py`～`L12.py`，将 L2 并发 async Demo 和 L8 本地 sandbox 独有内容合并到对应长文件；L2 离线并发契约通过，L8 离线入口及 sandbox `6/6` 断言通过。目录 5 基础冒烟通过，高级冒烟保持评测 `6/6`、合同检查 `31/31`；目录 2～5 全量编译、已改 Markdown 的 NUL/围栏/相对链接、删除文件引用、补丁格式与敏感信息检查均通过。
+
+2026-08-14 完成 Part 8 受控多工具图学习，并开始 Part 9～10：已区分固定边、条件边与 Node 内部 Python 分支，走通 `interrupt` / CLI `--decision` / `Command(resume=...)`，确认 `initial_request` 与 `thread_id` 分属 State 和运行配置，并理解 `yield` / `yield from` 把 metadata、Graph 事件和 result 按序交给 FastAPI SSE 调用方。Part 9 已学习 request ID 异步中间件和 SSE 转换，Part 10 已完成六类合同评测的概览。清理已由正式 Part 7 入口覆盖的重复 `part.py` 草稿，并在 Python 笔记补充 `yield from` 同步迭代委托语法。实测 Part 8 export approve 路径返回 `export_completed/120.5`；Part 10 为 `6/6`、`31/31`；目录 5 基础/高级冒烟和目录 2～5 全量编译全部通过；已改 Markdown 的 NUL/围栏/相对链接、删除文件引用、补丁格式与敏感信息检查均通过。
 
 ## 下一步
 
 继续逐课学习 `5_langgraph_agentic_rag`，不重复目录 3 和目录 4 已掌握的 RAG 基础，也不要因为代码已通过测试就把尚未讲解的章节标记为已学会：
 
-1. Part 1～7 已学习完成，不再重复 State/Edge 基础、Part 2 RAG 主流程、HITL、只读 SQL Tool、Reducer/Streaming、RetryPolicy/失败补偿和 SQLite 时间旅行。
-2. 下一步学习 Part 8：逐行分析受控多工具图如何在 RAG、SQL、HITL 和拒答路径之间路由，并继续区分 State、Tool Call、`Command` 与 `interrupt()` 的职责。
-3. 再学习 Part 9～10 的同 `thread_id` 多轮状态、FastAPI/SSE/恢复接口与确定性合同评测。
+1. Part 1～8 已学习完成，不再重复 State/Edge 基础、RAG 主流程、HITL、只读 SQL Tool、Reducer/Streaming、RetryPolicy/失败补偿、SQLite 时间旅行和 Part 8 受控多工具路由。
+2. 下一步继续 Part 9：从 FastAPI 入口追踪 `/v1/invoke`、`/v1/stream` 和 `/resume` 的请求/响应类型、SSE 字节流与异常边界。
+3. 然后逐用例学习 Part 10 的 `EvaluationResult`、`checks`、trajectory 和退出码合同，不只停留在 `6/6`、`31/31` 的结果。
 4. 目录 5 学完后再进入独立的 LangSmith tracing/实验记录；多 Agent 不属于当前路线。目录 4 尚未处理的 Docker / CI 一致性留到第 11 周上线工程化阶段。
 
 ## 新电脑继续学习时的启动提示
@@ -457,7 +485,7 @@ git diff --check
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
 不要重复 3_rag_from_scratch 和目录 4 已掌握的内容。
-目录 5 代码已经通过测试，Part 1～7 已逐课学习完成；从“下一步”的 Part 8 受控多工具图继续。
+目录 5 代码已经通过测试，Part 1～8 已逐课学习完成；从“下一步”的 Part 9 FastAPI/SSE 请求链继续。
 先分析，不要修改代码。
 ```
 

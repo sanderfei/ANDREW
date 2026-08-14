@@ -3861,7 +3861,27 @@ yield event
 
 这与 `return` 不同：`return` 会结束函数，普通情况下只返回一次。
 
-### 13.5 `async for` 遍历异步数据流
+### 13.5 `yield from` 委托另一个同步可迭代对象
+
+```python
+yield metadata_event
+yield from graph.stream(...)
+yield result_event
+```
+
+`yield from iterable` 会把 `iterable` 产生的元素逐个交给当前函数的调用方，近似等价于：
+
+```python
+yield metadata_event
+for event in graph.stream(...):
+    yield event
+yield result_event
+```
+
+它不会把右侧生成器当成一个整体元素产出。右侧迭代完成后，当前函数会从
+`yield from` 的下一行继续执行。
+
+### 13.6 `async for` 遍历异步数据流
 
 ```python
 async for audio_chunk in audio_stream:
@@ -3871,7 +3891,7 @@ async for audio_chunk in audio_stream:
 
 `async for` 每次异步等待下一项，适合网络流、音频流、模型流式输出等不能一次性得到全部数据的场景。
 
-### 13.6 `str` 与 `bytes`
+### 13.7 `str` 与 `bytes`
 
 ```python
 encoded = word.encode()   # str -> bytes
@@ -3881,7 +3901,7 @@ b" "                     # bytes 字面量
 
 文本处理通常使用 `str`，网络、文件或音频等原始二进制数据经常使用 `bytes`。
 
-### 13.7 同步方法不能把异步方法的协程当成结果
+### 13.8 同步方法不能把异步方法的协程当成结果
 
 是否异步由定义时的 `async def` 决定：
 

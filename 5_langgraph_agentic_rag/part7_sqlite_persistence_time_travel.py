@@ -141,6 +141,11 @@ def run_demo(
             and snapshot.next == ("apply_increment",)
         )
 
+        # before_second 是三条 checkpoint 历史的共同分叉点：
+        # before_second：value=2, amount=3, next=apply_increment
+        # ├─ 原始主线：+3 -> value=5 -> 第三轮 +1 -> value=6
+        # ├─ replay 分支：重新执行 +3 -> value=5
+        # └─ fork 分支：amount 改成 10 -> 执行 +10 -> value=12
         # None 表示没有新的外部 State 输入
         # 会新增一条分支，Replay 会重新执行旧 checkpoint 后的 Node，不是简单读取旧输出。
         # before_second 旧 checkpoint 没变，原始主线 value=6 没变

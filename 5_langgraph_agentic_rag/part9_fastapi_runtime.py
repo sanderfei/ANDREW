@@ -95,17 +95,14 @@ def create_app(service: ControlledAssistantService) -> FastAPI:
     app = FastAPI(
         title="Andrew Controlled LangGraph Tutorial",
         version="0.2.0",
-        description=(
-            "目录 5 的受控 RAG、只读 SQL、Streaming 与 HITL 恢复接口。"
-        ),
+        description=("目录 5 的受控 RAG、只读 SQL、Streaming 与 HITL 恢复接口。"),
     )
     app.state.service = service
 
     @app.middleware("http")
     async def add_request_id(request: Request, call_next):
-        request.state.request_id = (
-            request.headers.get("X-Request-ID") or uuid4().hex
-        )
+        request.state.request_id = request.headers.get("X-Request-ID") or uuid4().hex
+        # call_next(request) 返回可等待对象；await 取得后续请求链的 Response。
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
         return response
@@ -180,10 +177,7 @@ def create_app(service: ControlledAssistantService) -> FastAPI:
         snapshot = service.graph.get_state(config)
         if not snapshot.values:
             raise HTTPException(status_code=404, detail="thread_id 不存在。")
-        is_paused = any(
-            getattr(task, "interrupts", ())
-            for task in snapshot.tasks
-        )
+        is_paused = any(getattr(task, "interrupts", ()) for task in snapshot.tasks)
         if not is_paused:
             raise HTTPException(
                 status_code=409,
@@ -209,6 +203,8 @@ def create_default_app() -> FastAPI:
     return create_app(build_default_service())
 
 
+# 启动命令：.venv/bin/python 5_langgraph_agentic_rag/part9_fastapi_runtime.py
+# 参数枚举：无 CLI 参数；固定监听 127.0.0.1:8001，单 worker。
 def main() -> None:
     import uvicorn
 
