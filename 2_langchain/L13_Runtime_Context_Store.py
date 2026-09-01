@@ -152,14 +152,18 @@ def remember_preference(
         },
     )
     content = f"已为 {runtime.context.user_id} 记录 {key}={value}"
-    # Tool 返回 Command 时，除了业务 State 更新，还必须补齐本次 tool_call 的 ToolMessage。
+    # Tool 返回 Command 后，由 LangGraph 把 update 合并进当前 State。
+    # 普通返回值由 LangChain 自动构造 ToolMessage；Command 是特殊 State 指令，
+    # 会跳过自动构造，所以开发者必须手动放入带匹配 tool_call_id 的 ToolMessage。
     return Command(
         update={
             "last_memory_key": key,
             "messages": [
                 ToolMessage(
                     content=content,
+                    # 真实模型场景中，这个 ID 一般由模型服务返回。
                     tool_call_id=runtime.tool_call_id or "missing-tool-call-id",
+                    # 如果 tool_call_id 与原 Tool Call 的 ID 不匹配，LangGraph 会抛出 ValueError。
                 )
             ],
         }
