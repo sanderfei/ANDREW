@@ -7,5 +7,5 @@
 - 我问你的python语法都写入当前项目的python基础语法文档中，不是所有的python相关的问题都要加进去，只要对应的python基础语法加入文档即可
 - 新的langchain学习相关的语法也加入langchain基础语法
 - 新的langgraph学习相关的语法也加入langgraph基础语法（如果没有就创建一个langchain同级目录文件）
-- 我说的代码提交包含push到github main分支
+- 当我说“提交代码”时，不要额外修改、测试、构建、格式化或执行发布检查；只暂存我点名范围内的对应代码，直接 commit 并 push 到 GitHub main 分支，同时保留无关工作区改动
 - 每个可运行文件 main 方法上面添加注释，当前文件的启动命令示例以及参数枚举
