@@ -2,14 +2,17 @@
 
 这份笔记整理 `andrew` 项目中 [5_langgraph_agentic_rag](5_langgraph_agentic_rag) 逐步学习到的 LangGraph 语法和运行机制。
 
-本文按实际学习进度持续补充，不提前展开尚未学习的章节。当前学习到：
+本文按实际学习进度持续补充。当前目录 5 已覆盖：
 
 ```text
-Part 1：State、Node、Edge、Conditional Edge、compile、invoke
+Part 1～4：Graph 基础、Agentic RAG、Persistence/HITL、只读 Tool
+Part 5～10：Reducer/Streaming、容错、时间旅行、多工具图、服务化、评测
+Part 11～14：并行与 Send、Subgraph、异步运行、Functional API
 ```
 
 当前项目使用 `langgraph 1.2.8`。Part 1 示例见
-[part1_graph_basics.py](5_langgraph_agentic_rag/part1_graph_basics.py)。
+[part1_graph_basics.py](5_langgraph_agentic_rag/part1_graph_basics.py)，完整顺序见
+[目录 5 README](5_langgraph_agentic_rag/README.md)。
 
 ## 1. 常用术语
 
@@ -2925,3 +2928,219 @@ checkpoint_ns  区分根图与子图的 checkpoint 空间
 Replay 和 fork 都可能重新执行 checkpoint 之后的 Node，因此 Node 中的写数据库、发消息、
 扣款等外部副作用仍需要幂等键、去重或补偿。Checkpoint 保存 Graph State 和执行位置，
 不等于自动回滚外部系统。
+
+## 22. 并行分支、fan-in 与 `Send`
+
+[part11_parallel_send.py](5_langgraph_agentic_rag/part11_parallel_send.py) 同时验证静态和
+动态并行。
+
+### 22.1 静态 fan-out / fan-in
+
+同一个 Node 可以连接多个下游 Node；它们在同一 superstep 被调度：
+
+```python
+workflow.add_edge("plan", "read_docs")
+workflow.add_edge("plan", "read_examples")
+```
+
+列表形式的起点是一道等待屏障，只有列表中的 Node 全部完成后才进入下一 Node：
+
+```python
+workflow.add_edge(["read_docs", "read_examples"], "merge_sources")
+```
+
+这不是普通 Python 按代码行先执行 `read_docs`、再执行 `read_examples`。两项任务可以并行，
+但下游只能读取 Reducer 合并后的 State。
+
+### 22.2 并行写入必须声明 Reducer
+
+```python
+class ParallelState(TypedDict):
+    results: Annotated[list[dict], operator.add]
+```
+
+并行 Node 各自返回 `{"results": [item]}`，superstep 结束时通过 `operator.add` 合并。
+如果两个并行 Node 同时写普通字段，LangGraph 会抛 `InvalidUpdateError`，不会让“最后完成者”
+随机覆盖前一个结果。
+
+### 22.3 `Send` 动态创建任务
+
+当任务数只能在运行时确定时，条件路由返回 `Send` 列表：
+
+```python
+def fan_out(state):
+    return [
+        Send("analyze_subject", {"subject": subject})
+        for subject in state["subjects"]
+    ]
+```
+
+每个 `Send` 指定目标 Node 和该任务自己的输入 State。多个任务的输出仍通过主 State 中的
+Reducer 汇总。`config={"max_concurrency": 2}` 只限制同时执行数量，不改变 Graph 拓扑。
+
+## 23. Subgraph：父图组合子图
+
+[part12_subgraphs.py](5_langgraph_agentic_rag/part12_subgraphs.py) 演示三种组合方式。
+
+### 23.1 共享 Schema 与不同 Schema
+
+父子图共享字段时，编译后的子图可以直接作为父图 Node：
+
+```python
+parent.add_node("research_child", compiled_child)
+```
+
+字段完全不同时，用普通 wrapper 显式转换：
+
+```python
+def call_formatter(parent_state):
+    child_result = formatter.invoke({
+        "title": "子图报告",
+        "text": parent_state["draft"],
+    })
+    return {"formatted": child_result["rendered"]}
+```
+
+子图还可以分别声明外部输入、外部输出和内部工作 State：
+
+```python
+StateGraph(
+    ResearchState,
+    input_schema=ResearchInput,
+    output_schema=ResearchOutput,
+)
+```
+
+私有字段供子图内部 Node 使用，不会因为父图调用而自动暴露到父 State。
+
+### 23.2 子图 checkpoint 三种模式
+
+```text
+checkpointer=True   子图拥有自己的 checkpoint namespace，同一 thread 可保留内部 State
+checkpointer=None   使用默认继承语义；本次子图调用的业务输入保持隔离
+checkpointer=False  子图不创建 checkpoint，不能在子图内部 interrupt/resume
+```
+
+`graph.stream(..., subgraphs=True)` 返回的 v2 事件里，`event["ns"]` 是 namespace tuple：
+空 tuple 表示根图，非空 tuple 标识具体子图调用。
+
+### 23.3 子图跳到父图 Node
+
+```python
+return Command(
+    graph=Command.PARENT,
+    goto="parent_finish",
+    update={"status": "escalated"},
+)
+```
+
+`Command.PARENT` 表示 `goto` 的目标在父图中。共享字段仍按父 State 的 Reducer 合并；
+`destinations=("parent_finish",)` 主要补充图可视化目标，真正的跳转来自 `Command`。
+
+## 24. 异步 Graph、Streaming 与运行限制
+
+[part13_async_streaming.py](5_langgraph_agentic_rag/part13_async_streaming.py) 使用
+`async def` Node、`ainvoke()`、`astream()` 和 `aget_state()`，不是在线程外包一层同步调用。
+
+### 24.1 `RunnableConfig`
+
+```python
+config: RunnableConfig = {
+    "configurable": {"thread_id": "async-thread"},
+    "max_concurrency": 2,
+    "tags": ["lesson", "async"],
+    "metadata": {"lesson": "part13"},
+}
+```
+
+- `configurable.thread_id` 供 checkpointer 分区。
+- `max_concurrency` 是顶层运行配置，限制同时运行的任务数。
+- `tags`、`metadata` 可被 Node、Tracing 和 Streaming 读取，不属于业务 State。
+
+Node 在参数中声明 `config: RunnableConfig` 后即可读取它；Node 内的
+`get_stream_writer()` 可以发出 `custom` 事件。
+
+### 24.2 v2 Streaming 模式
+
+```python
+async for event in graph.astream(
+    input_state,
+    config=config,
+    stream_mode=[
+        "values", "updates", "messages", "custom", "checkpoints", "tasks"
+    ],
+    version="v2",
+):
+    ...
+```
+
+| `event["type"]` | `event["data"]` 的核心含义 |
+| --- | --- |
+| `values` | Reducer 合并后的完整 State |
+| `updates` | 本轮 Node 返回的局部更新 |
+| `messages` | `(AIMessageChunk, metadata)`，可逐 Token 消费 |
+| `custom` | Node 主动写出的非 State 进度 |
+| `checkpoints` | checkpoint 被保存时的事件 |
+| `tasks` | Task 开始、完成或报错事件 |
+| `debug` | 更完整的调试事件；数据量也最大 |
+
+`astream()` 是异步迭代器：消费一个事件、执行循环体、再等待后续事件。它不会先收集完
+全部结果，也不会让循环后的代码和流并发执行。
+
+### 24.3 两道运行保护
+
+```python
+await graph.ainvoke(input_state, config={"recursion_limit": 3})
+workflow.add_node("slow_node", slow_node, timeout=0.01)
+```
+
+- 无终点循环超过步数上限时抛 `GraphRecursionError`。
+- 单个 Node 超过自己的 timeout 时抛 `NodeTimeoutError`。
+
+它们只终止 Graph 运行，不会回滚已经发生的外部副作用。
+
+## 25. Functional API：普通 Python 控制流上的 LangGraph Runtime
+
+[part14_functional_api.py](5_langgraph_agentic_rag/part14_functional_api.py) 展示与
+Graph API 并列的另一种写法：
+
+```python
+@task(retry_policy=RetryPolicy(max_attempts=2))
+def prepare_report(name: str) -> dict:
+    ...
+
+@entrypoint(checkpointer=InMemorySaver())
+def workflow(request: dict) -> dict:
+    prepared = prepare_report(request["name"]).result()
+    decision = interrupt({"allowed_decisions": ["approve", "reject"]})
+    return {"prepared": prepared, "decision": decision}
+```
+
+`@task` 调用返回 Future；`.result()` 才读取任务结果。先创建多个 Future、再读取结果，可让
+互不依赖的 Task 并行运行。
+
+配置 checkpointer 后，`interrupt()` 和恢复仍使用相同合同：
+
+```python
+first = workflow.invoke(input_value, config=config)
+resumed = workflow.invoke(Command(resume={"decision": "approve"}), config=config)
+```
+
+恢复时 entrypoint 的 Python 函数会从开头重新执行，但已完成 `@task` 的结果会从 checkpoint
+恢复，不会重新执行该 Task。Task 中的随机值、外部 API 或写操作因此必须放在 Task 内，
+不要散落在 entrypoint 的普通代码里。
+
+同一 thread 的跨轮增量状态使用 `previous` 和 `entrypoint.final`：
+
+```python
+@entrypoint(checkpointer=checkpointer)
+def accumulate(amount: int, *, previous: int | None = None):
+    new_value = (previous or 0) + amount
+    return entrypoint.final(
+        value={"current": new_value},  # 返回调用方
+        save=new_value,                # 下一轮注入 previous
+    )
+```
+
+Graph API 适合显式 State、Reducer、Node、Edge 和拓扑可视化；Functional API 适合动态
+`if`、`for`、函数调用等普通 Python 控制流。二者共用 LangGraph Runtime，不是两套产品。

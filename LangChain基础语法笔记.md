@@ -2,7 +2,7 @@
 
 这份笔记整理 `andrew` 项目中 [2_langchain](2_langchain) 和 [3_rag_from_scratch](3_rag_from_scratch) 逐步出现的 LangChain 语法。
 
-它与 [2_langchain/LangChain知识点总结.md](2_langchain/LangChain知识点总结.md) 的区别是：原总结按 L1～L12 回顾每课内容；本文按语法/API 分类，重点说明“怎么读、输入输出是什么、什么时候真正执行”。
+它与 [2_langchain/LangChain知识点总结.md](2_langchain/LangChain知识点总结.md) 的区别是：原总结按 L1～L15 回顾每课内容；本文按语法/API 分类，重点说明“怎么读、输入输出是什么、什么时候真正执行”。
 
 本文依据当前项目环境整理：`langchain 1.3.11`、`langchain-core 1.4.8`。新代码优先参考 `3_rag_from_scratch` 中的 LangChain 1.x 写法。
 
@@ -23,6 +23,9 @@ L9  Document、Embedding、VectorStore、Retriever
 L10 固定 RAG 与 Agentic RAG
 L11 受限 SQL Tools
 L12 RunnableGenerator 异步流式管道
+L13 Agent State、Runtime Context、跨线程 Store
+L14 Agent Middleware 生命周期、上下文压缩、调用限制、HITL
+L15 MCP Tool、Resource、Prompt 与 stdio Client/Server
 ```
 
 ### 1.2 `3_rag_from_scratch`：拆开 RAG 的每一层
@@ -3237,3 +3240,322 @@ smalltalk → 不调用 Tool
 
 这些是程序可以严格判定的合同。回答文风、帮助程度等主观质量再单独使用模型
 评审或人工评审，不能替代权限和引用检查。
+
+## 20. Agent State、Runtime Context 与 Store
+
+[L13_Runtime_Context_Store.py](2_langchain/L13_Runtime_Context_Store.py) 把三种容易混淆的
+运行时数据放在同一个可执行示例中：
+
+```text
+State    当前 thread 内不断变化的数据；配置 checkpointer 后可保存
+Context  本次 invoke 注入的用户、权限、连接等依赖；不会自动写入 State
+Store    按 namespace/key 保存的数据；可以被不同 thread 读取
+```
+
+L13 的 `ToolCallingFakeChatModel` 是测试用的固定剧本模型，不会根据问题
+推理。它每被调用一次，就按顺序返回 `responses` 中的下一个
+`AIMessage`；一轮 Tool Calling 通常消耗两个预设响应：
+
+```text
+AIMessage(tool_calls=[...])  → Agent 执行 Tool
+AIMessage(content="...")    → Agent 输出最终回答
+```
+
+`AIMessage.tool_calls` 只是结构化的调用请求，直接调用假模型只会得到
+这个消息，不会执行 Tool。只有将模型和同名 Tool 交给
+`create_agent(tools=[...])` 后，Agent 循环才会识别 `tool_calls`、执行 Tool、
+加入 `ToolMessage` 并再次调用模型。
+
+创建 Agent 时分别声明：
+
+```python
+agent = create_agent(
+    model=model,
+    tools=tools,
+    state_schema=MemoryAgentState,
+    context_schema=UserContext,
+    checkpointer=InMemorySaver(),
+    store=InMemoryStore(),
+)
+
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "记住默认城市"}]},
+    config={"configurable": {"thread_id": "thread-a"}},
+    context=UserContext(user_id="user-a", permissions=("memory:write",)),
+)
+```
+
+`AgentState` 是 LangChain 定义的泛型 `TypedDict`，它用来描述 Agent State
+的字段结构，运行时传递的对象仍然是普通 `dict`：
+
+```python
+class AgentState(TypedDict, Generic[ResponseT]):
+    messages: Required[Annotated[list[AnyMessage], add_messages]]
+    jump_to: NotRequired[
+        Annotated[Literal["tools", "model", "end"] | None, EphemeralValue, PrivateStateAttr]
+    ]
+    structured_response: NotRequired[Annotated[ResponseT, OmitFromInput]]
+```
+
+- `messages` 是必需字段；`add_messages` 是 Reducer，节点返回新消息时按消息 ID
+  追加或替换，不是简单覆盖整个列表。
+- `jump_to` 是 Agent 内部路由指令，只在紧邻的计算步传递，并且不对外暴露为
+  State 的输入或输出字段。
+- `structured_response` 是可选的结构化输出，其具体类型由泛型参数 `ResponseT`
+  决定；它不是调用者需要传入的字段。
+
+项目中的 `MemoryAgentState` 继承这个 `TypedDict`，再增加一个可选业务字段：
+
+```python
+class MemoryAgentState(AgentState):
+    last_memory_key: NotRequired[str]
+
+state: MemoryAgentState = {
+    "messages": [HumanMessage(content="记住我的默认城市是上海")],
+    "last_memory_key": "default_city",
+}
+
+assert type(state) is dict
+```
+
+Tool 通过 `ToolRuntime` 读取这三类对象：
+
+```python
+@tool
+def remember(key: str, value: str, runtime: ToolRuntime[UserContext, State]):
+    user_id = runtime.context.user_id
+    thread_id = runtime.config["configurable"]["thread_id"]
+    runtime.store.put(("users", user_id), key, {"value": value})
+```
+
+`@tool` 会把函数包装成 `StructuredTool`。`ToolRuntime[...]` 参数由框架在
+Tool 执行时注入，不会暴露给模型；例如 `remember_preference` 的模型可见
+Schema 只包含 `key: str` 和 `value: str`，模型不需要也不能构造 `runtime`。
+
+这里有三个容易混淆的方法：
+
+```text
+runtime.store.put(namespace, key, value)  新增或覆盖 Store 条目，返回 None
+runtime.state.get("messages", [])          普通 dict.get，读取 Tool 当前收到的 State
+agent.get_state(config)                    通过 Checkpointer 按 thread 读取 StateSnapshot
+```
+
+Store 使用 `namespace + key` 定位业务数据，`store.get(...)` 返回 `Item | None`；
+Graph State 由 Checkpointer 按 `thread_id` 保存，`agent.get_state(config).values` 才是该
+checkpoint 中的 State 字典。两套数据不会自动互相复制。
+
+Tool 如果返回 `Command(update=...)` 修改 Agent State，必须同时返回与当前
+`tool_call_id` 对应的 `ToolMessage`，否则消息协议不完整：
+
+```python
+return Command(
+    update={
+        "last_memory_key": key,
+        "messages": [
+            ToolMessage(content="已保存", tool_call_id=runtime.tool_call_id)
+        ],
+    }
+)
+```
+
+`tool_call_id` 在 Tool 执行时沿两条路径传递。`ToolNode` 从模型生成的
+`ToolCall["id"]` 构造 `runtime.tool_call_id`；同时 `BaseTool.invoke()` 也从同一个
+Tool Call 中取出 ID，用于处理普通返回值：
+
+```text
+普通返回值：
+Tool 返回 str/dict 等
+  → BaseTool 自动构造 ToolMessage(content=返回值, tool_call_id=ToolCall["id"])
+
+Command 返回值：
+Tool 返回 Command(update=...)
+  → Command 作为特殊 Tool 输出被原样保留，不再自动构造 ToolMessage
+  → ToolNode 校验 Command.update 中是否已有匹配 ToolCall["id"] 的 ToolMessage
+```
+
+因此 `Command` 的目的不是生成 `tool_call_id`，而是表达 State 更新或控制指令；
+正因为返回 `Command` 时跳过了普通返回值的自动 `ToolMessage` 封装，开发者才需要使用
+`runtime.tool_call_id` 手动补齐消息。ID 不匹配时，ToolNode 会直接抛出 `ValueError`。
+
+`return Command(...)` 这一行只是把 `Command` 对象交还给框架，不会在 Tool
+函数内直接修改 State。`create_agent()` 会把 Tool 注册到 `ToolNode`：
+
+```text
+ToolNode 调用 tool.invoke(...)
+  → 收到 Command
+  → 校验 Command.update 中的 ToolMessage/tool_call_id
+  → 把 Command 作为 tools Node 输出返回
+  → StateGraph 把 Command.update 拆成字段更新
+  → messages 使用 add_messages，last_memory_key 直接设置
+```
+
+因此 Tool 返回 `Command(update=...)` 的效果等价于一个 Node 返回 partial
+State update，只是它还可以同时表达 `goto`、`resume` 或父图控制。
+
+`InMemorySaver` 和 `InMemoryStore` 都不跨进程；二者区别是前者保存一个 thread 的
+Graph State，后者允许按用户 namespace 在多个 thread 之间共享长期数据。
+
+## 21. Agent Middleware 的真实执行位置
+
+[L14_Agent_Middleware.py](2_langchain/L14_Agent_Middleware.py) 使用实际
+`create_agent()` 路径覆盖以下扩展点：
+
+只要通过 `create_agent()` 创建 Agent，返回的就是内部构建并编译好的 LangGraph；并不只有
+HITL 才使用 Graph。区别在于普通 Demo 只让 Graph 自动完成 Model、Middleware 和 Tool 的
+路由，而 HITL 还显式使用 Checkpointer、interrupt 和 `Command(resume=...)` 暂停并恢复
+Graph。`tools=[]` 时不会创建 Tools Node；`wrap_model_call` 等包装器在对应 Node 内执行，
+自身不是一次独立的 Graph 跳转。
+
+教程应按直接学习和编写的 API 分层，而不是按底层依赖归类。使用
+`langchain.agents.create_agent` 和 `langchain.agents.middleware` 给现成 Agent 循环配置能力，
+属于 LangChain；LangChain Agent 虽然以 LangGraph 作为 State、Node、路由、持久化和 HITL
+运行时，但只有开始显式使用 `StateGraph`、`add_node()`、`add_edge()` 和条件边设计流程时，
+才进入 LangGraph 编程层。
+
+```text
+before_agent
+  ↓
+before_model → wrap_model_call(handler) → after_model
+  ↓ 有 tool_calls
+wrap_tool_call(handler)
+  ↓ 可能再次调用 Model
+after_agent
+```
+
+`@before_agent` 是 LangChain 提供的装饰器，不是 Python 内置关键字。装饰发生在模块
+加载阶段，近似等价于：
+
+```python
+def log_before_agent(state, runtime):
+    ...
+
+
+log_before_agent = before_agent(log_before_agent)
+```
+
+装饰后的名字指向一个实现了 `before_agent` Hook 的 `AgentMiddleware` 实例；把它放进
+`create_agent(middleware=[...])` 后，LangChain 会把这个 Hook 注册成 Agent Graph 的
+入口 Node。它位于 Model/Tool 循环之外，一次从入口开始的 Agent 运行只执行一次；
+`before_model` 位于循环内部，可能因 Tool 回环执行多次。
+
+Hook 收到当前 `state` 和本次 `runtime`。返回 `None` 表示只观察或执行外部副作用，
+不更新 State；返回 `dict` 表示 partial State update，之后仍按字段 Reducer 合并；也可以
+返回 `Command` 表达 State 更新和受声明约束的跳转。
+
+- `before_*` / `after_*` 观察或返回 State 更新。
+- `wrap_model_call`、`wrap_tool_call` 决定何时调用 `handler`，因此能实现动态 Prompt、
+  模型选择、工具重试和统一错误转换。
+- `request.override(model=..., tools=..., system_message=...)` 返回调整后的 Model Request，
+  可以按本轮 Context 动态选择模型和可见工具，不应直接改内部字段。
+- [L14_2_Agent_Middleware.py](2_langchain/L14_2_Agent_Middleware.py) 还使用
+  `request.override(tool_choice="flaky_course_lookup")` 要求本次模型返回指定
+  Tool Call；收到对应 `ToolMessage` 后改为 `tool_choice="none"`，避免重复调用。
+  `tool_choice` 只约束模型输出，真正执行 Python Tool 的仍是 Agent 的 Tool Node。
+- `RemoveMessage(id=REMOVE_ALL_MESSAGES)` 配合消息 Reducer 可以重建短上下文。例如
+  `{"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *messages[-2:]]}` 是一份包含
+  3 个元素的 partial update：先发出“删除全部消息”的指令，再放入原列表最后两条。
+  `add_messages` Reducer 合并后不会保留 `RemoveMessage`，最终 State 的 `messages`
+  只剩那两条；`messages[-2:]` 本身并未原地修改旧列表。
+- `SummarizationMiddleware` 是一个 `before_model` Hook：达到 `trigger` 阈值时，先按
+  `keep` 找到应保留的近期消息，再让摘要模型总结更早的消息。它返回的 partial update
+  形如 `[RemoveMessage(REMOVE_ALL_MESSAGES), 摘要消息, *近期消息]`，由
+  `add_messages` 重建 `State["messages"]`；摘要会被包装为带
+  `additional_kwargs={"lc_source": "summarization"}` 的 `HumanMessage`，随后回答模型的
+  `AIMessage` 再正常追加。它压缩当前 Agent 上下文，不等于跨 thread 长期记忆。
+  离线示例使用固定响应的 Fake Model，只验证触发、分区和 State 重建链路，不验证模型
+  是否真的根据输入生成了高质量摘要。
+- `FakeMessagesListChatModel(responses=[...])` 是 LangChain 内置的确定性测试模型。它不根据
+  输入推理，而是依次返回预置的 `BaseMessage`，到列表末尾后循环；因为响应本身是完整
+  Message，所以可以预置 `AIMessage` 的 `tool_calls`、metadata 等结构。相近的
+  `FakeListChatModel` 接收的是 `list[str]`，由 `SimpleChatModel` 再把字符串包装成
+  `AIMessage`。内置 `FakeMessagesListChatModel` 没有实现 `bind_tools()`；若要把非空
+  `tools` 交给 `create_agent()` 完整执行 Tool Calling，需要换成支持工具绑定的模型，或像
+  本项目一样使用自定义 `ToolCallingFakeChatModel`。这些 Fake Model 适合离线示例和单元
+  测试，不是生产模型。
+- `PIIMiddleware` 可以对输入、模型输出和 Tool 结果执行 block/redact/mask/hash。本课的
+  `apply_to_input=True` 让 `before_model` 检查最新一条 `HumanMessage`，因此模型看到的
+  已经是脱敏输入；`apply_to_output=True` 让 `after_model` 检查最新一条 `AIMessage`。
+  两个 Hook 都创建内容已脱敏、但 message ID 不变的新消息，再由 `add_messages` 替换
+  原位置，而不是追加重复消息。本课实际验证输入和输出邮箱都被替换为
+  `[REDACTED_EMAIL]`。这只覆盖配置的数据面，不能替代权限控制、模型提供商的数据策略、
+  外部日志清洗、传输保护和存储加密。
+- `ModelRetryMiddleware` 的 `max_retries` 是第一次调用后的重试次数。例如
+  `max_retries=1` 最多执行 `1 次初始调用 + 1 次重试 = 2 次模型调用`。Middleware
+  在一次 Model Node 内重复调用同一个下游 `handler(request)`；失败的调用没有产生
+  `ModelResponse`，因此不会先向 State 写入一条失败消息。只有最终成功响应，或者进入
+  失败处理后由 `on_failure="continue"` / 自定义函数生成的错误 `AIMessage`，才会作为
+  Model Node 的 partial update 合并进 `messages`。`on_failure="error"` 则重新抛出异常。
+  `ToolRetryMiddleware` 可以只匹配指定 Tool 和异常类型。
+- `ModelCallLimitMiddleware` 与 `ToolCallLimitMiddleware` 防止一次运行无限调用。
+- `HumanInTheLoopMiddleware` 的 `after_model` Hook 会在模型生成敏感 Tool Call 后、Tool
+  真正执行前调用 `interrupt()`，把 `action_requests` 和 `review_configs` 暴露给审批端。
+  Interrupt 依赖 Checkpointer；恢复时必须使用同一个 Agent/checkpointer、同一个
+  `thread_id`，并传入 `Command(resume={"decisions": [...]})`。恢复会从被中断 Node 的
+  开头重新执行，但同位置的 `interrupt()` 会直接返回 resume 值，不会再次暂停。
+  `approve` 保留待执行 Tool Call，随后进入真实 Tool Node；`reject` 不执行 Tool，而是生成
+  与原调用 `tool_call_id` 匹配、`status="error"` 的人工 `ToolMessage`，让 Agent 回到模型
+  继续回答。`InMemorySaver` 只在当前进程内保存暂停状态，不是生产级持久化。
+
+Wrapper 的核心结构是：
+
+```python
+@wrap_tool_call
+def observe_tool(request, handler):
+    audit("before", request.tool_call["name"])
+    result = handler(request)
+    audit("after", request.tool_call["name"])
+    return result
+
+retry = ToolRetryMiddleware(
+    max_retries=1,
+    tools=["flaky_course_lookup"],
+    retry_on=ConnectionError,
+)
+```
+
+`handler` 是本层 Middleware 的下游调用链，不一定只是裸 Tool。本课将审计 Wrapper 和
+`ToolRetryMiddleware` 组合，第一次调用失败、第二次成功。若 Tool 已产生部分外部副作用，
+框架不会自动回滚，仍需幂等键、去重或补偿。
+
+## 22. MCP：远程能力协议，不是 Agent 本身
+
+[L15_MCP_Integration.py](2_langchain/L15_MCP_Integration.py) 和
+[mcp_demo_server.py](2_langchain/mcp_demo_server.py) 使用两个本地进程验证 MCP：
+
+```text
+LangChain Agent
+  ↓ BaseTool
+MCP Adapter Client
+  ↓ stdio transport
+MCP Server
+  ├─ Tool：可执行能力
+  ├─ Resource：由 Client 主动读取的内容
+  └─ Prompt：由 Client 主动加载的消息模板
+```
+
+Client 动态发现 Tool 后，可以直接交给普通 Agent：
+
+```python
+client = MultiServerMCPClient({
+    "course": {
+        "transport": "stdio",
+        "command": sys.executable,
+        "args": [str(server_path)],
+    }
+})
+
+tools = await client.get_tools(server_name="course")
+agent = create_agent(model=model, tools=tools)
+result = await agent.ainvoke({"messages": [...]})
+```
+
+Resource 和 Prompt 不会因为 `get_tools()` 自动进入 Agent 上下文，需要显式 session：
+
+```python
+async with client.session("course") as session:
+    resources = await load_mcp_resources(session, uris="course://MCP")
+    prompt = await load_mcp_prompt(session, "explain_topic", arguments={"topic": "MCP"})
+```
+
+MCP 统一的是发现和调用协议，不自动提供安全边界。文件访问范围、命令白名单、网络权限、
+认证、超时和审计仍要由 Server、Client 拦截器及 Sandbox 共同控制。

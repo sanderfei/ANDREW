@@ -1406,7 +1406,7 @@ groups[1][1]  # "d"
 
 `list[list[str]]` 只是描述两层列表的数据形状，不会自动排序或修改数据。
 
-### 4.13 `[:4]`、`[:6]` 对列表同样是切片
+### 4.13 `[:4]`、`[:6]`、`[-2:]` 对列表同样是切片
 
 ```python
 first_four = values[:4]
@@ -1420,9 +1420,13 @@ values = ["a", "b", "c", "d", "e"]
 
 values[:3]  # ["a", "b", "c"]
 values[:9]  # 不会报错，返回全部五项
+values[-2:]  # ["d", "e"]，从倒数第二项一直取到末尾
 ```
 
-它不会修改原列表。切片语法相同，但具体切的是字符、字节还是列表元素，取决于被切片对象的类型。
+负索引从末尾计数：`-1` 是最后一项，`-2` 是倒数第二项。因此 `values[-2:]`
+会创建一个只包含最后两项的新列表。切片不会修改原列表；如果元素是对象，新旧列表中
+对应位置仍引用同一个元素对象。切片语法相同，但具体切的是字符、字节还是列表元素，
+取决于被切片对象的类型。
 
 ### 4.14 `range(start, stop, step)`、列表分片与分批生成器
 
@@ -4286,7 +4290,50 @@ nested = ["系统消息", messages]
 
 此时第二项是完整的子列表，结构变成了嵌套列表。
 
-## 18. 语法速查
+## 18. `global` 修改模块级变量
+
+`global` 是 Python 关键字。它在函数内部声明：这个函数对指定变量名的赋值，应该
+作用于当前模块的全局命名空间，而不是创建同名局部变量。
+
+```python
+TOOL_ATTEMPTS = 0
+
+
+def record_attempt() -> None:
+    global TOOL_ATTEMPTS
+    TOOL_ATTEMPTS += 1
+```
+
+`TOOL_ATTEMPTS += 1` 同时包含“读取旧值”和“重新赋值”。如果删掉 `global`，只要
+函数体内出现赋值，Python 就会把 `TOOL_ATTEMPTS` 判定为局部变量；执行时又会在局部
+变量完成赋值前读取它，因此抛出 `UnboundLocalError`。
+
+只读取全局变量，或者修改全局变量所指向的可变对象时，不需要 `global`：
+
+```python
+EVENTS: list[str] = []
+
+
+def show_count() -> int:
+    return len(EVENTS)       # 只读取变量名
+
+
+def clear_events() -> None:
+    EVENTS.clear()           # 修改原列表对象，没有重新绑定 EVENTS
+```
+
+如果改成给变量名绑定一个新对象，就需要 `global`：
+
+```python
+def replace_events() -> None:
+    global EVENTS
+    EVENTS = []              # 把模块变量 EVENTS 重新绑定到新列表
+```
+
+因此，`global` 控制的是“变量名在哪里绑定”，不是“对象能不能修改”。这里的全局范围
+是当前 Python 模块在当前进程中的命名空间，不代表跨进程共享。
+
+## 19. 语法速查
 
 ```text
 """说明文字"""
