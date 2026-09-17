@@ -137,7 +137,11 @@ Windows VS Code 的实际用户配置文件通常位于：
 cd ~/code/andrew
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -r 3_rag_from_scratch/requirements.txt
+.venv/bin/python -m pip install \
+  -r 2_langchain/requirements.txt \
+  -r 3_rag_from_scratch/requirements.txt \
+  -r 4_rag_knowledge_base_service/requirements.txt \
+  -r 5_langgraph_agentic_rag/requirements.txt
 .venv/bin/python -m pip check
 ```
 
@@ -149,14 +153,28 @@ python3 -m venv .venv
 
 看到 `indexed_chunk_count` 为 `4` 且正常输出答案，说明 Python、依赖和代码层已经就绪。
 
+再运行完全离线的 LangChain/LangGraph 基础补充冒烟：
+
+```bash
+.venv/bin/python 5_langgraph_agentic_rag/scripts/smoke_foundations.py
+```
+
+看到 `Foundation supplement smoke passed`，说明 Runtime/Store、Middleware、MCP、并行、
+子图、异步 Streaming 和 Functional API 所需依赖均可用。
+
 当前 `requirements.txt` 使用兼容版本范围，不是严格锁定文件。工作机已验证的核心版本是：
 
 ```text
 Python 3.12.3
+langchain 1.3.11
 langchain-core 1.4.8
 langchain-openai 1.2.2
 langchain-text-splitters 1.1.2
 langchain-community 0.4.2
+langgraph 1.2.8
+langgraph-checkpoint-sqlite 3.1.0
+deepagents 0.6.12
+langchain-mcp-adapters 0.3.2
 fastembed 0.8.0
 onnxruntime 1.27.0
 ```

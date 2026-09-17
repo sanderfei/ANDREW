@@ -2892,6 +2892,21 @@ if part.strip():
 
 `strip()` 后还有内容时条件为真；变成空字符串时条件为假。
 
+整数也有真值：`0` 为 `False`，任何非零整数（包括负数）都为 `True`。
+因此 `if failures_remaining:` 对整数来说是在判断它是否**不为 0**，不是判断它是否为 0。
+
+```python
+failures_remaining = 1
+if failures_remaining:          # bool(1) 是 True
+    failures_remaining -= 1     # 变成 0
+    raise ConnectionError("模拟第一次失败")
+
+# 下次执行到 if 时，bool(0) 是 False，会跳过这个分支。
+```
+
+如果只允许正数进入，应明确写 `if failures_remaining > 0:`；`if failures_remaining:`
+在值为 `-1` 时也会进入分支。
+
 ### 9.6 `or` 可以提供后备值
 
 ```python
@@ -3797,6 +3812,18 @@ result = await coroutine
 ```
 
 `await` 表示暂停当前协程，等待异步操作完成，同时把事件循环的执行机会交给其他任务。
+
+`async with` 是异步上下文管理语法。进入和退出代码块时可以等待异步操作，常用于连接
+会话的建立与关闭：
+
+```python
+async with client.session("course") as session:
+    resources = await load_mcp_resources(session, uris="course://MCP")
+    prompts = await load_mcp_prompt(session, "explain_topic", arguments={"topic": "MCP"})
+```
+
+这里先取得 `session`，再按代码顺序等待 Resource 和 Prompt 两次读取，离开代码块时
+关闭会话。`async with` 不表示代码块内的两个 `await` 会并发执行。
 
 ### 13.2 `asyncio.gather()` 并发等待多个异步任务
 

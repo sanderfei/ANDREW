@@ -3395,6 +3395,32 @@ State update，只是它还可以同时表达 `goto`、`resume` 或父图控制�
 `InMemorySaver` 和 `InMemoryStore` 都不跨进程；二者区别是前者保存一个 thread 的
 Graph State，后者允许按用户 namespace 在多个 thread 之间共享长期数据。
 
+### 20.1 保存历史与发送给模型的上下文
+
+本地存储可以保存大量原始对话、用户事实或文档；模型每次只能读取本次请求实际放入的
+消息。把历史写入文件或数据库不会自动增加模型上下文窗口，也不要求每次发送全部历史。
+常见做法是把当前摘要、最近几轮原文和从长期存储检索出的少量相关信息组成请求。
+
+| 机制 | 保存什么 | 是否自动缩短模型请求 |
+| --- | --- | --- |
+| Checkpointer | 按 `thread_id` 保存当前 Agent State，供同一会话继续 | 否；它负责持久化，不负责压缩 |
+| `SummarizationMiddleware` | 达到阈值时，用摘要替换当前 State 中较早的消息，保留近期原文 | 是；后续主模型读取的是更新后的 `messages` |
+| Store、文件或外部数据库 | 按用户或业务键保存事实、完整记录、文档等 | 否；需要显式检索并只把相关部分加入请求 |
+
+L14 的 `summarization_demo()` 没有配置 Checkpointer 或 Store，只处理本次
+`agent.invoke()` 提供的 5 条消息。摘要模型读取待压缩的前 3 条；当前 State 随后变成
+“摘要 + 最近 2 条”，主模型读这 3 条并追加回答，最终得到 4 条消息。这里的 Fake
+Model 返回固定内容，不具备真正的记忆或摘要能力。阈值再次达到时可继续摘要，但每次
+压缩都有丢失细节的可能。
+
+需要本地持久化时，可用 SQLite Checkpointer 保存同一 thread 的 State，并用持久化的
+Store 或数据库保存跨 thread 的用户事实；原始对话如需完整留存，应另存并在需要时检索。
+当前环境提供 `SqliteSaver` 和 `SqliteStore`，两者都可连接本地 SQLite 文件；Store 首次
+使用前需要 `setup()`。它们负责保存，不会自行摘要或把存储内容注入模型。
+`InMemorySaver`、`InMemoryStore` 重启后都会丢失数据。无论原始数据保存在哪里，都应
+明确选择本轮真正需要进入模型请求的部分。模型服务的 Prompt Cache 只复用重复输入的
+计算，不会自动恢复会话记忆或扩大模型上下文窗口。
+
 ## 21. Agent Middleware 的真实执行位置
 
 [L14_Agent_Middleware.py](2_langchain/L14_Agent_Middleware.py) 使用实际
@@ -3438,6 +3464,17 @@ log_before_agent = before_agent(log_before_agent)
 入口 Node。它位于 Model/Tool 循环之外，一次从入口开始的 Agent 运行只执行一次；
 `before_model` 位于循环内部，可能因 Tool 回环执行多次。
 
+两者都接收 `(state, runtime)`，选择时主要看逻辑需要执行几次：
+
+| Hook | 执行时机 | 常见用途 |
+| --- | --- | --- |
+| `before_agent` | 每次 Agent 运行开始时一次，先于模型循环 | 校验初始输入、加载本次运行要用的用户信息、记录运行开始日志 |
+| `before_model` | 每轮进入 Model 节点前一次；Tool 返回后若继续调用模型，会再次执行 | 根据最新 State 裁剪或摘要消息、检查本轮模型调用条件、记录每轮日志 |
+
+这里的“一次”指一次 Agent 运行，不是创建 Agent 对象时只执行一次。L14 示例的
+`log_before_agent` 只记录进入时的租户与消息数量；`trim_before_model` 则检查每轮的
+消息列表，必要时返回裁剪更新。
+
 Hook 收到当前 `state` 和本次 `runtime`。返回 `None` 表示只观察或执行外部副作用，
 不更新 State；返回 `dict` 表示 partial State update，之后仍按字段 Reducer 合并；也可以
 返回 `Command` 表达 State 更新和受声明约束的跳转。
@@ -3464,6 +3501,14 @@ Hook 收到当前 `state` 和本次 `runtime`。返回 `None` 表示只观察或
   `AIMessage` 再正常追加。它压缩当前 Agent 上下文，不等于跨 thread 长期记忆。
   离线示例使用固定响应的 Fake Model，只验证触发、分区和 State 重建链路，不验证模型
   是否真的根据输入生成了高质量摘要。
+- `SummarizationMiddleware(model=...)` 的 `model` 是用于生成摘要的 ChatModel；可以与
+  `create_agent(model=...)` 使用同一个模型，也可以使用单独、较轻量的模型。摘要只需要
+  文本生成能力，不要求 Tool Calling。达到 `trigger` 时，它会额外调用摘要模型，得到
+  摘要后才让 Agent 主模型继续回答，不会递归进入 Agent 模型节点。生产选型应检查摘要能否
+  保留关键事实、约束和 Tool 结果，同时比较上下文容量、延迟与成本；本课的
+  `trigger=("messages", 4)` 仅为演示。若两个模型的上下文窗口不同，尤其要注意
+  `("fraction", ...)` 会参照摘要模型的 profile 计算阈值，可改用按主模型预算设定的
+  绝对 token 阈值。
 - `FakeMessagesListChatModel(responses=[...])` 是 LangChain 内置的确定性测试模型。它不根据
   输入推理，而是依次返回预置的 `BaseMessage`，到列表末尾后循环；因为响应本身是完整
   Message，所以可以预置 `AIMessage` 的 `tool_calls`、metadata 等结构。相近的
@@ -3496,6 +3541,40 @@ Hook 收到当前 `state` 和本次 `runtime`。返回 `None` 表示只观察或
   与原调用 `tool_call_id` 匹配、`status="error"` 的人工 `ToolMessage`，让 Agent 回到模型
   继续回答。`InMemorySaver` 只在当前进程内保存暂停状态，不是生产级持久化。
 
+### `before_model` 与 `wrap_model_call`
+
+`before_model(state, runtime)` 在每轮 Model 节点之前执行，适合观察或返回 partial
+State update，例如裁剪 `state["messages"]`。它没有 `handler`，不能包住这次模型调用并
+处理返回值。
+
+`wrap_model_call(request, handler)` 在 Model 节点内包住本轮调用：先读取或通过
+`request.override(...)` 调整本次 `ModelRequest`，再调用 `handler(request)`，最后可以
+读取、修改或替换 `ModelResponse`。`handler` 是继续执行后续包装器及模型的入口；
+调用多次可实现重试，不调用则可直接返回缓存或兜底结果。本次 `request.override(...)`
+不会直接改写 Agent State。
+
+```text
+before_model 可更新 State → wrap_model_call 调用前逻辑
+  → handler(request) → 模型返回 → wrap_model_call 调用后逻辑 → after_model
+```
+
+L14 示例中，`trim_before_model` 把 7 条历史消息裁成 2 条；紧接着
+`add_dynamic_system_message` 用 `request.override(...)` 为本轮选择模型、过滤工具、
+设置 SystemMessage，调用 `handler(scoped_request)` 后再记录响应。Tool 执行后回到
+Model 时，这两个 Hook 会再次执行；若只是在一个 `wrap_model_call` 内重试
+`handler`，`before_model` 不会因重试而重复执行。
+
+L14 中的 `log_tool_call` 使用的是 `@wrap_tool_call`，在 Tool 节点包住具体 Tool
+调用；它不是模型包装器的一部分。模型先生成 Tool Call，`after_model` 执行后才进入
+Tool 节点。本例的实际顺序是：
+
+```text
+before_agent → before_model → add_dynamic_system_message（模型前 → 模型 → 模型后）
+→ after_model → log_tool_call（工具前 → ToolRetry 尝试两次 → 工具后）
+→ before_model → add_dynamic_system_message（模型前 → 模型 → 模型后）
+→ after_model → after_agent
+```
+
 Wrapper 的核心结构是：
 
 ```python
@@ -3517,10 +3596,15 @@ retry = ToolRetryMiddleware(
 `ToolRetryMiddleware` 组合，第一次调用失败、第二次成功。若 Tool 已产生部分外部副作用，
 框架不会自动回滚，仍需幂等键、去重或补偿。
 
-## 22. MCP：远程能力协议，不是 Agent 本身
+## 22. MCP：Agent 与能力提供方之间的协议
 
 [L15_MCP_Integration.py](2_langchain/L15_MCP_Integration.py) 和
 [mcp_demo_server.py](2_langchain/mcp_demo_server.py) 使用两个本地进程验证 MCP：
+
+MCP（Model Context Protocol）定义 Client 如何发现和调用 Server 提供的能力与资料。
+它的目的是让 Agent 应用按统一接口接入独立的能力提供方；Server 可以是本机子进程，
+也可以是网络服务。本课使用 `stdio`，所以“跨进程”不等于“访问互联网”。MCP 本身
+不是模型、Agent 或自动记忆系统。
 
 ```text
 LangChain Agent
@@ -3532,6 +3616,26 @@ MCP Server
   ├─ Resource：由 Client 主动读取的内容
   └─ Prompt：由 Client 主动加载的消息模板
 ```
+
+### 22.1 如何选择 Tool、Resource、Prompt
+
+`@mcp.tool()`、`@mcp.resource(...)`、`@mcp.prompt(...)` 是 `FastMCP` 的注册方式，
+不是每个 Server 都必须同时实现的三个方法。只发布 Tool 的 Server 也可以正常工作。
+装饰器在 Server 模块加载时登记函数；登记本身不执行函数，收到匹配的请求后才执行。
+
+| 类型 | 典型用途 | 通常由谁选择 | 定位方式 |
+| --- | --- | --- | --- |
+| Tool | 搜索、计算、查询或操作；模型需要按任务决定是否调用 | 模型，也可以由程序直接调用 | 工具名和参数 |
+| Resource | 已确定要读取的文档、文件、配置或其他资料 | Client 应用选择并决定是否放进模型上下文 | 具体 URI |
+| Prompt | 可复用的提问或任务消息模板 | 通常由用户选择，Client 加载后决定如何使用 | Prompt 名称和参数 |
+
+不能仅凭函数是否“查询数据”区分：只读查询也可以做成 Tool。关键是希望模型
+自行决定何时调用，还是由 Client 选定资料或消息模板。MCP 并不强制某种用户界面。
+
+L14 的 `@tool` 直接把当前项目的 Python 函数注册为 LangChain Tool；L15 的
+`@mcp.tool()` 把函数发布在另一个 Server 进程中，Client 经 MCP 协议发现和调用，
+Adapter 再把它表示为 LangChain `BaseTool`。两者最终都能供 Agent 执行 Tool Call；
+区别是是否通过 MCP 的 Client/Server 协议边界，不在于工具是否访问网络。
 
 Client 动态发现 Tool 后，可以直接交给普通 Agent：
 
@@ -3556,6 +3660,55 @@ async with client.session("course") as session:
     resources = await load_mcp_resources(session, uris="course://MCP")
     prompt = await load_mcp_prompt(session, "explain_topic", arguments={"topic": "MCP"})
 ```
+
+### 22.2 Server 注册与 Client 入参如何对应
+
+Server 用 `@mcp.resource("course://{topic}", name="course_material",
+description="...", mime_type="text/markdown")` 注册动态资源模板。
+`course://` 是本例自定义的 URI 格式，不表示访问网络；`{topic}` 对应
+`course_material(topic: str)` 的参数。`name`、`description` 用于发现和描述资源，
+`mime_type` 标明返回内容类型；本例读取资源时按 URI 定位，而不是按
+`name="course_material"` 定位。
+
+```text
+load_mcp_resources(session, uris="course://MCP")
+  → MCP resources/read，uri="course://MCP"
+  → 匹配 course://{topic}，得到 topic="MCP"
+  → 执行 course_material(topic="MCP")
+  → 返回文本资料，Adapter 转成 LangChain Blob
+
+load_mcp_prompt(session, "explain_topic", arguments={"topic": "MCP"})
+  → MCP prompts/get，name="explain_topic"，arguments={"topic": "MCP"}
+  → 执行 @mcp.prompt(name="explain_topic") 注册的 explain_topic(topic="MCP")
+  → 返回模板消息，Adapter 转成 LangChain HumanMessage
+```
+
+`load_mcp_resources` 和 `load_mcp_prompt` 是 Client 侧的 LangChain Adapter 函数，
+不会直接导入或调用 Server 文件里的 Python 函数。L15 示例预先知道 URI 模板、Prompt
+名称和参数，所以把 `course://MCP`、`explain_topic` 与 `topic` 写在代码中。通用 Client
+可先用 `session.list_resource_templates()`、`session.list_prompts()` 发现这些信息。
+动态资源模板需要具体参数；`load_mcp_resources(session)` 不带 URI 时只列举普通资源，
+不会自动展开 `course://{topic}` 的所有可能取值。
+
+这里的 `"course"` 是 `build_client()` 中配置的 Server 名，`"MCP"` 是业务主题。
+Tool 对象的 `.ainvoke()` 会通过 Adapter 处理 MCP 会话；Resource 和 Prompt 的加载函数
+需要显式传入 `ClientSession`。四次读取分别调用 Server 的
+`course_lookup("MCP")`、`add_numbers(7, 5)`、`course_material("MCP")` 和
+`explain_topic("MCP")`，结果相互独立。
+
+`run_demo()` 的工具调用分成两条互不依赖的验证路径：
+
+1. `tools_by_name["course_lookup"].ainvoke({"topic": "MCP"})` 和
+   `tools_by_name["add_numbers"].ainvoke({"a": 7, "b": 5})` 是程序直接调用 MCP Tool，
+   用来验证工具可以返回课程资料与 `12`；这些结果没有作为输入传给后面的 Agent。
+2. `create_agent(model=model, tools=tools)` 把同一批工具交给 Agent。假模型第一次返回
+   `AIMessage(tool_calls=[course_lookup(topic="LangGraph")])`；Agent 才经 MCP Server 执行
+   Tool 并追加 `ToolMessage`，然后第二次调用假模型得到固定的最终回答。
+
+Resource 和 Prompt 也只在上面的 `session` 中被显式读取，并放进 `run_demo()` 的输出
+字典；当前代码没有把它们传给 Agent。MCP Tool 返回值可能是文本 content blocks 的
+`list`，所以直接调用的结果通过 `_content_text()` 提取文本；Agent 路径则由
+`ToolMessage` 保存工具结果。
 
 MCP 统一的是发现和调用协议，不自动提供安全边界。文件访问范围、命令白名单、网络权限、
 认证、超时和审计仍要由 Server、Client 拦截器及 Sandbox 共同控制。
