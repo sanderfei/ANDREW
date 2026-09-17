@@ -153,15 +153,6 @@ python3 -m venv .venv
 
 看到 `indexed_chunk_count` 为 `4` 且正常输出答案，说明 Python、依赖和代码层已经就绪。
 
-再运行完全离线的 LangChain/LangGraph 基础补充冒烟：
-
-```bash
-.venv/bin/python 5_langgraph_agentic_rag/scripts/smoke_foundations.py
-```
-
-看到 `Foundation supplement smoke passed`，说明 Runtime/Store、Middleware、MCP、并行、
-子图、异步 Streaming 和 Functional API 所需依赖均可用。
-
 当前 `requirements.txt` 使用兼容版本范围，不是严格锁定文件。工作机已验证的核心版本是：
 
 ```text

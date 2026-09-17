@@ -1,6 +1,6 @@
 # 目录 5：LangGraph Agentic RAG
 
-本目录对应学习路线第 8–9 周的 LangGraph 主线：先把目录 4 已验证的本地知识库检索能力包装成 Tool，再逐步学习显式控制流、Reducer、Streaming、容错、持久化、时间旅行、人工确认、多工具编排、FastAPI 服务化、评测、并行任务、子图、异步运行和 Functional API。
+本目录对应学习路线第 8–9 周的 LangGraph 主线：先把目录 4 已验证的本地知识库检索能力包装成 Tool，再逐步学习显式控制流、Reducer、Streaming、容错、持久化、时间旅行、人工确认、多工具编排、FastAPI 服务化和评测。
 
 主教程来自 LangChain 官方：
 
@@ -50,10 +50,6 @@
 | 8 | `part8_controlled_multi_tool_graph.py` | RAG + SQL + HITL 受控多工具图 |
 | 9 | `part9_fastapi_runtime.py` | invoke、SSE stream、thread resume API |
 | 10 | `part10_evaluate.py` | 路由轨迹、引用、只读与审批合同评测 |
-| 11 | `part11_parallel_send.py` | 并行分支、fan-in、Reducer、`Send` 动态任务 |
-| 12 | `part12_subgraphs.py` | 子图、状态 Schema、checkpoint 模式、父图跳转 |
-| 13 | `part13_async_streaming.py` | 异步 Graph、完整 Streaming、运行限制 |
-| 14 | `part14_functional_api.py` | `@task`、`@entrypoint`、恢复与增量运行 |
 
 ### Part 1：Graph 基础
 
@@ -296,76 +292,12 @@ route_request
   --output 5_langgraph_agentic_rag/reports/evaluation.json
 ```
 
-### Part 11：并行分支、fan-in 与 `Send`
-
-[part11_parallel_send.py](part11_parallel_send.py) 同时演示两类并行：
-
-- 静态 fan-out：一条边进入多个 Node，再由列表边等待全部完成后 fan-in。
-- 动态 fan-out：路由 Node 返回多个 `Send("analyze_subject", item)`，按运行时数据创建任务。
-- 并行 Node 更新同一字段时必须配置 Reducer，否则触发 `InvalidUpdateError`。
-- `config["max_concurrency"]` 控制同一批任务的最大并发数。
-
-```bash
-.venv/bin/python \
-  5_langgraph_agentic_rag/part11_parallel_send.py \
-  --max-concurrency 3
-```
-
-### Part 12：Subgraph 子图
-
-[part12_subgraphs.py](part12_subgraphs.py) 展示父图组合子图时最容易混淆的边界：
-
-- 子图可以和父图共享 State，也可以通过包装 Node 转换不同 State Schema。
-- `input_schema`、`output_schema` 与内部私有字段可以限制对子图的输入输出。
-- 子图 `checkpointer=None/True/False` 分别表示默认继承、同 thread 保留内部状态和关闭持久化。
-- `stream(..., subgraphs=True)` 会返回 namespace，用于识别事件属于哪层图。
-- 子图可以用 `Command.PARENT` 把控制权交给父图中的指定 Node。
-
-```bash
-.venv/bin/python 5_langgraph_agentic_rag/part12_subgraphs.py
-```
-
-### Part 13：异步 Graph 与完整 Streaming
-
-[part13_async_streaming.py](part13_async_streaming.py) 使用真正的 `async def` Node 和
-`astream()`，覆盖 `values`、`updates`、`messages`、`custom`、`checkpoints`、`tasks`
-及 `debug` 事件。示例还演示：
-
-- `RunnableConfig` 传递 `thread_id`、tags、metadata 和 `max_concurrency`。
-- `aget_state()` 异步读取最新 checkpoint。
-- `recursion_limit` 阻止失控循环。
-- Graph 的 `timeout` 把过慢 Node 转换为 `NodeTimeoutError`。
-
-```bash
-.venv/bin/python \
-  5_langgraph_agentic_rag/part13_async_streaming.py \
-  --max-concurrency 2
-```
-
-### Part 14：Functional API
-
-[part14_functional_api.py](part14_functional_api.py) 用 `@task` 和 `@entrypoint` 表达动态
-工作流。它与 Graph API 使用同一套 persistence、interrupt 和 `Command(resume=...)`
-能力，但控制流写成普通 Python：
-
-- `task()` 返回 Future，读取 `.result()` 时取得结果。
-- checkpoint 会保存已完成 Task 的结果，恢复 entrypoint 时不会重复其外部副作用。
-- entrypoint 函数的 `previous` 参数读取同一 thread 上一轮的持久化输出。
-- `entrypoint.final(value=..., save=...)` 分开“本轮返回值”和“下一轮 previous”。
-
-```bash
-.venv/bin/python \
-  5_langgraph_agentic_rag/part14_functional_api.py \
-  --decision approve
-```
-
 ## 安装依赖
 
 当前 `.venv` 已包含目录 4 的依赖和 LangGraph。新环境运行：
 
 ```bash
 .venv/bin/pip install \
-  -r 2_langchain/requirements.txt \
   -r 4_rag_knowledge_base_service/requirements.txt \
   -r 5_langgraph_agentic_rag/requirements.txt
 ```
@@ -399,17 +331,6 @@ Part 5～10 高级冒烟：
 
 高级冒烟覆盖 Reducer/Streaming、重试与补偿、SQLite 恢复/replay/fork、受控多工具路线、approve/reject、FastAPI、SSE 和六条评测用例。它同样只使用临时目录，不保留测试数据库或测试索引。
 
-L13～L15 与 Part 11～14 基础补充冒烟：
-
-```bash
-.venv/bin/python 5_langgraph_agentic_rag/scripts/smoke_foundations.py
-```
-
-它覆盖 Runtime Context/Store、Middleware 生命周期、动态 Model/Tool、调用重试与限制、
-摘要与 PII、MCP 子进程协议、并行与 `Send`、子图、异步 Streaming、运行限制和
-Functional API 的 interrupt/resume。全部使用 Fake Model 或本地进程，不需要 API Key
-和网络。
-
 ## 关键输入输出
 
 `graph.invoke(initial_state(...))` 返回完整 State；`public_result()` 提取稳定字段：
@@ -430,9 +351,9 @@ Functional API 的 interrupt/resume。全部使用 Fake Model 或本地进程，
 
 - `offline` 是确定性 Graph 教学模式，不伪装成模型推理。
 - `live` 才让聊天模型决定工具调用、判断证据、改写查询和生成答案。
-- 本目录已经补齐单 Agent/Graph 的常用基础，但不做多 Agent、Supervisor 或远程 Agent；这些属于下一阶段 Agent Harness 编排。
+- 本目录使用单 Agent 和显式多工具图，不做多 Agent、Supervisor 或远程 Agent。
 - SQL 示例是本地教学数据，不连接真实业务数据库。
 - 人工确认后的“导出”仍只产生教学预览，不执行外部副作用。
 - SQLite checkpointer 用于本地学习；生产 PostgreSQL、连接池和多副本并发不在本目录内。
 - FastAPI 是单进程本地适配，不等同于 LangGraph Platform 部署。
-- Part 10 是确定性合同评测；LangSmith 在线 tracing、数据集和线上反馈闭环留给后续 Harness 可观测性专题。
+- Part 10 是确定性合同评测；LangSmith 在线 tracing、数据集和线上反馈闭环留给后续可观测性专题。
