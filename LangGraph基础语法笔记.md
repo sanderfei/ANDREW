@@ -2931,8 +2931,8 @@ Replay 和 fork 都可能重新执行 checkpoint 之后的 Node，因此 Node �
 
 ## 22. 并行分支、fan-in 与 `Send`
 
-[part11_parallel_send.py](5_langgraph_agentic_rag/part11_parallel_send.py) 同时验证静态和
-动态并行。
+[part11_parallel_send.py](5_langgraph_agentic_rag/part11_parallel_send.py) 是并行任务编排教程：
+把任务分开执行，再合并结果。当前使用普通 Python 函数模拟工作，不调用大模型或真实检索服务。
 
 ### 22.1 静态 fan-out / fan-in
 
@@ -2949,42 +2949,102 @@ workflow.add_edge("plan", "read_examples")
 workflow.add_edge(["read_docs", "read_examples"], "merge_sources")
 ```
 
-这不是普通 Python 按代码行先执行 `read_docs`、再执行 `read_examples`。两项任务可以并行，
-但下游只能读取 Reducer 合并后的 State。
+`add_edge()` 的先后顺序不是节点的执行顺序。两项任务在同一轮 superstep 中被调度，
+各自产生更新，轮末合并 State，后续 `merge_sources` 才读取合并后的结果。
 
-### 22.2 并行写入必须声明 Reducer
+`config={"max_concurrency": 2}` 允许两项任务的执行时间重叠，但不保证同一瞬间开始、
+同一瞬间结束。本例同步节点中的 `time.sleep()` 可以在线程执行期间重叠；Part 13 则用
+`await asyncio.sleep()` 展示异步等待的重叠。并发编排本身不保证 Python 的 CPU 计算同时执行。
+
+设为 `max_concurrency=1` 后，任务按并发上限排队执行，但仍属于同一个 superstep，
+不会自动变成 `read_docs -> read_examples` 的依赖关系。
+
+### 22.2 `conflict_demo`：同一轮写同一字段为什么冲突
 
 ```python
-class ParallelState(TypedDict):
-    results: Annotated[list[dict], operator.add]
+class ConflictState(TypedDict, total=False):
+    value: str
+
+
+# branch_a 返回 {"value": "A"}
+# branch_b 返回 {"value": "B"}
+workflow.add_edge(START, "branch_a")
+workflow.add_edge(START, "branch_b")
+workflow.add_edge("branch_a", END)
+workflow.add_edge("branch_b", END)
 ```
 
-并行 Node 各自返回 `{"results": [item]}`，superstep 结束时通过 `operator.add` 合并。
-如果两个并行 Node 同时写普通字段，LangGraph 会抛 `InvalidUpdateError`，不会让“最后完成者”
-随机覆盖前一个结果。
+普通字段默认使用 `LastValue` 通道：同一个 superstep 最多接收一次更新。本例轮末收到
+`value` 的两次更新，没有定义合并规则，因此抛 `InvalidUpdateError`；不会按任务完成时间
+决定保留 `"A"` 还是 `"B"`。两边即使写入相同的值，也仍然是两次更新。
+
+`max_concurrency=1` 只减少同时执行数量，不能消除同一 superstep 的两次写入。
+如果改成 `START -> branch_a -> branch_b -> END`，两次写入处于不同轮次，才会依次覆盖，
+最后得到 `"B"`。各分支写不同字段时，不会因这一规则冲突。
+
+需要收集多个结果时，使用列表字段和 Reducer，例如本课的：
+
+```python
+static_results: Annotated[list[dict[str, Any]], operator.add]
+
+# 两个节点分别返回 {"static_results": [自己的结果]}
+# 合并：旧列表 + docs 的列表 + examples 的列表
+```
+
+Reducer 定义的是该字段的更新规则，顺序执行和输入更新时也会使用它，并非只有并行时才生效。
 
 ### 22.3 `Send` 动态创建任务
 
 当任务数只能在运行时确定时，条件路由返回 `Send` 列表：
 
 ```python
-def fan_out(state):
+def fan_out_subjects(state: ParallelState) -> list[Send]:
     return [
         Send("analyze_subject", {"subject": subject})
         for subject in state["subjects"]
     ]
+
+
+workflow.add_conditional_edges(
+    "merge_sources",
+    fan_out_subjects,
+    ["analyze_subject"],
+)
 ```
 
-每个 `Send` 指定目标 Node 和该任务自己的输入 State。多个任务的输出仍通过主 State 中的
-Reducer 汇总。`config={"max_concurrency": 2}` 只限制同时执行数量，不改变 Graph 拓扑。
+这次 `merge_sources` 完成后，框架把包含其更新的 State 交给路由函数 `fan_out_subjects`。
+第三个参数声明可能的目标节点，不表示“只执行一个任务”；实际任务数由返回的 `Send` 数量决定。
+当前 `plan` 写入 `subjects=["State", "Reducer", "Send"]`，所以产生三个任务：
+
+```python
+Send("analyze_subject", {"subject": "State"})
+Send("analyze_subject", {"subject": "Reducer"})
+Send("analyze_subject", {"subject": "Send"})
+```
+
+只有一个注册的 `analyze_subject` 节点，但运行时有三次独立的节点执行，每次只接收对应
+`Send` 携带的输入。它们各自返回 `{"analyses": [result]}`，通过父 State 的列表 Reducer
+汇总成三个结果。本例这一批任务完成后，`finalize` 执行一次，读取汇总后的 `analyses`。
+
+### 22.4 Node、Task 和 Agent 的区别
+
+| 名称 | 在本课中的含义 |
+| --- | --- |
+| Node | 注册到图中的逻辑，例如 `branch_a`、`analyze_subject` |
+| Task | 某次运行中对 Node 的一次执行；一个 Node 可以产生多个 Task |
+| Agent / 子 Agent | 节点内部如果封装了 Agent，才涉及 Agent；框架不会把普通函数自动变成 Agent |
+
+因此 `conflict_demo` 是两个普通节点、两个同轮任务；`Send` 示例是一个工作节点、三个动态任务。
+它们都不是本课中的“三个子 Agent”或“两个 Agent 子任务”。
 
 ## 23. Subgraph：父图组合子图
 
-[part12_subgraphs.py](5_langgraph_agentic_rag/part12_subgraphs.py) 演示三种组合方式。
+[part12_subgraphs.py](5_langgraph_agentic_rag/part12_subgraphs.py) 是子流程组织与状态管理教程，
+涵盖直接嵌入子图、wrapper 字段映射和三种 checkpoint 模式。子图是工作流，不自动等于子 Agent。
 
 ### 23.1 共享 Schema 与不同 Schema
 
-父子图共享字段时，编译后的子图可以直接作为父图 Node：
+父子图有共同字段时，编译后的子图可以直接作为父图 Node，不要求整个 Schema 完全相同：
 
 ```python
 parent.add_node("research_child", compiled_child)
@@ -3011,18 +3071,51 @@ StateGraph(
 )
 ```
 
-私有字段供子图内部 Node 使用，不会因为父图调用而自动暴露到父 State。
+本例 `ResearchInput` 只有 `question`，`ResearchOutput` 只有 `draft`、
+`research_step_seen`、`audit`；`private_research_step` 留在子图内部。
+
+`input_schema` 限制子图接收的输入字段，`output_schema` 限制子图对外返回的字段，
+内部 State 可以包含额外工作字段。父图接收子图最终输出中自己认识的字段，再按自己的
+Reducer 处理；私有字段不会自动加入父图 State。
+
+“子图内部节点的 return”和“整个子图最终输出”是两层结果。内部节点即使返回 `{}`，
+子图最终输出仍可能带有从输入或 checkpoint 保留下来的字段；不能仅凭某个节点没 return
+`audit`，就判断父图一定不会收到 `audit`。
+
+同名字段也不会凭 Schema 声明自动产生一个值：要看子图最终输出是否包含它，以及它有没有被
+`output_schema` 排除。`MemoryChildState` 没有单独限制输出，已有的共同字段通常会随子图
+最终状态返回，正是本例会更新父图的原因。
 
 ### 23.2 子图 checkpoint 三种模式
 
+本例父图已经配置 `InMemorySaver()`，复用同一个 graph、Saver 和 `thread_id`：
+
+| 子图编译配置 | 子图调用期间保存内部进度 | 下一次新调用保留自己的内部状态 | 本例私有计数 |
+| --- | --- | --- | --- |
+| `checkpointer=True` | 是，使用父图提供的存储能力 | 是，同一会话中继续 | `0 -> 1 -> 2` |
+| `checkpointer=None`（默认） | 是，继承父图的 checkpoint 能力 | 否，每次调用隔离 | 每次 `0 -> 1` |
+| `checkpointer=False` | 否，不保存子图内部 checkpoint | 否 | 每次 `0 -> 1` |
+
+`True` 不是独立创建一套数据库；这里仍需父图提供 Checkpointer。`thread_id` 是状态会话标识，
+不是操作系统线程 ID。`InMemorySaver` 只保存在当前进程内存，进程退出后不会保留。
+
+None 和 False 只看本例私有计数确实相同，区别在于能否保存子图内部执行进度。假设子图是：
+
 ```text
-checkpointer=True   子图拥有自己的 checkpoint namespace，同一 thread 可保留内部 State
-checkpointer=None   使用默认继承语义；本次子图调用的业务输入保持隔离
-checkpointer=False  子图不创建 checkpoint，不能在子图内部 interrupt/resume
+START -> prepare -> approve（interrupt 等待确认）-> END
 ```
 
+`prepare` 已完成、`approve` 中断后，通过有 checkpoint 的父图发送 `Command(resume=...)`：
+
+- `None`：从中断的 `approve` 节点重新执行，不重跑已经完成的 `prepare`。
+- `False`：没有子图内部进度，父图恢复时重新进入子图，重跑 `prepare -> approve`。
+
+两种情况下，发生 `interrupt` 的 `approve` 函数本身都会从头执行。False 的准确含义是
+“没有子图级 checkpoint”，不能笼统理解成“父图也无法接收中断或恢复”。
+
 `graph.stream(..., subgraphs=True)` 返回的 v2 事件里，`event["ns"]` 是 namespace tuple：
-空 tuple 表示根图，非空 tuple 标识具体子图调用。
+空 tuple `()` 表示根图，非空 tuple 标识具体子图调用。`subgraphs=True` 负责输出子图事件，
+不负责开启 checkpoint。
 
 ### 23.3 子图跳到父图 Node
 
@@ -3030,26 +3123,69 @@ checkpointer=False  子图不创建 checkpoint，不能在子图内部 interrupt
 return Command(
     graph=Command.PARENT,
     goto="parent_finish",
-    update={"status": "escalated"},
+    update={"status": "escalated", "audit": ["child:handoff"]},
 )
 ```
 
-`Command.PARENT` 表示 `goto` 的目标在父图中。共享字段仍按父 State 的 Reducer 合并；
+`Command.PARENT` 表示更新父图 State，并把后续执行路由到父图中的 `parent_finish`。
+父图必须定义要接收的 `status`、`audit` 字段，并注册目标节点；但不要求初始输入就提供
+两个字段的值。本例输入只有 `{"audit": []}`，`status` 由子图第一次写入。
+
 `destinations=("parent_finish",)` 主要补充图可视化目标，真正的跳转来自 `Command`。
+
+### 23.4 共同字段更新与 Reducer、checkpoint 的关系
+
+共同字段通信不要求 `checkpointer=True`，也不要求父子图双方都定义 Reducer：
+
+- 父图字段没有 Reducer：接收子图输出后覆盖旧值；同一轮仍不能有多个任务写入该字段。
+- 父图字段有 Reducer：按父图的 Reducer 合并旧值与子图输出。
+- 子图字段的 Reducer：只决定子图内部如何处理输入和节点更新，与父图的规则分别生效。
+
+假设父图 audit 原值为 `["parent:start"]`，子图接收它，内部节点返回
+`{"audit": ["child:done"]}`，子图最终输出包含 audit：
+
+| 子图 audit 规则 | 父图 audit 规则 | 子图最终输出 audit | 更新后的父图 audit |
+| --- | --- | --- | --- |
+| 覆盖 | 覆盖 | `["child:done"]` | `["child:done"]` |
+| 覆盖 | 列表相加 | `["child:done"]` | `["parent:start", "child:done"]` |
+| 列表相加 | 覆盖 | `["parent:start", "child:done"]` | `["parent:start", "child:done"]` |
+| 列表相加 | 列表相加 | `["parent:start", "child:done"]` | `["parent:start", "parent:start", "child:done"]` |
+
+最后一行说明：子图传回的可能是累积列表，父图又追加一次，就会出现重复。
+`operator.add` 不去重，也不会自动只传“这次新增的一条”。
+
+### 23.5 跨调用状态与子图事件
+
+在同一个有 Checkpointer 的父图会话中，再传入普通输入字典，会在已有父图 State 上应用
+新输入，未提供的字段可以保留。新一轮业务调用仍从入口执行；这与 `Command(resume=...)`
+恢复中断位置是两种不同操作。
+
+父子图双方都使用列表追加时，需要留意旧内容被子图再次输出并追加到父图的问题。
+子图保留内部历史、父图又把累积列表传入子图，会进一步放大重复；不能把列表长度直接当作
+节点执行次数。
+
+`stream_mode=["updates", "values"]` 同时观察节点局部更新和累积 State。
+订阅子图事件时，可以用 `event["ns"] == ()` 筛选根图结果，避免把子图状态当成父图状态。
+`get_state(config, subgraphs=True)` 只是读取快照，不会重新执行节点。
 
 ## 24. 异步 Graph、Streaming 与运行限制
 
 [part13_async_streaming.py](5_langgraph_agentic_rag/part13_async_streaming.py) 使用
-`async def` Node、`ainvoke()`、`astream()` 和 `aget_state()`，不是在线程外包一层同步调用。
+异步节点、流式事件和运行限制，仍然是离线教学，不调用真实模型或搜索服务。
+
+`build_async_graph()` 本身是普通 `def`，只创建模型、定义和注册异步函数、编译图，并不执行
+其中的 `await model.ainvoke()`。真正执行这些异步节点时，使用 `ainvoke()` 或 `astream()`。
+同步入口可以用 `asyncio.run(coroutine)` 启动异步流程；不是所有调用构图函数的方法
+都必须改成 async。
 
 ### 24.1 `RunnableConfig`
 
 ```python
 config: RunnableConfig = {
-    "configurable": {"thread_id": "async-thread"},
+    "configurable": {"thread_id": "async-stream-demo"},
     "max_concurrency": 2,
     "tags": ["lesson", "async"],
-    "metadata": {"lesson": "part13"},
+    "metadata": {"lesson": "part13", "purpose": "offline-demo"},
 }
 ```
 
@@ -3058,7 +3194,8 @@ config: RunnableConfig = {
 - `tags`、`metadata` 可被 Node、Tracing 和 Streaming 读取，不属于业务 State。
 
 Node 在参数中声明 `config: RunnableConfig` 后即可读取它；Node 内的
-`get_stream_writer()` 可以发出 `custom` 事件。
+`get_stream_writer()` 可以发出 `custom` 事件。改变 tags 或 metadata 不会创建新会话，
+本例是否沿用已有 checkpoint 主要看 `thread_id` 是否相同。
 
 ### 24.2 v2 Streaming 模式
 
@@ -3076,13 +3213,42 @@ async for event in graph.astream(
 
 | `event["type"]` | `event["data"]` 的核心含义 |
 | --- | --- |
-| `values` | Reducer 合并后的完整 State |
-| `updates` | 本轮 Node 返回的局部更新 |
-| `messages` | `(AIMessageChunk, metadata)`，可逐 Token 消费 |
+| `values` | 当前 State 快照；本例可看到初始状态和每轮合并后的状态 |
+| `updates` | 节点完成后的局部更新，通常按节点名组织 |
+| `messages` | `(message_chunk, metadata)`，本例是模拟模型的 `AIMessageChunk` |
 | `custom` | Node 主动写出的非 State 进度 |
 | `checkpoints` | checkpoint 被保存时的事件 |
 | `tasks` | Task 开始、完成或报错事件 |
-| `debug` | 更完整的调试事件；数据量也最大 |
+| `debug` | 包含 checkpoint、任务开始及结果等详细调试信息 |
+
+`stream_mode` 列表是在一次运行中观察多种事件，不会为每种模式重新跑一遍图。
+`version="v2"` 指流式输出协议，统一为这样的字典结构，不是模型版本或执行次数：
+
+```python
+{
+    "type": "custom",                 # 事件种类
+    "ns": (),                         # 根图；子图使用非空 namespace
+    "data": {"stage": "fetch:start", "source": "docs"},
+}
+```
+
+其中 custom 是代码主动发送的业务事件。`writer` 是向当前运行的流式通道发送数据的函数，
+队列由框架管理；本例没有往文件或数据库写入，也不会因为发送事件而更新 State：
+
+```python
+# 在图内部执行的节点/辅助函数中
+writer = get_stream_writer()
+writer({"stage": "fetch:start", "source": "docs"})
+
+# 在图外部消费事件
+async for event in graph.astream(
+    input_state, config=config, stream_mode="custom", version="v2"
+):
+    print(event["data"])  # 收到上面 writer(...) 传入的字典
+```
+
+订阅 custom 才能在这个流里读到 writer 的数据；values、updates、tasks 等事件由框架根据
+执行过程生成。业务 State 更新仍来自节点的返回值，例如 `{"research_notes": [note]}`。
 
 `astream()` 是异步迭代器：消费一个事件、执行循环体、再等待后续事件。它不会先收集完
 全部结果，也不会让循环后的代码和流并发执行。
@@ -3094,10 +3260,187 @@ await graph.ainvoke(input_state, config={"recursion_limit": 3})
 workflow.add_node("slow_node", slow_node, timeout=0.01)
 ```
 
-- 无终点循环超过步数上限时抛 `GraphRecursionError`。
-- 单个 Node 超过自己的 timeout 时抛 `NodeTimeoutError`。
+- Graph 达到 superstep 上限仍未结束时抛 `GraphRecursionError`。
+- 单个 Node 的一次执行尝试超过自己的 timeout 时抛 `NodeTimeoutError`。
 
 它们只终止 Graph 运行，不会回滚已经发生的外部副作用。
+
+`recursion_limit=3` 限制整张图最多执行三轮 superstep；达到上限后仍有后续任务就报错。
+它不是 Python 递归调用深度，也不是“每个节点各执行三次”。多个任务在同一个 superstep
+中完成时，共占一轮。自环必须有正常退出条件，`await asyncio.sleep(0)` 仅让出事件循环，
+不负责结束循环。
+
+不写 `recursion_limit` 也不会取消保护。2026-09-23 本地 LangGraph 1.2.8 核对结果：
+默认上限为 `10007`，实现可从环境变量 `LANGGRAPH_DEFAULT_RECURSION_LIMIT` 读取默认值。
+这是当前版本/环境的值，不应把旧教程中的默认 `25` 当成所有版本的固定值。
+实际业务应设计正常退出条件，保留步数上限作为保护。
+
+**自环再加一条 END 边，不会实现二选一退出：**
+
+```python
+workflow.add_edge("loop", "loop")
+workflow.add_edge("loop", END)
+```
+
+这可以编译成功：两条普通边都是无条件边，不存在“框架不知道该选哪条”的歧义。
+END 是结束标记，不是一个会取消其他分支的全局 `break`；自环仍会安排下一轮 loop，
+所以图仍会触发 `GraphRecursionError`。只有没有后续待运行任务时，图才正常结束。
+
+要在 `count >= 3` 时退出，替换 loop 的普通出边，使用条件路由：
+
+```python
+def route(state: LoopState):
+    return END if state["count"] >= 3 else "loop"
+
+
+workflow = StateGraph(LoopState)
+workflow.add_node("loop", loop)
+workflow.add_edge(START, "loop")
+workflow.add_conditional_edges("loop", route, ["loop", END])
+graph = workflow.compile()
+result = await graph.ainvoke({"count": 0}, config={"recursion_limit": 10})
+# result == {"count": 3}
+```
+
+路由接收本轮更新后的 State，按 count 选择一个目标。不要同时保留无条件的
+`workflow.add_edge("loop", "loop")`，否则条件路由选 END 时，自环仍然生效。
+
+### 24.4 节点 timeout 的计时范围与 `before_model`
+
+来源：[part13_async_streaming.py](5_langgraph_agentic_rag/part13_async_streaming.py)
+中的 `node_timeout_demo()`。
+
+```python
+async def slow_node(_state):
+    await asyncio.sleep(0.05)  # 模拟需要等待 50 毫秒的操作
+    return {"status": "finished"}
+
+
+workflow.add_node("slow_node", slow_node, timeout=0.01)  # 本次尝试只允许 10 毫秒
+```
+
+数字 `timeout` 对应 `TimeoutPolicy` 的 `run_timeout`，单位是秒，限制的是绑定 Node
+**一次执行尝试的整体耗时**。本例在异步等待期间触发 `NodeTimeoutError`，没有执行到
+`return {"status": "finished"}`；外层捕获异常并返回验证结果。
+
+节点内部的前置处理、等待模型或工具返回、返回前的结果处理，都使用同一份时间预算。
+如果配置了框架级重试，每次新的节点执行尝试会单独计时；这不是整张 Graph 的总时限。
+
+例如，普通节点自己调用前置处理时：
+
+```python
+async def model_step(state):
+    await before_model_logic(state)
+    response = await model.ainvoke(state["messages"])
+    return {"answer": response.content}
+
+
+workflow.add_node("model_step", model_step, timeout=1.0)
+```
+
+这里的 `before_model_logic` 是示意的普通异步函数。`model_step` 的 1 秒预算包含
+前置处理、模型调用及返回前的处理，并不是只给 `model.ainvoke()` 计时。
+
+LangChain `create_agent()` 的 `before_model` 中间件需要按实际图结构判断。
+当前安装版本会将它注册为独立的 `<中间件名>.before_model` 节点，流程形如：
+
+```text
+START -> Xxx.before_model -> model -> END
+```
+
+| 超时绑定位置 | 是否包含 `before_model` |
+| --- | --- |
+| 普通节点内部自己调用前置处理 | 包含，前置处理属于该节点的一次执行 |
+| 只限制 Agent 内部的 `model` 节点 | 不包含前面独立的 `before_model` 节点 |
+| 限制调用整个 Agent 的外层节点 | 包含，整个 Agent 调用都在外层节点执行期间 |
+
+`wrap_model_call` 与 `before_model` 的位置不同：它在 `model` 节点内部包住模型调用，
+因此其调用前、调用后的处理也计入 `model` 节点的时间预算。
+
+外层节点调用整个 Agent 的示例：
+
+```python
+async def call_agent(state):
+    agent_result = await agent.ainvoke({"messages": state["messages"]})
+    return {"answer": agent_result["messages"][-1].content}
+
+
+workflow.add_node("call_agent", call_agent, timeout=1.0)
+```
+
+这里的 1 秒覆盖整个 `agent.ainvoke()`，包括其内部的 `before_model`、模型调用，以及
+工具调用等尚未完成的内部流程。
+
+本次学习已做离线验证：`before_model` 异步等待 80 毫秒，模拟模型立即返回固定文本：
+
+| 设置 | 实测结果 |
+| --- | --- |
+| 仅内部 `model` 节点超时为 30 毫秒 | 成功；前面 `before_model` 的 80 毫秒不计入它 |
+| 外层 `call_agent` 节点超时为 30 毫秒 | 在约 30 毫秒触发 `NodeTimeoutError` |
+
+超时依赖 asyncio 的协作式取消。若在异步节点里直接执行阻塞事件循环的 `time.sleep()`
+或长时间同步计算，超时检测可能延迟，不能理解为到点就强制打断任意 Python 代码。
+
+### 24.5 列表 Reducer、排序与模拟模型
+
+```python
+research_notes: Annotated[list[dict[str, Any]], operator.add]
+```
+
+在 LangGraph 中，这表示该 State 字段是“字典组成的列表”，并附加 `operator.add` 作为
+更新规则。框架合并的是外层列表，等价于 `旧列表 + 本次返回列表`，不会合并列表内部的字典。
+
+```python
+old = [{"source": "docs", "content": "旧资料"}]
+new = [{"source": "docs", "content": "新资料"}]
+old + new
+# [
+#     {"source": "docs", "content": "旧资料"},
+#     {"source": "docs", "content": "新资料"},
+# ]
+```
+
+两个字典有相同的 key，甚至 `source` 值也相同，仍然作为两个列表元素并存，不会覆盖或去重。
+同理，向已有该字段的 State 输入 `research_notes=[]`，是追加空列表，不能清空历史资料。
+
+并行结果的完成顺序不适合作为业务排序依据，可以在消费结果时显式排序：
+
+```python
+sorted(state["research_notes"], key=lambda item: item["source"])
+```
+
+这按 source 字符串默认升序生成一个新列表，本例 docs 在 examples 前，不修改原列表。
+它是字典序，不是识别数字大小的“自然排序”（例如字符串 `"item10"` 会排在 `"item2"` 前）。
+
+```python
+model = FakeListChatModel(responses=["异步资料汇总完成"])
+```
+
+`FakeListChatModel` 是本地模拟聊天模型，按配置的 responses 返回结果，不根据提示词推理。
+本例只有一条预设回复，重复调用仍返回这句话。它验证异步调用、消息对象、流式事件与 State
+写入的连接是否正确，不验证模型的总结能力或答案质量。
+
+当前模型的流式实现按字符产生 `AIMessageChunk`，片段拼起来等于完整回复，不能据此推断
+真实模型的 token 数。模型消息流可以多次输出片段，节点最终只返回一次答案字段更新。
+
+### 24.6 重复调用、debug 与状态读取
+
+`stream_mode="debug"` 是本次图执行的观察方式。再次调用 `astream()` 会重新执行图，
+不是回看上一次的日志，也不自动跳过业务节点。
+
+| 调用方式 | 状态含义 |
+| --- | --- |
+| 同一 Saver、同一 `thread_id`，传入新的业务输入 | 在该会话已有状态上合并输入，再执行图 |
+| 同一 Saver、新的 `thread_id` | 使用另一份会话状态 |
+| 仅更换 tags、metadata 或 stream_mode | 不会因此隔离原会话状态 |
+| `get_state()` / `aget_state()` | 读取快照，不执行节点 |
+
+复用会话时，普通字段被新输入覆盖，列表追加字段会继续累积；传入 `[]` 不会清空
+`operator.add` 字段。调试时若想从空状态验证，应使用新的会话标识。
+
+局部变量保存的某次流事件不会自动跟随 checkpoint 更新。后续又执行了同一会话时，
+再次读取最新快照，可能得到比局部变量更新的状态。`snapshot.next == ()` 表示该快照下
+没有待执行节点，不表示它从未运行过。
 
 ## 25. Functional API：普通 Python 控制流上的 LangGraph Runtime
 
