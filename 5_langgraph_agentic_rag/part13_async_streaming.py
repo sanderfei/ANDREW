@@ -173,6 +173,7 @@ async def recursion_limit_demo() -> dict[str, Any]:
     workflow.add_edge("loop", "loop")
     graph = workflow.compile()
     try:
+        # 启动时，设置最多运行 3 个执行轮次
         await graph.ainvoke({"count": 0}, config={"recursion_limit": 3})
     except GraphRecursionError as exc:
         return {

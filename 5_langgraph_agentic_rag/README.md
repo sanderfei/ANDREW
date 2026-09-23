@@ -356,4 +356,4 @@ Part 5～10 高级冒烟：
 - 人工确认后的“导出”仍只产生教学预览，不执行外部副作用。
 - SQLite checkpointer 用于本地学习；生产 PostgreSQL、连接池和多副本并发不在本目录内。
 - FastAPI 是单进程本地适配，不等同于 LangGraph Platform 部署。
-- Part 10 是确定性合同评测；LangSmith 在线 tracing、数据集和线上反馈闭环留给后续可观测性专题。
+- Part 10 是确定性合同评测；追踪、数据集与实验对比继续学习[目录 6 Langfuse](../6_langfuse_observability/README.md)，默认离线，支持免费自部署平台。
