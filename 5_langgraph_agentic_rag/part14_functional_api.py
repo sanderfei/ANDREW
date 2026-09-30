@@ -2,6 +2,20 @@
 
 Graph API 适合显式 State/Node/Edge；Functional API 保留 if、for、函数调用等
 普通 Python 控制流，同时增加 task、checkpoint、retry、interrupt 和 streaming。
+
+本文件不配置或调用模型，prepare_report() 只生成固定预览。
+@entrypoint 的设计目的是让普通函数接入 LangGraph 运行时，由运行时管理任务、
+检查点、暂停与恢复；模型只是工作流中可选的一步，可按需在 @task 内调用。
+例如模型负责生成报告内容，工作流负责保存进度并等待人工审批。
+
+本节核心知识点：
+1. @entrypoint 把普通函数接入运行时，变成可用 invoke() 调用的工作流；@task 调用返回 Future，
+   通过 .result() 取结果，并可用 RetryPolicy 配置失败重试。
+2. checkpointer 按 thread_id 保存进度；interrupt() 暂停后，用同一 thread_id
+   和 Command(resume=...) 恢复。恢复会从入口重放，已完成的 task 结果可复用。
+3. previous 是 LangGraph 注入的上轮保存值；entrypoint.final 的 value 返回调用方，
+   save 供同一线程的下一轮读取。一次 save 可保存包含多个字段的字典。
+4. 先创建多个 task Future，再逐个调用 .result()，任务便有机会并发执行。
 """
 
 from __future__ import annotations
@@ -16,18 +30,28 @@ from langgraph.func import entrypoint, task
 from langgraph.types import Command, RetryPolicy, interrupt
 
 
+# invoke(Command(resume={"decision": "approve"}))
+#   → LangGraph 读取同一 thread 的检查点和恢复值
+#   → 从头执行 approval_workflow()
+#   → 再次走到 prepare_report(...).result()
+#       → 直接取得之前保存的报告结果，任务体不执行
+#   → 再次走到 interrupt()
+#       → 返回 {"decision": "approve"}
+#   → human_decision 得到这个字典
+#   → 返回 status="published"
 def approval_workflow_demo(
     decision: Literal["approve", "reject"],
 ) -> dict[str, Any]:
     checkpointer = InMemorySaver()
     task_attempts = {"prepare_report": 0}
 
+    # 把一次工作交给 Runtime 调度，调用后拿到 Future，再用 .result() 获取结果
     @task(
         retry_policy=RetryPolicy(
             max_attempts=2,
             initial_interval=0.01,
-            backoff_factor=1.0,
-            jitter=False,
+            backoff_factor=1.0,  # 等待间隔不增长
+            jitter=False,  # 不加随机抖动
             retry_on=ConnectionError,
         )
     )
@@ -40,6 +64,7 @@ def approval_workflow_demo(
             "preview": f"{report_name} 的确定性预览",
         }
 
+    # 把函数变成 LangGraph 工作流入口，用 .invoke() 启动或恢复
     @entrypoint(checkpointer=checkpointer)
     def approval_workflow(request: dict[str, str]) -> dict[str, Any]:
         # @task 调用返回 future；result() 取得任务返回值。
@@ -53,9 +78,7 @@ def approval_workflow_demo(
         )
         return {
             "status": (
-                "published"
-                if human_decision["decision"] == "approve"
-                else "rejected"
+                "published" if human_decision["decision"] == "approve" else "rejected"
             ),
             "report": prepared,
             "decision": human_decision,
@@ -85,6 +108,8 @@ def approval_workflow_demo(
     }
 
 
+# previous 是 LangGraph 约定的注入参数名
+# 每轮 entrypoint.final 只有一个 save 参数。
 def previous_state_demo() -> dict[str, Any]:
     @entrypoint(checkpointer=InMemorySaver())
     def accumulate(
@@ -95,8 +120,10 @@ def previous_state_demo() -> dict[str, Any]:
         old_value = previous or 0
         new_value = old_value + amount
         # value 返回调用方；save 才是下一轮 previous 收到的值。
+        # entrypoint.final[dict[str, int], int]
         return entrypoint.final(
             value={"previous": old_value, "amount": amount, "current": new_value},
+            # 保存到检查点，成为同一线程下一次调用的 previous
             save=new_value,
         )
 
@@ -105,6 +132,36 @@ def previous_state_demo() -> dict[str, Any]:
     second = accumulate.invoke(5, config=config)
     assert first["current"] == 2
     assert second == {"previous": 2, "amount": 5, "current": 7}
+    return {"first": first, "second": second}
+
+# 要留多个数据，就把它们组成一个字典等结构保存；下一轮的 previous 会收到整个结构
+def multiple_previous_fields_demo() -> dict[str, Any]:
+    @entrypoint(checkpointer=InMemorySaver())
+    def accumulate_with_count(
+        amount: int,
+        *,
+        previous: dict[str, int] | None = None,
+    ) -> entrypoint.final[dict[str, Any], dict[str, int]]:
+        old_state = previous or {"total": 0, "count": 0}
+        new_state = {
+            "total": old_state["total"] + amount,
+            "count": old_state["count"] + 1,
+        }
+        # 一次 save 保存整个字典；下一轮的 previous 收到这两个字段。
+        return entrypoint.final(
+            value={"previous": old_state, "amount": amount, "current": new_state},
+            save=new_state,
+        )
+
+    config = {"configurable": {"thread_id": "functional-previous-fields"}}
+    first = accumulate_with_count.invoke(2, config=config)
+    second = accumulate_with_count.invoke(5, config=config)
+    assert first["current"] == {"total": 2, "count": 1}
+    assert second == {
+        "previous": {"total": 2, "count": 1},
+        "amount": 5,
+        "current": {"total": 7, "count": 2},
+    }
     return {"first": first, "second": second}
 
 
@@ -121,6 +178,7 @@ def parallel_tasks_demo() -> dict[str, Any]:
             "finished": finished,
         }
 
+    # 虽然 .result() 按顺序调用，三个任务已经可以同时运行。因此，等待第一个结果期间，其他任务也在执行。最终结果列表仍按输入顺序排列
     @entrypoint()
     def inspect_sections(sections: list[str]) -> list[dict[str, Any]]:
         # 先创建所有 future，再逐个 result；tasks 可以并发执行。
@@ -144,6 +202,7 @@ def run_demo(
     return {
         "approval_workflow": approval_workflow_demo(decision),
         "previous_and_final": previous_state_demo(),
+        "multiple_previous_fields": multiple_previous_fields_demo(),
         "parallel_tasks": parallel_tasks_demo(),
         "comparison": {
             "graph_api": "显式 State、Reducer、Node、Edge，适合可视化复杂拓扑。",
