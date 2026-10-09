@@ -14,6 +14,20 @@
 - 一条 Trace 内包含多个 observation：本例一次正常运行产生 6 条，分别是
   part2-langgraph、LangGraph、fetch_docs、fetch_examples、generate_answer 和 FakeListChatModel。
   这些 observation 共享本次运行的 trace_id，不会各自创建一条 Trace。
+- 六条记录的来源：part2-langgraph 由 start_as_current_observation 显式创建，
+  其余五条由 config["callbacks"] 中的 CallbackHandler 自动记录图、节点和模型调用。
+  每条 observation 记录对应执行范围的输入、输出、耗时和错误等信息；父子关系如下：
+  Trace：本次 Part 2 运行
+  └── part2-langgraph [agent]：教程整体运行
+      └── LangGraph [chain]：整张图的执行
+          ├── fetch_docs [chain]：获取文档资料
+          ├── fetch_examples [chain]：获取示例资料
+          └── generate_answer [chain]：整理资料并生成回答
+              └── FakeListChatModel [generation]：模拟模型调用
+  generate_answer 内部执行 model.ainvoke()，因此节点记录内又包含一条模型调用记录，
+  可以分别观察整个节点和其中模型调用的耗时。
+  数量为 1 条教程整体记录 + 1 条图记录 + 3 条节点记录 + 1 条模型调用记录 = 6 条。
+  每条 observation 有独立的 ID，通过父 ID 建立嵌套关系；整张图实际只运行了一次。
 - thread_id 用于 LangGraph 检查点；本例与 session_id 共用字符串，没有自动绑定。
 
 - 先进入 propagate_attributes，再创建根 observation；图和模型记录继承会话及追踪上下文。
