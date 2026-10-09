@@ -1,4 +1,15 @@
-"""Part 1：Trace、嵌套 Span、输入输出、异常与 flush；没有模型调用。"""
+"""Part 1：Trace、嵌套 Span、输入输出与异常；没有模型调用。
+
+- Trace 表示一次完整调用；Span 是其中一个处理步骤，也是 observation 的一种类型。
+- 本例根 Span 为 part1-text-workflow，两个子 Span 为 normalize 和 format-report；
+  三者共享 trace_id，各自有独立的 Span ID，子 Span 通过父 Span ID 关联根 Span。
+- start_as_current_observation 在进入 with 时开始记录并设置当前 Span，退出时结束；
+  嵌套的 with 自动建立父子关系，两个子 Span 在本例中顺序执行。
+- input 记录输入，update(output=...) 记录输出；这些操作不执行文本处理逻辑。
+- 空文本触发 ValueError，平台模式中异常经过的 normalize 和根 Span 会记录错误。
+- open_client 管理客户端生命周期；平台模式退出时 flush 等待发送，shutdown 释放资源。
+- offline 只处理文本，trace_id 为 None；langfuse 上报记录，返回 Trace ID 不等于入库证明。
+"""
 
 from __future__ import annotations
 

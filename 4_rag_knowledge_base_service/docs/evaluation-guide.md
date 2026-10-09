@@ -32,4 +32,7 @@ CI 使用 `--embedding hash --mode offline`，保证无需下载模型、无需 
 
 定位顺序应是：先看 `retrieval.matches` 是否召回正确 chunk；再看 `accepted` 与阈值；最后才看 live 模型的生成文本。这样可以区分检索失败、错误引用、拒答错误和生成不忠实。
 
-后续第 10 周可以在这套本地回归稳定后，开启 `LANGSMITH_TRACING=true`，把同一黄金集做 trace 与实验对比。CI 仍使用 `hash + offline`，不放入任何 API key。
+后续第 10 周使用[目录 6 Langfuse](../../6_langfuse_observability/README.md) 学习追踪、
+数据集和实验对比；通过 SDK / CallbackHandler 接入，而非仅设置一个环境变量就自动追踪。
+该专题先使用独立合成数据验证接口，再扩展到真实 RAG 质量评测。此目录现有 CI 仍使用
+`hash + offline`，不依赖 Langfuse 服务或任何平台 Key。

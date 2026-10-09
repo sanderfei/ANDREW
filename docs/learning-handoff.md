@@ -2,12 +2,13 @@
 
 > 用途：在不同电脑之间通过 GitHub 同步学习进度。新建 Codex 会话后先阅读本文，再从“下一步”继续。
 >
-> 最后更新：2026-08-14
+> 最后更新：2026-09-23
 
 ## 当前学习主线
 
-- 目录：`5_langgraph_agentic_rag/`
-- 当前阶段：用户已确认 `3_rag_from_scratch` 全部学完，目录 4 的主体内容已基本学完。目录 5 的 Part 1～8 已逐课学习完成；Part 9 已学习 FastAPI `invoke/stream/resume`、SSE 事件转换、request ID 中间件和 `yield from` 的顺序转发；Part 10 已完成确定性合同评测的整体定位，尚待逐用例细化学习。
+- 目录：`5_langgraph_agentic_rag/` 收尾，然后进入 `6_langfuse_observability/`。
+- 当前阶段：2026-09-23 用户确认原有项目内容除目录 5 Part 14 外均已看完，包括目录 2 L13～L15 和目录 5 Part 1～13。下面按日期记录的旧进度是历史信息，不再作为当前待学清单。
+- 后续平台：用户选择 Langfuse，使用免费自部署方案学习追踪、数据集与实验；新目录 6 已添加课程，尚未逐课学习。
 - 学习方式：结合仓库中的真实代码，用中文解释运行流程、Python 语法、LangChain 类型和隐藏调用关系。
 
 ## 当前运行配置
@@ -467,14 +468,24 @@ git diff --check
 
 2026-08-14 完成 Part 8 受控多工具图学习，并开始 Part 9～10：已区分固定边、条件边与 Node 内部 Python 分支，走通 `interrupt` / CLI `--decision` / `Command(resume=...)`，确认 `initial_request` 与 `thread_id` 分属 State 和运行配置，并理解 `yield` / `yield from` 把 metadata、Graph 事件和 result 按序交给 FastAPI SSE 调用方。Part 9 已学习 request ID 异步中间件和 SSE 转换，Part 10 已完成六类合同评测的概览。清理已由正式 Part 7 入口覆盖的重复 `part.py` 草稿，并在 Python 笔记补充 `yield from` 同步迭代委托语法。实测 Part 8 export approve 路径返回 `export_completed/120.5`；Part 10 为 `6/6`、`31/31`；目录 5 基础/高级冒烟和目录 2～5 全量编译全部通过；已改 Markdown 的 NUL/围栏/相对链接、删除文件引用、补丁格式与敏感信息检查均通过。
 
+## 目录 6 Langfuse 课件验证（2026-09-23）
+
+- `.venv/bin/python 6_langfuse_observability/part1_trace_basics.py`：离线文本处理与空输入错误退出通过。
+- `.venv/bin/python 6_langfuse_observability/part2_langgraph_tracing.py`：复用 Part 13，两个资料结果和模拟模型消息拼接通过。
+- `.venv/bin/python 6_langfuse_observability/part3_datasets_scores.py`：四条合成样本规则评分通过；`--policy always_answer` 为坏基线。
+- `.venv/bin/python 6_langfuse_observability/part4_experiment_comparison.py`：两策略三项平均分分别为 0.5 / 1.0。
+- 四个 offline 示例在禁止 socket 连接时均通过；SDK 4.15.4 依赖检查通过。
+- 临时本地 HTTP 模拟服务验证了平台模式的 OTLP Span、错误状态、Session、数据集重复上传、Score 和实验关联；覆盖旧 Dataset Run 端点不可用时的 v4 兼容分支。临时验证类已删除。
+- 尚未连接真实 Langfuse 实例验证页面展示，不把模拟服务通过当作真实部署或入库证明。
+
 ## 下一步
 
-继续逐课学习 `5_langgraph_agentic_rag`，不重复目录 3 和目录 4 已掌握的 RAG 基础，也不要因为代码已通过测试就把尚未讲解的章节标记为已学会：
+1. 完成目录 5 Part 14：`@entrypoint`、`@task`、恢复时重放、任务结果复用、`previous/final`，以及 Graph API 与 Functional API 的选型。
+2. 按[目录 6 README](../6_langfuse_observability/README.md) 学习四课：Trace/Span → LangGraph CallbackHandler → Dataset/Score → Experiment 对比。默认 offline，准备好本地 Langfuse 和项目 API Keys 后再用 `--mode langfuse`。
+3. 将确定性评测扩展为真实模型的质量评测，保留独立验证集，学习人工评分和校准 LLM 评分器。
+4. 继续检索优化、上下文与工具工程、持久化/并发/幂等、Docker/CI 交付。目录 4 的 Dockerfile 与 CI 构建配置一致性仍待处理，不属于本次 Langfuse 课件改动。
 
-1. Part 1～8 已学习完成，不再重复 State/Edge 基础、RAG 主流程、HITL、只读 SQL Tool、Reducer/Streaming、RetryPolicy/失败补偿、SQLite 时间旅行和 Part 8 受控多工具路由。
-2. 下一步继续 Part 9：从 FastAPI 入口追踪 `/v1/invoke`、`/v1/stream` 和 `/resume` 的请求/响应类型、SSE 字节流与异常边界。
-3. 然后逐用例学习 Part 10 的 `EvaluationResult`、`checks`、trajectory 和退出码合同，不只停留在 `6/6`、`31/31` 的结果。
-4. 目录 5 学完后再进入独立的 LangSmith tracing/实验记录；多 Agent 不属于当前路线。目录 4 尚未处理的 Docker / CI 一致性留到第 11 周上线工程化阶段。
+课件准备完成、离线验证通过和用户已学习是三个不同状态，不将新增目录 6 标记为学完。
 
 ## 新电脑继续学习时的启动提示
 
@@ -485,7 +496,8 @@ git diff --check
 ```text
 先阅读 AGENTS.md 和 docs/learning-handoff.md。
 不要重复 3_rag_from_scratch 和目录 4 已掌握的内容。
-目录 5 代码已经通过测试，Part 1～8 已逐课学习完成；从“下一步”的 Part 9 FastAPI/SSE 请求链继续。
+原有内容除目录 5 Part 14 外均已看完；先完成 Part 14，再学习目录 6 Langfuse。
+目录 6 是新准备的课件，不要把离线验证通过当成已经学完。
 先分析，不要修改代码。
 ```
 

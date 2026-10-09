@@ -1,0 +1,28 @@
+[
+  {
+    "id": "reducer",
+    "input": {
+      "question": "如何拼接各节点返回的列表？",
+      "evidence": [{"id": "reducer-doc", "text": "operator.add 将旧列表和新列表相加。"}]
+    },
+    "expected_output": {"answerable": true, "required_terms": ["operator.add"]}
+  },
+  {
+    "id": "stream",
+    "input": {
+      "question": "writer 对应哪种流式事件？",
+      "evidence": [{"id": "stream-doc", "text": "get_stream_writer 发送 custom 事件。"}]
+    },
+    "expected_output": {"answerable": true, "required_terms": ["custom"]}
+  },
+  {
+    "id": "unknown-weather",
+    "input": {"question": "明天这里会下雨吗？", "evidence": []},
+    "expected_output": {"answerable": false, "required_terms": []}
+  },
+  {
+    "id": "unknown-release",
+    "input": {"question": "未公开的下一个版本哪天发布？", "evidence": []},
+    "expected_output": {"answerable": false, "required_terms": []}
+  }
+]
