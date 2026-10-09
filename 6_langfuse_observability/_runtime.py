@@ -91,3 +91,5 @@ def open_client(mode: str):
 #   → 暂停 open_client，执行调用方的 with 块
 # 退出 with
 #   → 恢复 open_client，执行退出逻辑
+
+# yield 是交接位置：把客户端交给调用方使用，并暂停函数；调用方退出 with 后，再回来执行清理。

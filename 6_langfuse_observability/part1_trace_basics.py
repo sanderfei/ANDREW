@@ -1,6 +1,14 @@
 """Part 1：Trace、嵌套 Span、输入输出与异常；没有模型调用。
 
-- Trace 表示一次完整调用；Span 是其中一个处理步骤，也是 observation 的一种类型。
+- Trace 表示一次完整调用；Span 是其中一个处理步骤，也是 observation 的一种类型。 
+    Observation 可以理解为“程序执行过程中，一项操作的观测记录”
+| 类型 | 记录什么 |
+|---|---|
+| `span` | 一段普通处理过程，例如整理文本 |
+| `generation` | 模型生成，包括提示词、回答、token 和费用 |
+| `tool` | 一次工具调用 |
+| `retriever` | 一次资料检索 |
+| `event` | 一个离散事件，例如命中缓存 |
 - 本例根 Span 为 part1-text-workflow，两个子 Span 为 normalize 和 format-report；
   三者共享 trace_id，各自有独立的 Span ID，子 Span 通过父 Span ID 关联根 Span。
 - start_as_current_observation 在进入 with 时开始记录并设置当前 Span，退出时结束；
@@ -44,35 +52,42 @@ def normalize(text: str) -> str:
 #     ↓
 # 调用方拿到字典
 def run_demo(mode: str = "offline", text: str = "  Langfuse 学习  ") -> dict:
+    # with 语法（负责进入和退出“上下文”）：
+    # 进入一个由 open_client 管理的执行范围，取得客户端并命名为 client；离开这个范围时，执行相应的清理操作
     with open_client(mode) as client:
         if client is None:
             normalized = normalize(text)
             return {"mode": mode, "result": f"已整理：{normalized}", "trace_id": None}
 
-        # 最外层 observation 创建一条 Trace；上下文中的 observation 是它的子 Span。
-        # root 的类型是 SDK 的 LangfuseSpan，代表整个处理过程。
-        # 在独立运行这个脚本、没有上层活动 Span 时，它作为根 Span 开始一条新 Trace。进入 with 后，根 Span 成为当前活动 Span，下面嵌套创建的 Span 可以自动关联到它。
+        # 最外层 observation 会开始新 Trace，前提是当前没有有效的父 Span。
+        # root 本身仍然是 Span；Trace 是共享同一个 trace_id 的 observations 的逻辑集合
         with client.start_as_current_observation(
             name="part1-text-workflow",
-            as_type="span",
+            as_type="span",# span：普通文本
             input={"text": text},
-            metadata={"lesson": "part1", "model_used": False},
+            metadata={"lesson": "part1", "model_used": False},#自定义元数据
         ) as root:
+            # 开始 normalize Span，记录 input
             with client.start_as_current_observation(
-                name="normalize", input=text  # 开始 normalize Span，记录 input
+                name="normalize", input=text  
             ) as span:
                 normalized = normalize(text)
-                span.update(output=normalized)  # 记录 output
+                # 记录 output
+                span.update(output=normalized)  
             # 退出 with，结束 normalize Span
+
             with client.start_as_current_observation(
                 name="format-report", input=normalized
             ) as span:
                 result = f"已整理：{normalized}"
                 span.update(output=result)
             root.update(output={"result": result})
+
+            # 获取当前活动 Span 所属的 Trace ID
+            # 两个子 Span 都已经结束，根 Span 仍然活动，所以此时获取的是 root 所属的 Trace ID。
             trace_id = (
                 client.get_current_trace_id()
-            )  # 获取当前活动 Span 所属的 Trace ID
+            )  
         # 三个 Span 共享同一个 Trace ID，各自有独立的 Span ID。
         return {"mode": mode, "result": result, "trace_id": trace_id}
 

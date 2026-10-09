@@ -1,5 +1,7 @@
 # SDK 接口按 4.15.4 验证；与当前仓库的 LangChain 1.x / LangGraph 1.x 配合。
 langfuse==4.15.4
+# Langfuse CallbackHandler 会导入 langchain 以判断版本，仅安装 core 不够。
+langchain>=1.3,<2.0
 langchain-core>=1.4,<2.0
 langgraph>=1.2,<2.0
 # 与仓库已有的 OTLP gRPC exporter 保持同一版本，避免 pip 只升级 HTTP 一侧。
