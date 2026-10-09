@@ -70,6 +70,9 @@ async def fetch_examples(state: AsyncState, config: RunnableConfig) -> AsyncStat
     return {"research_notes": [await _fetch_note("examples", state["topic"], config)]}
 
 
+#         ┌→ fetch_docs ─────┐
+# START ──┤                 ├→ generate_answer → END
+#         └→ fetch_examples ┘
 def build_async_graph(checkpointer: InMemorySaver):
     # LangChain 提供的“模拟聊天模型”，用于测试和教学
     # FakeListChatModel 的流式实现会逐字符产生 AIMessageChunk，全程不调用网络。
@@ -228,7 +231,7 @@ async def run_demo(max_concurrency: int = 2) -> dict[str, Any]:
     graph = build_async_graph(checkpointer)
     config: RunnableConfig = {
         "configurable": {"thread_id": "async-stream-demo"},
-        "max_concurrency": max_concurrency,
+        "max_concurrency": max_concurrency,  # max_concurrency=2 允许它们并发运行
         "tags": ["lesson", "async"],  # 给这次运行附加标签
         "metadata": {
             "lesson": "part13",

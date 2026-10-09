@@ -12,13 +12,34 @@ graph.get_state_history()       ->      获取当前线程的所有历史 checkp
 get_state       = 读取某个 checkpoint
 get_state_history = 查找历史 checkpoint
 代码执行逻辑如下：
-replay =
-旧 checkpoint.config
-+ invoke(None)
-fork =
-旧 checkpoint.config
-+ update_state(部分更新)
-+ invoke(None)
+replay = 旧 checkpoint.config + invoke(None)
+fork = 旧 checkpoint.config + update_state(部分更新) + invoke(None)
+
+Replay 为什么会产生新的历史分支：
+- 图结构仍是 START -> apply_increment -> END；这里的分支指 checkpoint 历史分叉，
+  不是条件边，也不是新建 thread_id。
+- 原来的 config 只有 thread_id，读取该线程最新检查点；before_second.config 还包含
+  checkpoint_id，精确指向第二轮节点执行前的旧检查点：value=2、amount=3。
+- graph.invoke(None, config=before_second.config) 中 None 表示没有新的外部 State 输入；
+  因为旧检查点的 next=("apply_increment",)，会从保存的 State 重新执行 +3。
+  这次执行产生新的 checkpoint_id，原始历史及旧检查点保持不变。
+- 连续两次传入同一个 before_second.config，输入的旧 checkpoint_id 都相同，
+  但两次重新执行生成的 checkpoint_id 不同；结果相同不代表执行记录相同。
+  before_second.config 不会自动改为 replay 后的新检查点，因此第二次仍从 2 加 3，
+  得到 5，不会接着第一次 replay 的 5 再加 3 得到 8。
+
+示例历史（C、D、E、F 是示意检查点 ID）：
+旧检查点 C：value=2、amount=3
+  ├─ 原始执行 -> D：value=5 -> 第三轮 value=6
+  ├─ Replay 1 -> E：value=5
+  └─ Replay 2 -> F：value=5
+Fork 则先从 C 创建 amount=10 的新检查点，再执行 +10，得到 value=12。
+
+- invoke() 返回业务 State 字典，不包含本例的 checkpoint_id；检查点 ID 位于
+  StateSnapshot.config 中，通过 get_state() 或 get_state_history() 查看。
+- 如果选择最终检查点，next=()，invoke(None, ...) 没有待执行节点，不会重跑。
+- 原始历史保留不代表它仍是最新：本例 replay 后最新 value=5，fork 执行后为 12；
+  只有 thread_id 的 config 会读取最新检查点，指定 checkpoint_id 才定位具体历史。
 
 
 本课把同一个小图编译到 SqliteSaver，依次演示：
@@ -146,6 +167,7 @@ def run_demo(
         # ├─ 原始主线：+3 -> value=5 -> 第三轮 +1 -> value=6
         # ├─ replay 分支：重新执行 +3 -> value=5
         # └─ fork 分支：amount 改成 10 -> 执行 +10 -> value=12
+
         # None 表示没有新的外部 State 输入
         # 会新增一条分支，Replay 会重新执行旧 checkpoint 后的 Node，不是简单读取旧输出。
         # before_second 旧 checkpoint 没变，原始主线 value=6 没变
