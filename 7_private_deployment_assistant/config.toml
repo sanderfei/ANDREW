@@ -1,0 +1,26 @@
+[vector_store]
+# 改为 "pgvector" 即切换；两个后端各自保存数据，切换后分别执行录入。
+backend = "qdrant"
+namespace = "private_deployment"
+
+[embedding]
+model = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+dimension = 384
+model_path = "~/.cache/fastembed/paraphrase-multilingual-MiniLM-L12-v2-modelscope"
+cache_dir = "~/.cache/fastembed"
+
+[qdrant]
+url = "http://127.0.0.1:6333"
+
+[pgvector]
+host = "127.0.0.1"
+port = 5433
+database = "private_deployment"
+user = "private_assistant"
+password_env = "PRIVATE_ASSISTANT_PG_PASSWORD"
+
+[ingestion]
+chunk_size = 800
+chunk_overlap = 120
+# 相对路径以目录 7 为基准；需要录入其他目录时，在这里显式添加绝对路径。
+allowed_roots = ["documents/source"]

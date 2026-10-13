@@ -1,0 +1,32 @@
+name: andrew-private-vectors
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  pgvector:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: private_deployment
+      POSTGRES_USER: private_assistant
+      POSTGRES_PASSWORD: ${PRIVATE_ASSISTANT_PG_PASSWORD:?请先运行 setup_local_databases.py}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+      - ./database/001-vector.sql:/docker-entrypoint-initdb.d/001-vector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
+  pgvector_data:

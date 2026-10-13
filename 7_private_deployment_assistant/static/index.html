@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#132b32">
+  <title>私有化部署助手 · Web / KK</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="私有化部署助手首页">
+      <span class="brand-mark" aria-hidden="true">▥</span>
+      <span>部署助手<small>PRIVATE DEPLOYMENT</small></span>
+    </a>
+    <button id="new-session" class="new-session"><span>＋</span> 新建会话</button>
+    <p class="nav-label">工作空间</p>
+    <nav aria-label="主导航">
+      <button class="nav-item active" data-view="workspace"><span aria-hidden="true">◫</span> 运维工作台</button>
+      <button class="nav-item" data-view="documents"><span aria-hidden="true">▤</span> 知识文档 <span id="nav-doc-count" class="nav-count">—</span></button>
+      <button class="nav-item" data-view="evaluations"><span aria-hidden="true">◷</span> 评测实验</button>
+    </nav>
+    <div class="history-heading"><p class="nav-label">本地会话</p><button id="clear-sessions" class="icon-button" aria-label="清空本地会话" title="清空本地会话">×</button></div>
+    <div id="session-list" class="session-list"></div>
+    <div class="sidebar-bottom">
+      <span class="status-dot"></span><span>项目框架已就绪<small>智能问答与集群连接待接入</small></span>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div><span class="breadcrumb">Web / KK</span><span class="separator">/</span><span id="view-title">运维工作台</span></div>
+      <div class="topbar-right"><span class="framework-badge">框架模式</span><span class="avatar">运维</span></div>
+    </header>
+
+    <div class="page-content">
+      <section id="workspace-view" class="view">
+        <div class="page-heading"><div><p class="eyebrow">DEPLOYMENT WORKSPACE</p><h1>私有化部署运维工作台</h1><p class="subtitle">集群环境、部署资料与问题记录，集中在一个工作空间。</p></div><span class="quiet-tag">在线 / 离线部署</span></div>
+
+        <section class="context-card" aria-labelledby="context-title">
+          <div class="section-heading"><h2 id="context-title"><span class="section-icon">▥</span> 集群上下文</h2><span class="muted-badge">尚未连接</span></div>
+          <div class="context-fields">
+            <div class="field server-field"><label for="server-url">Web 部署服务器</label><div class="input-action"><input id="server-url" type="url" placeholder="https://web-installer.example.com" autocomplete="off"><button id="save-server">保存草稿</button></div></div>
+            <div class="field"><label for="cluster-select">目标集群</label><select id="cluster-select" disabled><option>连接服务器后选择集群</option></select></div>
+            <button class="outline-button refresh-button" disabled title="集群配置读取尚未接入">↻ 读取配置</button>
+          </div>
+          <div class="context-summary"><span>K8s 版本 <b>待读取</b></span><span>操作系统 <b>待读取</b></span><span>安装模式 <b>待读取</b></span><span>节点信息 <b>待读取</b></span></div>
+          <p class="field-help">地址仅保存为浏览器草稿。当前不会连接服务器或读取 config.yaml。</p>
+        </section>
+
+        <div class="workspace-grid">
+          <section class="conversation-card" aria-labelledby="conversation-title">
+            <div class="section-heading"><h2 id="conversation-title"><span class="section-icon">◫</span> 问题会话</h2><span class="muted">本地记录</span></div>
+            <div id="conversation" class="conversation" aria-live="polite">
+              <div id="welcome" class="welcome">
+                <div class="welcome-icon" aria-hidden="true">⌘</div>
+                <h2>从一个部署问题开始</h2>
+                <p>记录问题、查看部署资料，逐步搭建你的运维知识库。</p>
+                <div class="suggestions">
+                  <button data-question="私有化离线部署需要提前准备哪些内容？"><span>离线部署</span>安装准备与制品清单 <b>↗</b></button>
+                  <button data-question="Pod 镜像拉取失败时，应该先检查哪些信息？"><span>故障排查</span>镜像仓库与运行时配置 <b>↗</b></button>
+                  <button data-question="Helm 部署后 Pod 未就绪，如何逐步定位问题？"><span>Helm 部署</span>配置与工作负载排查 <b>↗</b></button>
+                  <button data-question="Web 与 KK 发布前，需要核对哪些部署条件？"><span>发布支持</span>版本与环境核对 <b>↗</b></button>
+                </div>
+                <div class="scope-note"><span aria-hidden="true">ⓘ</span> 当前为项目框架，发送问题不会生成诊断结论或调用模型。</div>
+              </div>
+              <div id="messages" class="messages"></div>
+            </div>
+            <form id="question-form" class="composer">
+              <label class="sr-only" for="question">输入部署或运维问题</label>
+              <textarea id="question" rows="3" maxlength="12000" placeholder="描述你的部署问题，例如：离线添加节点时依赖安装失败……"></textarea>
+              <div class="composer-bottom"><span>Shift + Enter 换行 · Enter 发送</span><button id="send-question" class="primary-button" type="submit">发送问题 <span aria-hidden="true">↑</span></button></div>
+            </form>
+          </section>
+
+          <aside class="workspace-aside">
+            <section class="info-card"><p class="eyebrow">KNOWLEDGE BASE</p><h2>部署参考资料</h2><div class="document-count"><strong id="workspace-doc-count">—</strong><span>份原始文档</span></div><p>私有化安装文档已归档，在线与离线流程作为后续知识来源。</p><button class="text-button" data-open-view="documents">浏览知识文档 <span>→</span></button></section>
+            <section class="info-card"><h2>版本支持范围</h2><div id="support-matrix" class="support-matrix"></div><p class="small-note">按当前 Web / KK 产品范围展示，实际集群环境待读取。</p></section>
+            <section class="info-card roadmap-card"><h2>后续能力</h2><ul><li><span>01</span>读取集群配置与任务历史</li><li><span>02</span>按版本检索部署资料</li><li><span>03</span>生成带引用的支持建议</li><li><span>04</span>Langfuse 质量评测</li></ul></section>
+          </aside>
+        </div>
+      </section>
+
+      <section id="documents-view" class="view" hidden>
+        <div class="page-heading"><div><p class="eyebrow">KNOWLEDGE DOCUMENTS</p><h1>知识文档</h1><p class="subtitle">部署指南与运维案例的原始资料，保留来源，逐步整理。</p></div><button class="outline-button" disabled title="文档上传与索引构建后续接入">＋ 导入文档</button></div>
+        <div class="notice"><span>ⓘ</span> 已提供本地文件录入与检索接口，执行后写入配置选中的数据库。<a href="/docs" target="_blank" rel="noopener">打开接口文档 ↗</a></div>
+        <div class="documents-panel"><div class="section-heading"><h2>资料目录</h2><span id="document-total" class="muted">加载中</span></div><div id="document-list"></div></div>
+        <section class="info-card document-plan"><h2>后续资料范围</h2><div class="topic-tags"><span>Web / KK 部署</span><span>Kubernetes 运维</span><span>Helm 部署</span><span>历史故障案例</span></div><p>集群配置按需读取，历史问题整理为经确认的案例文档。</p></section>
+      </section>
+
+      <section id="evaluations-view" class="view" hidden>
+        <div class="page-heading"><div><p class="eyebrow">QUALITY EVALUATION</p><h1>评测实验</h1><p class="subtitle">用真实问题与固定环境快照，比较每次迭代的效果。</p></div><button class="outline-button" disabled title="评测运行器尚未接入">＋ 创建实验</button></div>
+        <div class="metric-grid"><div class="metric-card"><span>检索命中</span><strong>—</strong><small>是否找到适用资料</small></div><div class="metric-card"><span>回答正确性</span><strong>—</strong><small>关键判断与步骤</small></div><div class="metric-card"><span>引用支持</span><strong>—</strong><small>结论是否有据可查</small></div><div class="metric-card"><span>追问与拒答</span><strong>—</strong><small>信息不足时的处理</small></div></div>
+        <section class="empty-panel"><div class="welcome-icon" aria-hidden="true">◷</div><h2>还没有评测实验</h2><p>后续接入真实问题集和 Langfuse，记录评分、耗时与失败原因。</p><span class="muted-badge">评测能力待接入</span></section>
+      </section>
+    </div>
+    <footer>Web / KK 运维知识工作空间<span>界面与项目框架 · v0.1</span></footer>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
