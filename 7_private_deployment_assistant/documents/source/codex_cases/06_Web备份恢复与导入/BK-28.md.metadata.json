@@ -1,0 +1,15 @@
+{
+  "title": "prepare漏过滤版本注释DROP导致误删原业务库",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

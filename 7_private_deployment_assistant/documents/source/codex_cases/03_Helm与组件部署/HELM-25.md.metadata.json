@@ -1,0 +1,15 @@
+{
+  "title": "Pinpoint HBase等待ZooKeeper端口不能证明quorum就绪",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

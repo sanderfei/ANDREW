@@ -1,0 +1,15 @@
+{
+  "title": "backup config零字节导致unexpected end of JSON input",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "自动retention删除NFS失败的记录与clean_fail",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

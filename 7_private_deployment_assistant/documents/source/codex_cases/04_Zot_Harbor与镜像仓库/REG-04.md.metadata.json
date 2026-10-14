@@ -1,0 +1,14 @@
+{
+  "title": "Harbor或Zot的HTTPS444被客户端当作HTTP",
+  "kind": "case",
+  "kubernetes_versions": [
+    "1.32.8"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "tar文件名包含完整钉钉URL及写归档无进度",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

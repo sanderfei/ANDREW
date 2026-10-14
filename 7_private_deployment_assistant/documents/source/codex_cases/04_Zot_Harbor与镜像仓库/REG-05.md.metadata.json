@@ -1,0 +1,14 @@
+{
+  "title": "证书错误x509与no basic auth credentials是两件事",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

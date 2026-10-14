@@ -1,0 +1,15 @@
+{
+  "title": "kubectl和Helm能SSH执行但无法访问API",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "Milvus账号配置路径与旧etcd数据保留",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

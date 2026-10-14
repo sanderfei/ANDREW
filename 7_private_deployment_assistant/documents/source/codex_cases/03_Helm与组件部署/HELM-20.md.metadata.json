@@ -1,0 +1,15 @@
+{
+  "title": "RabbitMQ管理入口404因classless Ingress被忽略",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

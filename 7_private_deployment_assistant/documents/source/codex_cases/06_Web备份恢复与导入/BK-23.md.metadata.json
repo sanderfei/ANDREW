@@ -1,0 +1,15 @@
+{
+  "title": "MariaDB schema-sync缺USE和完全限定表名风险",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

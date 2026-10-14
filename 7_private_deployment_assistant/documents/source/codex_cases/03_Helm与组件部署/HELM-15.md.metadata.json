@@ -1,0 +1,15 @@
+{
+  "title": "Apollo数据库名大小写与DeletedAt schema问题",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

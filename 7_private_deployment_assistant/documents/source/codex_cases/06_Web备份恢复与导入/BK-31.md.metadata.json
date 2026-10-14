@@ -1,0 +1,15 @@
+{
+  "title": "备份配置接口接受只有目录没有cluster config的伪集群",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

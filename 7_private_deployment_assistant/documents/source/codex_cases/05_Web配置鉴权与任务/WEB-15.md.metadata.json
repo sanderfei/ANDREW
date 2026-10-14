@@ -1,0 +1,15 @@
+{
+  "title": "PushAppImages 的 plainHTTP 与 skipTLSVerify 只控制传输",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

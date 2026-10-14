@@ -1,0 +1,14 @@
+{
+  "title": "Harbor初始化密码和auths推送密码不一致",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "verified"
+}

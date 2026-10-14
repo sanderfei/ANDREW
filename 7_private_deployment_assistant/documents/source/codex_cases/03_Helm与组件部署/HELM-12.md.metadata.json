@@ -1,0 +1,15 @@
+{
+  "title": "Nacos单副本cluster模式导致Distro未Ready和Seata503",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

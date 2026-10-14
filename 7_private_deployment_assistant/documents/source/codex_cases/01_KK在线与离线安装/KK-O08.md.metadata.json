@@ -1,0 +1,14 @@
+{
+  "title": "Ubuntu24.04离线ISO缺项与按OS版本选择",
+  "kind": "case",
+  "kubernetes_versions": [
+    "1.32.8"
+  ],
+  "operating_systems": [
+    "Ubuntu"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "NAS导出权限和服务配置问题不应盲目降级协议",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

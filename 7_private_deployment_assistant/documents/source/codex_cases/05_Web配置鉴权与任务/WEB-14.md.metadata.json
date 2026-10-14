@@ -1,0 +1,15 @@
+{
+  "title": "InstallAppV1 的安装与镜像推送分支及文件格式",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

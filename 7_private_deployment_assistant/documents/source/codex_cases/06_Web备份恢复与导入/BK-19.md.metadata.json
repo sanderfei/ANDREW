@@ -1,0 +1,15 @@
+{
+  "title": "MariaDB和Elasticsearch导入包合同不匹配",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

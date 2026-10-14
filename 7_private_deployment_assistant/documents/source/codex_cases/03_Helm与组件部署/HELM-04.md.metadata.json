@@ -1,0 +1,15 @@
+{
+  "title": "Bitnami非标准私库镜像被allowInsecureImages拦截",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

@@ -1,0 +1,14 @@
+{
+  "title": "导出下载curl56连接重置及9字节Not Found",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

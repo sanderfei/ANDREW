@@ -1,0 +1,15 @@
+{
+  "title": "Nacos Pending因PVC storageClassName为空或local错配",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

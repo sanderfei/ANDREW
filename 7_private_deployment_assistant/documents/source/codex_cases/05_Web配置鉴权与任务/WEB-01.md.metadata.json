@@ -1,0 +1,15 @@
+{
+  "title": "全局app.yaml与集群config.yaml及容器数据挂载",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

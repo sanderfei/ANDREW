@@ -1,0 +1,15 @@
+{
+  "title": "旧docker_push依赖Docker CLI导致command not found",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

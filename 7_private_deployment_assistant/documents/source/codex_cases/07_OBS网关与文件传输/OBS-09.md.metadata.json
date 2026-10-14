@@ -1,0 +1,15 @@
+{
+  "title": "并发打包任务同名临时文件和目标key冲突",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

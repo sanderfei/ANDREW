@@ -1,0 +1,15 @@
+{
+  "title": "NFS删除持全局锁导致所有集群配置查询阻塞",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

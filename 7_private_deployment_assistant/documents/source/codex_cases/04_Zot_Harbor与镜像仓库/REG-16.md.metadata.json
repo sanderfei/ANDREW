@@ -1,0 +1,14 @@
+{
+  "title": "manifest镜像清单与实际嵌入Chart不一致",
+  "kind": "case",
+  "kubernetes_versions": [
+    "1.32.8"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

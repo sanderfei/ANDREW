@@ -1,0 +1,15 @@
+{
+  "title": "MySQL导入不能复用为PostgreSQL/pgvector导入",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

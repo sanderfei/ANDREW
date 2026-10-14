@@ -1,0 +1,15 @@
+{
+  "title": "Neo4j5.26.28新版Chart与旧离线dump路径不匹配",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

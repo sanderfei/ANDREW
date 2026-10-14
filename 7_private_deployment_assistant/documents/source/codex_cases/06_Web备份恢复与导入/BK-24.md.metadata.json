@@ -1,0 +1,15 @@
+{
+  "title": "多库DDL半成功不能用一次事务整体回滚",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

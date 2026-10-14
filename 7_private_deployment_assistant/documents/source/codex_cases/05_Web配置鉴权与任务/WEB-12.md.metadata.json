@@ -1,0 +1,15 @@
+{
+  "title": "下载兑换token落盘不能异步返回制造刚申请就失效",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "TOKEN_INVALID需区分应用和用户凭据与会话",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

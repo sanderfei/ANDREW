@@ -1,0 +1,15 @@
+{
+  "title": "Chart应用版本与镜像tag升级不能仅看包名",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

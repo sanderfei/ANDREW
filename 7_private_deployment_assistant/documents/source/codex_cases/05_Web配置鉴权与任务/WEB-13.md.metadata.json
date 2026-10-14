@@ -1,0 +1,15 @@
+{
+  "title": "备份配置响应多一层config造成旧页面读不到",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

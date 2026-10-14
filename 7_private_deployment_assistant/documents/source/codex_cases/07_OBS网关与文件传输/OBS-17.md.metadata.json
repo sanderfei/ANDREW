@@ -1,0 +1,15 @@
+{
+  "title": "V3镜像归档registry重命名只改目标RepoTags",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

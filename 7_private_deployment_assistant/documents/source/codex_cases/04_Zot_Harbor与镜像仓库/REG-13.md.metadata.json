@@ -1,0 +1,14 @@
+{
+  "title": "HarborStatus端口可连不等于镜像仓库功能正常",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

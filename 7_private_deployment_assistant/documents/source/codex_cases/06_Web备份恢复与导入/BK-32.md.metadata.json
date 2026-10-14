@@ -1,0 +1,15 @@
+{
+  "title": "Images备份仍用Docker CLI而推送接口已改Go",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

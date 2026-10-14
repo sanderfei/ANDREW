@@ -1,0 +1,15 @@
+{
+  "title": "Apollo Helm覆盖hosts数组导致http paths缺失",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

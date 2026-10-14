@@ -1,0 +1,14 @@
+{
+  "title": "新artifact无images但旧工作目录镜像被继续推送",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

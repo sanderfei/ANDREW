@@ -1,0 +1,15 @@
+{
+  "title": "数据库依赖配置bothDB导致Apollo和Cadence传空参数",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

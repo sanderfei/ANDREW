@@ -1,0 +1,15 @@
+{
+  "title": "NFS存储位置和任务远程执行位置是两个配置",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

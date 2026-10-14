@@ -1,0 +1,15 @@
+{
+  "title": "registry上传ECONNRESET因同步长任务跨HTTP窗口",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

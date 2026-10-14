@@ -1,0 +1,15 @@
+{
+  "title": "Web重启不会更新固定g-web-installer-kk",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

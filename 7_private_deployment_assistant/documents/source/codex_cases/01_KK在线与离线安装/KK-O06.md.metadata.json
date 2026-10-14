@@ -1,0 +1,14 @@
+{
+  "title": "离线初始化NFS依赖解包后未配置",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "Ubuntu"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "verified"
+}

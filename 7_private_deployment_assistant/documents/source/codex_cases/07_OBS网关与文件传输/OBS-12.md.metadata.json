@@ -1,0 +1,15 @@
+{
+  "title": "V3上传10分钟context canceled实际是Axios600000ms",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

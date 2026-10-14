@@ -1,0 +1,14 @@
+{
+  "title": "Harbor缺少dmp和cloud项目导致push拒绝",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

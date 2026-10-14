@@ -1,0 +1,15 @@
+{
+  "title": "PostgreSQL镜像含扩展文件不等于每个数据库启用vector",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

@@ -1,0 +1,14 @@
+{
+  "title": "Zot特殊字符认证参数及NAT IP证书SAN风险",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

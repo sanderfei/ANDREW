@@ -1,0 +1,15 @@
+{
+  "title": "MySQL首启探针过短与Pinpoint初始化SQL失败",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

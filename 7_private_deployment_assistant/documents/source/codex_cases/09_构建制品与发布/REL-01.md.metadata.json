@@ -1,0 +1,15 @@
+{
+  "title": "编辑解压Chart未重新打包实际嵌入tgz",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "Velero及旧导入脚本仍写死root密码SSH",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

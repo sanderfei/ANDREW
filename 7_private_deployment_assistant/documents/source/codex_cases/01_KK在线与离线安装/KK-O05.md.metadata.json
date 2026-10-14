@@ -1,0 +1,14 @@
+{
+  "title": "Harbor离线初始化回退到GitHub下载",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

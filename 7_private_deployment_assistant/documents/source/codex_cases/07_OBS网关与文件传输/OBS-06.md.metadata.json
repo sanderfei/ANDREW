@@ -1,0 +1,15 @@
+{
+  "title": "大文件下载200 pending及WriteTimeout限制",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

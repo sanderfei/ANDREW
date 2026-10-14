@@ -1,0 +1,14 @@
+{
+  "title": "init registry成功后UpdateLocalHosts127或resource busy",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

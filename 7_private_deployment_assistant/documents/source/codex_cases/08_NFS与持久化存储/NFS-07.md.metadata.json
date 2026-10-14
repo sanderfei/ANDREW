@@ -1,0 +1,15 @@
+{
+  "title": "NFS下载缓存保留与保留策略目标一致性",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

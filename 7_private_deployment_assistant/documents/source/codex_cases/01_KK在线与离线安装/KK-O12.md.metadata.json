@@ -1,0 +1,14 @@
+{
+  "title": "artifact export累计两小时超时和缓存复用",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

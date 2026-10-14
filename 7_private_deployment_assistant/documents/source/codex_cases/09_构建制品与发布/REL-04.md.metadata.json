@@ -1,0 +1,15 @@
+{
+  "title": "Go默认构建因gpgme btrfs原生依赖失败",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "cron未执行因按服务端EDT而非北京时间",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

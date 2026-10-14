@@ -1,0 +1,15 @@
+{
+  "title": "NFS4ERR_PERM因高位源端口需要exports匹配",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

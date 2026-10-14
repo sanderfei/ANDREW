@@ -1,0 +1,15 @@
+{
+  "title": "Seata使用旧Nacos域名或写死namespace",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

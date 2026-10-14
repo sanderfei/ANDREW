@@ -1,0 +1,15 @@
+{
+  "title": "PV PVC与NFS目录及卸载后旧数据复用",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

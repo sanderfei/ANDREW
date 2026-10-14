@@ -1,0 +1,2296 @@
+{
+  "created_at": "2026-10-14",
+  "case_count": 167,
+  "raw_files_scanned": 421,
+  "distinct_sessions": 378,
+  "cases": [
+    {
+      "id": "KK-O01",
+      "title": "在线与离线模式的实际开关及三步安装",
+      "path": "01_KK在线与离线安装/KK-O01.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019f885c-37ff-7ba1-8684-30e6d14bc858",
+          "session_start": "2026-07-22"
+        }
+      ]
+    },
+    {
+      "id": "KK-O02",
+      "title": "1.23.10与1.32.8的运行时和配置差异",
+      "path": "01_KK在线与离线安装/KK-O02.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019f885c-37ff-7ba1-8684-30e6d14bc858",
+          "session_start": "2026-07-22"
+        },
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "id": "KK-O03",
+      "title": "Web初始化离线仓库仍尝试从OBS下载制品",
+      "path": "01_KK在线与离线安装/KK-O03.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019f83e7-6612-7e73-9060-fe08650c2432",
+          "session_start": "2026-07-21"
+        }
+      ]
+    },
+    {
+      "id": "KK-O04",
+      "title": "离线制品的宿主机路径与容器路径不一致",
+      "path": "01_KK在线与离线安装/KK-O04.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a1335b-0dc5-78f2-8722-2aa5f948ef7d",
+          "session_start": "2026-10-13"
+        }
+      ]
+    },
+    {
+      "id": "KK-O05",
+      "title": "Harbor离线初始化回退到GitHub下载",
+      "path": "01_KK在线与离线安装/KK-O05.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019f842c-ee19-7382-95c8-fc50e58bc4e7",
+          "session_start": "2026-07-21"
+        }
+      ]
+    },
+    {
+      "id": "KK-O06",
+      "title": "离线初始化NFS依赖解包后未配置",
+      "path": "01_KK在线与离线安装/KK-O06.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "KK-O07",
+      "title": "dpkg前端锁被unattended-upgrade占用",
+      "path": "01_KK在线与离线安装/KK-O07.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a11e76-e245-75f0-82a7-b73685d728c7",
+          "session_start": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": "KK-O08",
+      "title": "Ubuntu24.04离线ISO缺项与按OS版本选择",
+      "path": "01_KK在线与离线安装/KK-O08.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a1191d-6db7-7c42-8d00-6194d609a369",
+          "session_start": "2026-10-08"
+        }
+      ]
+    },
+    {
+      "id": "KK-O09",
+      "title": "离线新增节点APT依赖冲突发生在join之前",
+      "path": "01_KK在线与离线安装/KK-O09.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a11a9f-ba61-7e73-a4e3-accd4ec7d7a7",
+          "session_start": "2026-10-08"
+        }
+      ]
+    },
+    {
+      "id": "KK-O10",
+      "title": "add nodes未先安装socat和conntrack依赖",
+      "path": "01_KK在线与离线安装/KK-O10.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019e1afd-83f9-7fc1-98dc-f16372a318bd",
+          "session_start": "2026-05-12"
+        }
+      ]
+    },
+    {
+      "id": "KK-O11",
+      "title": "KKZONE区域设置在新增节点时丢失",
+      "path": "01_KK在线与离线安装/KK-O11.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019e1b56-4ffb-7e10-8be5-b4455100eced",
+          "session_start": "2026-05-12"
+        }
+      ]
+    },
+    {
+      "id": "KK-O12",
+      "title": "artifact export累计两小时超时和缓存复用",
+      "path": "01_KK在线与离线安装/KK-O12.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "KK-O13",
+      "title": "导出下载curl56连接重置及9字节Not Found",
+      "path": "01_KK在线与离线安装/KK-O13.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        },
+        {
+          "session_id": "01a083b4-1688-70b3-8244-3d7265654268",
+          "session_start": "2026-09-09"
+        }
+      ]
+    },
+    {
+      "id": "KK-O14",
+      "title": "ISO同步校验时报远端文件不存在",
+      "path": "01_KK在线与离线安装/KK-O14.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "KK-O15",
+      "title": "两个离线集群复用同一个registry",
+      "path": "01_KK在线与离线安装/KK-O15.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a1335b-0dc5-78f2-8722-2aa5f948ef7d",
+          "session_start": "2026-10-13"
+        }
+      ]
+    },
+    {
+      "id": "KK-C01",
+      "title": "已有containerd关闭CRI导致unknown service runtime.v1",
+      "path": "02_集群运行时与网络/KK-C01.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019d85fa-2ea8-78b3-b206-29382cb353ec",
+          "session_start": "2026-04-13"
+        }
+      ]
+    },
+    {
+      "id": "KK-C02",
+      "title": "CoreDNS1.9.3不支持kubeadm1.32生成的新Corefile",
+      "path": "02_集群运行时与网络/KK-C02.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "id": "KK-C03",
+      "title": "Calico等待逻辑目标数错误及无法持续轮询",
+      "path": "02_集群运行时与网络/KK-C03.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        },
+        {
+          "session_id": "019dcda0-0c9b-7433-81b3-dc45661aadac",
+          "session_start": "2026-04-27"
+        }
+      ]
+    },
+    {
+      "id": "KK-C04",
+      "title": "Calico Init0/3因宿主机缺少bpffs目录",
+      "path": "02_集群运行时与网络/KK-C04.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019dcda0-0c9b-7433-81b3-dc45661aadac",
+          "session_start": "2026-04-27"
+        }
+      ]
+    },
+    {
+      "id": "KK-C05",
+      "title": "通配域名A正常但AAAA返回SERVFAIL",
+      "path": "02_集群运行时与网络/KK-C05.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0b396-9930-75e1-8954-874cb2cd724e",
+          "session_start": "2026-09-18"
+        },
+        {
+          "session_id": "01a0b290-5667-7b52-8ce3-9d3425d0a83b",
+          "session_start": "2026-09-18"
+        }
+      ]
+    },
+    {
+      "id": "KK-C06",
+      "title": "DNS域名配置和k8s地址网段混用",
+      "path": "02_集群运行时与网络/KK-C06.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a08a04-f13e-7191-b25f-90b77439398d",
+          "session_start": "2026-09-10"
+        },
+        {
+          "session_id": "019f88b7-4948-7942-82aa-96119886cdbc",
+          "session_start": "2026-07-22"
+        }
+      ]
+    },
+    {
+      "id": "KK-C07",
+      "title": "多Master的API VIP不是业务Ingress VIP",
+      "path": "02_集群运行时与网络/KK-C07.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a089e4-3852-7840-9a78-acdcd4c7825a",
+          "session_start": "2026-09-10"
+        },
+        {
+          "session_id": "01a08a16-ebab-7ed1-b0a8-5ad5afece0c8",
+          "session_start": "2026-09-10"
+        }
+      ]
+    },
+    {
+      "id": "KK-C08",
+      "title": "scheduler和controller-manager因续租超时重启",
+      "path": "02_集群运行时与网络/KK-C08.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "id": "KK-C09",
+      "title": "NodePort在master超时而worker正常",
+      "path": "02_集群运行时与网络/KK-C09.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019e49fd-4546-7761-921f-432304983f3e",
+          "session_start": "2026-05-21"
+        }
+      ]
+    },
+    {
+      "id": "KK-C10",
+      "title": "kubectl和Helm能SSH执行但无法访问API",
+      "path": "02_集群运行时与网络/KK-C10.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019fd691-52d5-77e3-a7b9-9e104320bcb8",
+          "session_start": "2026-08-06"
+        },
+        {
+          "session_id": "019ff49e-b946-72a0-8913-0ab2764c18ca",
+          "session_start": "2026-08-12"
+        }
+      ]
+    },
+    {
+      "id": "REG-01",
+      "title": "init registry成功后UpdateLocalHosts127或resource busy",
+      "path": "04_Zot_Harbor与镜像仓库/REG-01.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0f1be-127f-7623-b005-44535a0d38e2",
+          "session_start": "2026-09-30"
+        },
+        {
+          "session_id": "01a1191d-6db7-7c42-8d00-6194d609a369",
+          "session_start": "2026-10-08"
+        },
+        {
+          "session_id": "01a0e73a-d872-7de0-b4bd-898a8dc97d47",
+          "session_start": "2026-09-28"
+        }
+      ]
+    },
+    {
+      "id": "REG-02",
+      "title": "Harbor初始化密码和auths推送密码不一致",
+      "path": "04_Zot_Harbor与镜像仓库/REG-02.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0b30c-04bf-7fc0-954b-f763a87a463e",
+          "session_start": "2026-09-18"
+        }
+      ]
+    },
+    {
+      "id": "REG-03",
+      "title": "Harbor缺少dmp和cloud项目导致push拒绝",
+      "path": "04_Zot_Harbor与镜像仓库/REG-03.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0b30c-04bf-7fc0-954b-f763a87a463e",
+          "session_start": "2026-09-18"
+        },
+        {
+          "session_id": "01a0b396-9930-75e1-8954-874cb2cd724e",
+          "session_start": "2026-09-18"
+        }
+      ]
+    },
+    {
+      "id": "REG-04",
+      "title": "Harbor或Zot的HTTPS444被客户端当作HTTP",
+      "path": "04_Zot_Harbor与镜像仓库/REG-04.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        },
+        {
+          "session_id": "01a11acc-4df5-78f3-9d32-2b2307bff4c5",
+          "session_start": "2026-10-08"
+        }
+      ]
+    },
+    {
+      "id": "REG-05",
+      "title": "证书错误x509与no basic auth credentials是两件事",
+      "path": "04_Zot_Harbor与镜像仓库/REG-05.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0b30c-04bf-7fc0-954b-f763a87a463e",
+          "session_start": "2026-09-18"
+        },
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REG-06",
+      "title": "containerd1.x使用certs.d而非旧inline镜像配置",
+      "path": "04_Zot_Harbor与镜像仓库/REG-06.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a0e73a-d872-7de0-b4bd-898a8dc97d47",
+          "session_start": "2026-09-28"
+        },
+        {
+          "session_id": "01a11acc-4df5-78f3-9d32-2b2307bff4c5",
+          "session_start": "2026-10-08"
+        }
+      ]
+    },
+    {
+      "id": "REG-07",
+      "title": "Zot缺少离线二进制不能靠init自动下载",
+      "path": "04_Zot_Harbor与镜像仓库/REG-07.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a11e76-e245-75f0-82a7-b73685d728c7",
+          "session_start": "2026-10-09"
+        },
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REG-08",
+      "title": "Zot已启动但v2空正文被就绪检查误判",
+      "path": "04_Zot_Harbor与镜像仓库/REG-08.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REG-09",
+      "title": "Zot就绪检查节点缺curl",
+      "path": "04_Zot_Harbor与镜像仓库/REG-09.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REG-10",
+      "title": "Zot允许匿名pull但push仍需认证",
+      "path": "04_Zot_Harbor与镜像仓库/REG-10.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REG-11",
+      "title": "Zot数据目录改为data-zot不自动迁移旧数据",
+      "path": "04_Zot_Harbor与镜像仓库/REG-11.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REG-12",
+      "title": "PushAppImages对Zot误调用Harbor项目API",
+      "path": "04_Zot_Harbor与镜像仓库/REG-12.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        },
+        {
+          "session_id": "01a0e7b5-8ba4-7653-8222-e5c0bbf67654",
+          "session_start": "2026-09-28"
+        }
+      ]
+    },
+    {
+      "id": "REG-13",
+      "title": "HarborStatus端口可连不等于镜像仓库功能正常",
+      "path": "04_Zot_Harbor与镜像仓库/REG-13.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REG-14",
+      "title": "Harbor数据库dirty82导致core与jobservice重启",
+      "path": "04_Zot_Harbor与镜像仓库/REG-14.md",
+      "status": "历史状态验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "id": "REG-15",
+      "title": "镜像push401与PUT blob403不能混为密码或满盘",
+      "path": "04_Zot_Harbor与镜像仓库/REG-15.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "id": "REG-16",
+      "title": "manifest镜像清单与实际嵌入Chart不一致",
+      "path": "04_Zot_Harbor与镜像仓库/REG-16.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0c17e-ab67-7921-86c1-df12b82bd17d",
+          "session_start": "2026-09-21"
+        }
+      ]
+    },
+    {
+      "id": "HELM-01",
+      "title": "another operation in progress与pending修订",
+      "path": "03_Helm与组件部署/HELM-01.md",
+      "status": "历史状态验证",
+      "sources": [
+        {
+          "session_id": "019dd6c2-058b-7663-9904-8e6f8f22861f",
+          "session_start": "2026-04-29"
+        },
+        {
+          "session_id": "019e39d0-a474-7313-a050-2a1384c7ceda",
+          "session_start": "2026-05-18"
+        }
+      ]
+    },
+    {
+      "id": "HELM-02",
+      "title": "ingress admission证书not yet valid",
+      "path": "03_Helm与组件部署/HELM-02.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019dd6c2-058b-7663-9904-8e6f8f22861f",
+          "session_start": "2026-04-29"
+        }
+      ]
+    },
+    {
+      "id": "HELM-03",
+      "title": "Redis包缺common子Chart",
+      "path": "03_Helm与组件部署/HELM-03.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "id": "HELM-04",
+      "title": "Bitnami非标准私库镜像被allowInsecureImages拦截",
+      "path": "03_Helm与组件部署/HELM-04.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "id": "HELM-05",
+      "title": "升级Chart后私有registry覆盖无效",
+      "path": "03_Helm与组件部署/HELM-05.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        }
+      ]
+    },
+    {
+      "id": "HELM-06",
+      "title": "MySQL首启探针过短与Pinpoint初始化SQL失败",
+      "path": "03_Helm与组件部署/HELM-06.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "id": "HELM-07",
+      "title": "Kafka KRaft Secret被错误绑定SASL条件",
+      "path": "03_Helm与组件部署/HELM-07.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        }
+      ]
+    },
+    {
+      "id": "HELM-08",
+      "title": "数据库依赖配置bothDB导致Apollo和Cadence传空参数",
+      "path": "03_Helm与组件部署/HELM-08.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019d9001-85fa-74e1-8139-e17f1bfb9e81",
+          "session_start": "2026-04-15"
+        },
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        }
+      ]
+    },
+    {
+      "id": "HELM-09",
+      "title": "组件安装依赖顺序与Ready不是同一保证",
+      "path": "03_Helm与组件部署/HELM-09.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019da8d0-8dab-7c01-aca1-61b76598a714",
+          "session_start": "2026-04-20"
+        },
+        {
+          "session_id": "019dd763-a37b-7a32-a87c-9eee316434d6",
+          "session_start": "2026-04-29"
+        },
+        {
+          "session_id": "019da8f6-435c-7673-8dfe-09956eaf3dd3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "HELM-10",
+      "title": "Nacos Pending因PVC storageClassName为空或local错配",
+      "path": "03_Helm与组件部署/HELM-10.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019da8b7-4fb6-7c53-9418-182a68ec00e3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "HELM-11",
+      "title": "Nacos3初始化数据库缺config_info_gray等表",
+      "path": "03_Helm与组件部署/HELM-11.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019da8b7-4fb6-7c53-9418-182a68ec00e3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "HELM-12",
+      "title": "Nacos单副本cluster模式导致Distro未Ready和Seata503",
+      "path": "03_Helm与组件部署/HELM-12.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019da8b7-4fb6-7c53-9418-182a68ec00e3",
+          "session_start": "2026-04-20"
+        },
+        {
+          "session_id": "01a055af-6e48-7d72-b584-626a5f397ba7",
+          "session_start": "2026-08-31"
+        }
+      ]
+    },
+    {
+      "id": "HELM-13",
+      "title": "Nacos3健康检查端口和URL前缀不兼容",
+      "path": "03_Helm与组件部署/HELM-13.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        },
+        {
+          "session_id": "01a055af-6e48-7d72-b584-626a5f397ba7",
+          "session_start": "2026-08-31"
+        },
+        {
+          "session_id": "019ff49e-b946-72a0-8913-0ab2764c18ca",
+          "session_start": "2026-08-12"
+        }
+      ]
+    },
+    {
+      "id": "HELM-14",
+      "title": "MariaDB探针报Access denied后排除密码确认连接数耗尽",
+      "path": "03_Helm与组件部署/HELM-14.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019da8b7-4fb6-7c53-9418-182a68ec00e3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "HELM-15",
+      "title": "Apollo数据库名大小写与DeletedAt schema问题",
+      "path": "03_Helm与组件部署/HELM-15.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019da8b7-4fb6-7c53-9418-182a68ec00e3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "HELM-16",
+      "title": "Apollo Helm覆盖hosts数组导致http paths缺失",
+      "path": "03_Helm与组件部署/HELM-16.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019da8b7-4fb6-7c53-9418-182a68ec00e3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "HELM-17",
+      "title": "Seata使用旧Nacos域名或写死namespace",
+      "path": "03_Helm与组件部署/HELM-17.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019da8b7-4fb6-7c53-9418-182a68ec00e3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "HELM-18",
+      "title": "Seata store.db键及MySQL8驱动超时不兼容",
+      "path": "03_Helm与组件部署/HELM-18.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        }
+      ]
+    },
+    {
+      "id": "HELM-19",
+      "title": "Nacos和Seata IngressClass为空或端口指向错误",
+      "path": "03_Helm与组件部署/HELM-19.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019da8b7-4fb6-7c53-9418-182a68ec00e3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "HELM-20",
+      "title": "RabbitMQ管理入口404因classless Ingress被忽略",
+      "path": "03_Helm与组件部署/HELM-20.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a060f1-9100-7d30-88ac-056f1de8919b",
+          "session_start": "2026-09-02"
+        }
+      ]
+    },
+    {
+      "id": "HELM-21",
+      "title": "Milvus Pending因CPU requests预约满而非镜像缺失",
+      "path": "03_Helm与组件部署/HELM-21.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019ff49e-b946-72a0-8913-0ab2764c18ca",
+          "session_start": "2026-08-12"
+        }
+      ]
+    },
+    {
+      "id": "HELM-22",
+      "title": "Milvus历史失败Hook Pod使Web健康状态误判",
+      "path": "03_Helm与组件部署/HELM-22.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019ff49e-b946-72a0-8913-0ab2764c18ca",
+          "session_start": "2026-08-12"
+        }
+      ]
+    },
+    {
+      "id": "HELM-23",
+      "title": "Milvus账号配置路径与旧etcd数据保留",
+      "path": "03_Helm与组件部署/HELM-23.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a056e4-c464-7211-92f1-7361bdbc24c0",
+          "session_start": "2026-08-31"
+        },
+        {
+          "session_id": "019ff4a8-2a85-7430-bb79-e576e4793ee1",
+          "session_start": "2026-08-12"
+        }
+      ]
+    },
+    {
+      "id": "HELM-24",
+      "title": "Milvus升级的Woodpecker与StorageV2兼容",
+      "path": "03_Helm与组件部署/HELM-24.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        }
+      ]
+    },
+    {
+      "id": "HELM-25",
+      "title": "Pinpoint HBase等待ZooKeeper端口不能证明quorum就绪",
+      "path": "03_Helm与组件部署/HELM-25.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019fabf4-d087-7020-ba90-77a51c8c3b7b",
+          "session_start": "2026-07-29"
+        }
+      ]
+    },
+    {
+      "id": "HELM-26",
+      "title": "Pinpoint HBase后台进程退出但Pod仍Running",
+      "path": "03_Helm与组件部署/HELM-26.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019fabf4-d087-7020-ba90-77a51c8c3b7b",
+          "session_start": "2026-07-29"
+        }
+      ]
+    },
+    {
+      "id": "HELM-27",
+      "title": "Pinpoint内置MySQL初始化表缺失与依赖分支变动",
+      "path": "03_Helm与组件部署/HELM-27.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019fabf4-d087-7020-ba90-77a51c8c3b7b",
+          "session_start": "2026-07-29"
+        },
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        }
+      ]
+    },
+    {
+      "id": "HELM-28",
+      "title": "Elasticsearch升级后analysis插件缺失",
+      "path": "03_Helm与组件部署/HELM-28.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a056e4-c464-7211-92f1-7361bdbc24c0",
+          "session_start": "2026-08-31"
+        }
+      ]
+    },
+    {
+      "id": "HELM-29",
+      "title": "Neo4j默认资源被Web低值覆盖触发Chart校验",
+      "path": "03_Helm与组件部署/HELM-29.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        },
+        {
+          "session_id": "019ff49e-b946-72a0-8913-0ab2764c18ca",
+          "session_start": "2026-08-12"
+        }
+      ]
+    },
+    {
+      "id": "HELM-30",
+      "title": "Neo4j对NAS只读snapshot递归chown失败",
+      "path": "03_Helm与组件部署/HELM-30.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019f88d6-6fe9-7fe2-8e25-0a533e46b8f1",
+          "session_start": "2026-07-22"
+        }
+      ]
+    },
+    {
+      "id": "HELM-31",
+      "title": "Cadence初始化缺少schema版本基线",
+      "path": "03_Helm与组件部署/HELM-31.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019ff49e-b946-72a0-8913-0ab2764c18ca",
+          "session_start": "2026-08-12"
+        },
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        }
+      ]
+    },
+    {
+      "id": "HELM-32",
+      "title": "RocketMQ Proxy Service targetPort指向7001错误",
+      "path": "03_Helm与组件部署/HELM-32.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        }
+      ]
+    },
+    {
+      "id": "HELM-33",
+      "title": "EMQX sysctl initContainer mount权限不足",
+      "path": "03_Helm与组件部署/HELM-33.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019f88b7-4948-7942-82aa-96119886cdbc",
+          "session_start": "2026-07-22"
+        },
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        }
+      ]
+    },
+    {
+      "id": "HELM-34",
+      "title": "多release数据库端口和资源名称冲突",
+      "path": "03_Helm与组件部署/HELM-34.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019fb1d7-4e6f-7b62-822e-4bb10959cc3e",
+          "session_start": "2026-07-30"
+        },
+        {
+          "session_id": "019fabf4-d087-7020-ba90-77a51c8c3b7b",
+          "session_start": "2026-07-29"
+        }
+      ]
+    },
+    {
+      "id": "WEB-01",
+      "title": "全局app.yaml与集群config.yaml及容器数据挂载",
+      "path": "05_Web配置鉴权与任务/WEB-01.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a123ed-8f95-7d10-97c1-e7521f6ee643",
+          "session_start": "2026-10-10"
+        },
+        {
+          "session_id": "019da8f6-435c-7673-8dfe-09956eaf3dd3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "WEB-02",
+      "title": "ComponentsStatus私钥路径没有透传",
+      "path": "05_Web配置鉴权与任务/WEB-02.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019e0baa-05fc-7120-aeb3-04dbb297c88c",
+          "session_start": "2026-05-09"
+        }
+      ]
+    },
+    {
+      "id": "WEB-03",
+      "title": "组件卸载SSH旧指纹和私钥支持缺失",
+      "path": "05_Web配置鉴权与任务/WEB-03.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019fabf4-d087-7020-ba90-77a51c8c3b7b",
+          "session_start": "2026-07-29"
+        },
+        {
+          "session_id": "019fb742-2b7f-70e1-a902-567e046c2aba",
+          "session_start": "2026-07-31"
+        }
+      ]
+    },
+    {
+      "id": "WEB-04",
+      "title": "Velero及旧导入脚本仍写死root密码SSH",
+      "path": "05_Web配置鉴权与任务/WEB-04.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019fabf4-d087-7020-ba90-77a51c8c3b7b",
+          "session_start": "2026-07-29"
+        }
+      ]
+    },
+    {
+      "id": "WEB-05",
+      "title": "users.json更新后权限不生效",
+      "path": "05_Web配置鉴权与任务/WEB-05.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019ff4a4-8c23-7a63-aecb-9f31290a1918",
+          "session_start": "2026-08-12"
+        },
+        {
+          "session_id": "01a0a423-6067-7e41-be01-fd4cc495aec5",
+          "session_start": "2026-09-15"
+        }
+      ]
+    },
+    {
+      "id": "WEB-06",
+      "title": "v3 login先被本地JWT拦截",
+      "path": "05_Web配置鉴权与任务/WEB-06.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a133bd-09d5-7981-91f4-c13b97e833cc",
+          "session_start": "2026-10-13"
+        }
+      ]
+    },
+    {
+      "id": "WEB-07",
+      "title": "IAM401应用授权与实际网页应用不一致",
+      "path": "05_Web配置鉴权与任务/WEB-07.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0a423-6067-7e41-be01-fd4cc495aec5",
+          "session_start": "2026-09-15"
+        }
+      ]
+    },
+    {
+      "id": "WEB-08",
+      "title": "网关示例bucket不等于实际授权桶",
+      "path": "05_Web配置鉴权与任务/WEB-08.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0a423-6067-7e41-be01-fd4cc495aec5",
+          "session_start": "2026-09-15"
+        }
+      ]
+    },
+    {
+      "id": "WEB-09",
+      "title": "TOKEN_INVALID需区分应用和用户凭据与会话",
+      "path": "05_Web配置鉴权与任务/WEB-09.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0bdb4-fd78-7393-918d-1430d361ee4c",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "WEB-10",
+      "title": "runningProcesses并发注册和kill存在数据竞争",
+      "path": "05_Web配置鉴权与任务/WEB-10.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019f4aa4-d27b-7632-a1fd-008c4a7d986e",
+          "session_start": "2026-07-10"
+        }
+      ]
+    },
+    {
+      "id": "WEB-11",
+      "title": "NFS存储位置和任务远程执行位置是两个配置",
+      "path": "05_Web配置鉴权与任务/WEB-11.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019fa651-7fbb-7fd0-a241-ca3a1dfc4512",
+          "session_start": "2026-07-28"
+        },
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        }
+      ]
+    },
+    {
+      "id": "WEB-12",
+      "title": "下载兑换token落盘不能异步返回制造刚申请就失效",
+      "path": "05_Web配置鉴权与任务/WEB-12.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019ea503-3922-7bf3-91f8-71117200fbe1",
+          "session_start": "2026-06-08"
+        }
+      ]
+    },
+    {
+      "id": "BK-01",
+      "title": "backup config零字节导致unexpected end of JSON input",
+      "path": "06_Web备份恢复与导入/BK-01.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a05644-4d89-7f73-9142-47c33afb0da5",
+          "session_start": "2026-08-31"
+        }
+      ]
+    },
+    {
+      "id": "BK-02",
+      "title": "备份工具安装在Web端而非只看数据库Pod",
+      "path": "06_Web备份恢复与导入/BK-02.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019e5ccd-6d2d-73f3-90c2-0e8d7304c680",
+          "session_start": "2026-05-25"
+        },
+        {
+          "session_id": "019e7286-2b09-7223-b53a-a19230165695",
+          "session_start": "2026-05-29"
+        },
+        {
+          "session_id": "019e811b-2e53-7192-969c-410a25d2be34",
+          "session_start": "2026-06-01"
+        }
+      ]
+    },
+    {
+      "id": "BK-03",
+      "title": "MariaDB mysqldump COLUMN_STATISTICS导致假成功小包",
+      "path": "06_Web备份恢复与导入/BK-03.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019e5ccd-6d2d-73f3-90c2-0e8d7304c680",
+          "session_start": "2026-05-25"
+        }
+      ]
+    },
+    {
+      "id": "BK-04",
+      "title": "Milvus备份名称前缀与字符限制",
+      "path": "06_Web备份恢复与导入/BK-04.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019e811b-2e53-7192-969c-410a25d2be34",
+          "session_start": "2026-06-01"
+        },
+        {
+          "session_id": "019e9557-d08c-7a42-b71e-e16374c033cd",
+          "session_start": "2026-06-05"
+        }
+      ]
+    },
+    {
+      "id": "BK-05",
+      "title": "Milvus备份141因awk早退触发SIGPIPE",
+      "path": "06_Web备份恢复与导入/BK-05.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019ea503-3922-7bf3-91f8-71117200fbe1",
+          "session_start": "2026-06-08"
+        }
+      ]
+    },
+    {
+      "id": "BK-06",
+      "title": "备份warning是最近任务失败不是组件健康",
+      "path": "06_Web备份恢复与导入/BK-06.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f7d61-b3e5-7720-b55d-b5446491c074",
+          "session_start": "2026-07-20"
+        },
+        {
+          "session_id": "019fa651-7fbb-7fd0-a241-ca3a1dfc4512",
+          "session_start": "2026-07-28"
+        }
+      ]
+    },
+    {
+      "id": "BK-07",
+      "title": "cron未执行因按服务端EDT而非北京时间",
+      "path": "06_Web备份恢复与导入/BK-07.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019ea503-3922-7bf3-91f8-71117200fbe1",
+          "session_start": "2026-06-08"
+        }
+      ]
+    },
+    {
+      "id": "BK-08",
+      "title": "同一分钟多个备份目标并发与锁范围",
+      "path": "06_Web备份恢复与导入/BK-08.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019e5ccd-6d2d-73f3-90c2-0e8d7304c680",
+          "session_start": "2026-05-25"
+        },
+        {
+          "session_id": "019e811b-2e53-7192-969c-410a25d2be34",
+          "session_start": "2026-06-01"
+        }
+      ]
+    },
+    {
+      "id": "BK-09",
+      "title": "立即备份trigger传状态对象导致JSON解析失败",
+      "path": "06_Web备份恢复与导入/BK-09.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019fa651-7fbb-7fd0-a241-ca3a1dfc4512",
+          "session_start": "2026-07-28"
+        }
+      ]
+    },
+    {
+      "id": "BK-10",
+      "title": "Images备份配置残留database_filter",
+      "path": "06_Web备份恢复与导入/BK-10.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f8848-7b2b-73d1-9b89-e8c510e509c7",
+          "session_start": "2026-07-22"
+        }
+      ]
+    },
+    {
+      "id": "BK-11",
+      "title": "MongoDB过滤误用mongodump不支持的ns参数",
+      "path": "06_Web备份恢复与导入/BK-11.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019f4aa4-d27b-7632-a1fd-008c4a7d986e",
+          "session_start": "2026-07-10"
+        }
+      ]
+    },
+    {
+      "id": "BK-12",
+      "title": "MongoDB config.system.sessions读取被拒",
+      "path": "06_Web备份恢复与导入/BK-12.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f4aa4-d27b-7632-a1fd-008c4a7d986e",
+          "session_start": "2026-07-10"
+        }
+      ]
+    },
+    {
+      "id": "BK-13",
+      "title": "数据库列表空数组因kubectl exec未传stdin",
+      "path": "06_Web备份恢复与导入/BK-13.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f4aa4-d27b-7632-a1fd-008c4a7d986e",
+          "session_start": "2026-07-10"
+        }
+      ]
+    },
+    {
+      "id": "BK-14",
+      "title": "ES过滤全部索引生成空包却显示成功",
+      "path": "06_Web备份恢复与导入/BK-14.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f4aa4-d27b-7632-a1fd-008c4a7d986e",
+          "session_start": "2026-07-10"
+        }
+      ]
+    },
+    {
+      "id": "BK-15",
+      "title": "Neo4j3.5不支持SHOW DATABASES及sh执行Bash数组",
+      "path": "06_Web备份恢复与导入/BK-15.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f4aa4-d27b-7632-a1fd-008c4a7d986e",
+          "session_start": "2026-07-10"
+        },
+        {
+          "session_id": "019f7d61-b3e5-7720-b55d-b5446491c074",
+          "session_start": "2026-07-20"
+        }
+      ]
+    },
+    {
+      "id": "BK-16",
+      "title": "Neo4j5.26.28新版Chart与旧离线dump路径不匹配",
+      "path": "06_Web备份恢复与导入/BK-16.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0eba7-7f86-7033-a5f3-e6ef05de1a2f",
+          "session_start": "2026-09-29"
+        }
+      ]
+    },
+    {
+      "id": "BK-17",
+      "title": "Neo4j离线备份缩容及失败恢复方案曾被撤回",
+      "path": "06_Web备份恢复与导入/BK-17.md",
+      "status": "撤回方案",
+      "sources": [
+        {
+          "session_id": "019f49ae-385b-7a31-ae23-073fe2ed7e56",
+          "session_start": "2026-07-10"
+        }
+      ]
+    },
+    {
+      "id": "BK-18",
+      "title": "MongoDB导入包伪装tar.gz且多套一层目录",
+      "path": "06_Web备份恢复与导入/BK-18.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019e49fd-4546-7761-921f-432304983f3e",
+          "session_start": "2026-05-21"
+        },
+        {
+          "session_id": "01a040ea-7274-7d80-831d-db0d2f36ba3c",
+          "session_start": "2026-08-27"
+        }
+      ]
+    },
+    {
+      "id": "BK-19",
+      "title": "MariaDB和Elasticsearch导入包合同不匹配",
+      "path": "06_Web备份恢复与导入/BK-19.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a040ea-7274-7d80-831d-db0d2f36ba3c",
+          "session_start": "2026-08-27"
+        },
+        {
+          "session_id": "01a05b12-9c19-7f02-ac4e-a2d362fded88",
+          "session_start": "2026-09-01"
+        }
+      ]
+    },
+    {
+      "id": "BK-20",
+      "title": "MySQL导入不能复用为PostgreSQL/pgvector导入",
+      "path": "06_Web备份恢复与导入/BK-20.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a01d0c-3c4a-7130-81fb-1abdc5c41eea",
+          "session_start": "2026-08-20"
+        },
+        {
+          "session_id": "01a01e56-f1c8-7c73-926c-5f4838ffbeb9",
+          "session_start": "2026-08-20"
+        }
+      ]
+    },
+    {
+      "id": "BK-21",
+      "title": "Web宿主机缺psql pg_restore与目标PG未Ready",
+      "path": "06_Web备份恢复与导入/BK-21.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a01d0c-3c4a-7130-81fb-1abdc5c41eea",
+          "session_start": "2026-08-20"
+        },
+        {
+          "session_id": "01a01e56-f1c8-7c73-926c-5f4838ffbeb9",
+          "session_start": "2026-08-20"
+        }
+      ]
+    },
+    {
+      "id": "BK-22",
+      "title": "Atlas no-change文本写入SQL导致apply语法错误",
+      "path": "06_Web备份恢复与导入/BK-22.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a01e56-f1c8-7c73-926c-5f4838ffbeb9",
+          "session_start": "2026-08-20"
+        },
+        {
+          "session_id": "01a04627-24b7-7301-bf0b-a002f6a815eb",
+          "session_start": "2026-08-28"
+        }
+      ]
+    },
+    {
+      "id": "BK-23",
+      "title": "MariaDB schema-sync缺USE和完全限定表名风险",
+      "path": "06_Web备份恢复与导入/BK-23.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a04627-24b7-7301-bf0b-a002f6a815eb",
+          "session_start": "2026-08-28"
+        }
+      ]
+    },
+    {
+      "id": "BK-24",
+      "title": "多库DDL半成功不能用一次事务整体回滚",
+      "path": "06_Web备份恢复与导入/BK-24.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a069f9-0319-7601-916a-687736e32337",
+          "session_start": "2026-09-04"
+        }
+      ]
+    },
+    {
+      "id": "BK-25",
+      "title": "Velero迁移Kubernetes资源不自动备份所有NFS文件",
+      "path": "06_Web备份恢复与导入/BK-25.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019f8d04-9e8e-7fa1-be65-0e272df69f4e",
+          "session_start": "2026-07-23"
+        },
+        {
+          "session_id": "019e29a9-7d86-7fe1-983f-b7ac830f3418",
+          "session_start": "2026-05-15"
+        }
+      ]
+    },
+    {
+      "id": "BK-26",
+      "title": "备份目录和NFS上传成功后的本地清理",
+      "path": "06_Web备份恢复与导入/BK-26.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019fa651-7fbb-7fd0-a241-ca3a1dfc4512",
+          "session_start": "2026-07-28"
+        },
+        {
+          "session_id": "019fab8d-09e2-71f3-be54-562997db8321",
+          "session_start": "2026-07-29"
+        }
+      ]
+    },
+    {
+      "id": "OBS-01",
+      "title": "大文件本地分片不等于OBS multipart",
+      "path": "07_OBS网关与文件传输/OBS-01.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019dfc40-ff43-7c53-adcd-825f5bee9539",
+          "session_start": "2026-05-06"
+        }
+      ]
+    },
+    {
+      "id": "OBS-02",
+      "title": "408 RequestTimeout在OBS而非浏览器HTTP超时",
+      "path": "07_OBS网关与文件传输/OBS-02.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019ff4a4-8c23-7a63-aecb-9f31290a1918",
+          "session_start": "2026-08-12"
+        }
+      ]
+    },
+    {
+      "id": "OBS-03",
+      "title": "NoSuchUpload可能表示multipart已完成",
+      "path": "07_OBS网关与文件传输/OBS-03.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019dfc40-ff43-7c53-adcd-825f5bee9539",
+          "session_start": "2026-05-06"
+        }
+      ]
+    },
+    {
+      "id": "OBS-04",
+      "title": "旧docker_push依赖Docker CLI导致command not found",
+      "path": "07_OBS网关与文件传输/OBS-04.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019da8f6-435c-7673-8dfe-09956eaf3dd3",
+          "session_start": "2026-04-20"
+        },
+        {
+          "session_id": "01a018e0-e6d3-7a11-ad79-7ea0114c8a96",
+          "session_start": "2026-08-19"
+        }
+      ]
+    },
+    {
+      "id": "OBS-05",
+      "title": "registry上传ECONNRESET因同步长任务跨HTTP窗口",
+      "path": "07_OBS网关与文件传输/OBS-05.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019da8f6-435c-7673-8dfe-09956eaf3dd3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "OBS-06",
+      "title": "大文件下载200 pending及WriteTimeout限制",
+      "path": "07_OBS网关与文件传输/OBS-06.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019da8f6-435c-7673-8dfe-09956eaf3dd3",
+          "session_start": "2026-04-20"
+        },
+        {
+          "session_id": "019f1255-aa9d-7b12-94b5-46b806877e34",
+          "session_start": "2026-06-29"
+        }
+      ]
+    },
+    {
+      "id": "OBS-07",
+      "title": "外层镜像包嵌套tar不能直接docker load",
+      "path": "07_OBS网关与文件传输/OBS-07.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019e811b-2e53-7192-969c-410a25d2be34",
+          "session_start": "2026-06-01"
+        },
+        {
+          "session_id": "019da8f6-435c-7673-8dfe-09956eaf3dd3",
+          "session_start": "2026-04-20"
+        },
+        {
+          "session_id": "01a12e08-2388-76a1-8436-3d9d3c519720",
+          "session_start": "2026-10-12"
+        }
+      ]
+    },
+    {
+      "id": "OBS-08",
+      "title": "tar文件名包含完整钉钉URL及写归档无进度",
+      "path": "07_OBS网关与文件传输/OBS-08.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019f1255-aa9d-7b12-94b5-46b806877e34",
+          "session_start": "2026-06-29"
+        }
+      ]
+    },
+    {
+      "id": "OBS-09",
+      "title": "并发打包任务同名临时文件和目标key冲突",
+      "path": "07_OBS网关与文件传输/OBS-09.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019da8f6-435c-7673-8dfe-09956eaf3dd3",
+          "session_start": "2026-04-20"
+        }
+      ]
+    },
+    {
+      "id": "OBS-10",
+      "title": "OBS403 AccessDenied只能确认当前身份拒绝",
+      "path": "07_OBS网关与文件传输/OBS-10.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0a423-6067-7e41-be01-fd4cc495aec5",
+          "session_start": "2026-09-15"
+        },
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "OBS-11",
+      "title": "V3元数据30秒超时误用于大文件传输",
+      "path": "07_OBS网关与文件传输/OBS-11.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0a423-6067-7e41-be01-fd4cc495aec5",
+          "session_start": "2026-09-15"
+        },
+        {
+          "session_id": "01a0bdb4-fd78-7393-918d-1430d361ee4c",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "OBS-12",
+      "title": "V3上传10分钟context canceled实际是Axios600000ms",
+      "path": "07_OBS网关与文件传输/OBS-12.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0bdb4-fd78-7393-918d-1430d361ee4c",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "OBS-13",
+      "title": "V3文件下载转发链路慢但未复现持续0B",
+      "path": "07_OBS网关与文件传输/OBS-13.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0a423-6067-7e41-be01-fd4cc495aec5",
+          "session_start": "2026-09-15"
+        }
+      ]
+    },
+    {
+      "id": "OBS-14",
+      "title": "V3双签名URL的有效期读取与配置",
+      "path": "07_OBS网关与文件传输/OBS-14.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0bdb4-fd78-7393-918d-1430d361ee4c",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "OBS-15",
+      "title": "OBS网关目录重命名不是文件系统mv",
+      "path": "07_OBS网关与文件传输/OBS-15.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0eba7-7f86-7033-a5f3-e6ef05de1a2f",
+          "session_start": "2026-09-29"
+        }
+      ]
+    },
+    {
+      "id": "OBS-16",
+      "title": "V3内容类型校验和错误日志缺上游正文",
+      "path": "07_OBS网关与文件传输/OBS-16.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0bdb4-fd78-7393-918d-1430d361ee4c",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "OBS-17",
+      "title": "V3镜像归档registry重命名只改目标RepoTags",
+      "path": "07_OBS网关与文件传输/OBS-17.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a12e08-2388-76a1-8436-3d9d3c519720",
+          "session_start": "2026-10-12"
+        }
+      ]
+    },
+    {
+      "id": "NFS-01",
+      "title": "多个roleGroups nfs节点不等于HA",
+      "path": "08_NFS与持久化存储/NFS-01.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019f128d-bfb8-72f3-9dcd-d4da9f6f5aa0",
+          "session_start": "2026-06-29"
+        },
+        {
+          "session_id": "01a08a42-c807-7e93-aac6-15b78272d1d0",
+          "session_start": "2026-09-10"
+        }
+      ]
+    },
+    {
+      "id": "NFS-02",
+      "title": "PV PVC与NFS目录及卸载后旧数据复用",
+      "path": "08_NFS与持久化存储/NFS-02.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019fefb1-1e45-70b3-a81f-bce94029fe79",
+          "session_start": "2026-08-11"
+        }
+      ]
+    },
+    {
+      "id": "NFS-03",
+      "title": "Web NFSv4客户端不能自动兼容v3",
+      "path": "08_NFS与持久化存储/NFS-03.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a0ec7f-4204-78e0-a504-3fcda2f86723",
+          "session_start": "2026-09-29"
+        }
+      ]
+    },
+    {
+      "id": "NFS-04",
+      "title": "NFS大文件10065因单次WRITE请求过大",
+      "path": "08_NFS与持久化存储/NFS-04.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019fab8d-09e2-71f3-be54-562997db8321",
+          "session_start": "2026-07-29"
+        }
+      ]
+    },
+    {
+      "id": "NFS-05",
+      "title": "NAS导出权限和服务配置问题不应盲目降级协议",
+      "path": "08_NFS与持久化存储/NFS-05.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a0ec7f-4204-78e0-a504-3fcda2f86723",
+          "session_start": "2026-09-29"
+        },
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        }
+      ]
+    },
+    {
+      "id": "NFS-06",
+      "title": "Web部署位置不能用硬编码data-nfs代替网络存储",
+      "path": "08_NFS与持久化存储/NFS-06.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019fa651-7fbb-7fd0-a241-ca3a1dfc4512",
+          "session_start": "2026-07-28"
+        },
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        }
+      ]
+    },
+    {
+      "id": "NFS-07",
+      "title": "NFS下载缓存保留与保留策略目标一致性",
+      "path": "08_NFS与持久化存储/NFS-07.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        },
+        {
+          "session_id": "019fa651-7fbb-7fd0-a241-ca3a1dfc4512",
+          "session_start": "2026-07-28"
+        }
+      ]
+    },
+    {
+      "id": "REL-01",
+      "title": "编辑解压Chart未重新打包实际嵌入tgz",
+      "path": "09_构建制品与发布/REL-01.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0c17e-ab67-7921-86c1-df12b82bd17d",
+          "session_start": "2026-09-21"
+        },
+        {
+          "session_id": "019fabf4-d087-7020-ba90-77a51c8c3b7b",
+          "session_start": "2026-07-29"
+        }
+      ]
+    },
+    {
+      "id": "REL-02",
+      "title": "Web重启不会更新固定g-web-installer-kk",
+      "path": "09_构建制品与发布/REL-02.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        },
+        {
+          "session_id": "01a0b30c-04bf-7fc0-954b-f763a87a463e",
+          "session_start": "2026-09-18"
+        },
+        {
+          "session_id": "01a11acc-4df5-78f3-9d32-2b2307bff4c5",
+          "session_start": "2026-10-08"
+        }
+      ]
+    },
+    {
+      "id": "REL-03",
+      "title": "改manifest后旧artifact和镜像缓存不会自动变化",
+      "path": "09_构建制品与发布/REL-03.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        },
+        {
+          "session_id": "01a11e76-e245-75f0-82a7-b73685d728c7",
+          "session_start": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": "REL-04",
+      "title": "Go默认构建因gpgme btrfs原生依赖失败",
+      "path": "09_构建制品与发布/REL-04.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019ff4a4-8c23-7a63-aecb-9f31290a1918",
+          "session_start": "2026-08-12"
+        },
+        {
+          "session_id": "01a01e56-f1c8-7c73-926c-5f4838ffbeb9",
+          "session_start": "2026-08-20"
+        }
+      ]
+    },
+    {
+      "id": "REL-05",
+      "title": "make kk的GIT_MAJOR警告与真实编译失败区别",
+      "path": "09_构建制品与发布/REL-05.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "01a055af-6e48-7d72-b584-626a5f397ba7",
+          "session_start": "2026-08-31"
+        },
+        {
+          "session_id": "01a0ec7f-4204-78e0-a504-3fcda2f86723",
+          "session_start": "2026-09-29"
+        },
+        {
+          "session_id": "01a1191d-6db7-7c42-8d00-6194d609a369",
+          "session_start": "2026-10-08"
+        }
+      ]
+    },
+    {
+      "id": "REL-06",
+      "title": "错误发布仓库路径或构建旧分支",
+      "path": "09_构建制品与发布/REL-06.md",
+      "status": "历史状态验证",
+      "sources": [
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        },
+        {
+          "session_id": "01a0e6f2-f37c-73c2-b321-b2dc9fa01916",
+          "session_start": "2026-09-28"
+        }
+      ]
+    },
+    {
+      "id": "REL-07",
+      "title": "SSH节点重装后指纹与免密认证变化",
+      "path": "09_构建制品与发布/REL-07.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "01a01d0c-3c4a-7130-81fb-1abdc5c41eea",
+          "session_start": "2026-08-20"
+        },
+        {
+          "session_id": "01a055af-6e48-7d72-b584-626a5f397ba7",
+          "session_start": "2026-08-31"
+        },
+        {
+          "session_id": "019fabf4-d087-7020-ba90-77a51c8c3b7b",
+          "session_start": "2026-07-29"
+        }
+      ]
+    },
+    {
+      "id": "REL-08",
+      "title": "121磁盘不足时保留活动镜像pull",
+      "path": "09_构建制品与发布/REL-08.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a012e1-0a31-76e0-8280-3e967adf91e2",
+          "session_start": "2026-08-18"
+        },
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REL-09",
+      "title": "Chart应用版本与镜像tag升级不能仅看包名",
+      "path": "09_构建制品与发布/REL-09.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019d8608-9edf-7580-bbd4-c2569ab38dbc",
+          "session_start": "2026-04-13"
+        },
+        {
+          "session_id": "01a0c17e-ab67-7921-86c1-df12b82bd17d",
+          "session_start": "2026-09-21"
+        },
+        {
+          "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
+          "session_start": "2026-08-04"
+        }
+      ]
+    },
+    {
+      "id": "HELM-35",
+      "title": "Elasticsearch deployed但内存requests满导致无Endpoint",
+      "path": "03_Helm与组件部署/HELM-35.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a056e4-c464-7211-92f1-7361bdbc24c0",
+          "session_start": "2026-08-31"
+        }
+      ]
+    },
+    {
+      "id": "HELM-36",
+      "title": "PostgreSQL镜像含扩展文件不等于每个数据库启用vector",
+      "path": "03_Helm与组件部署/HELM-36.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019ff49e-b946-72a0-8913-0ab2764c18ca",
+          "session_start": "2026-08-12"
+        }
+      ]
+    },
+    {
+      "id": "REG-17",
+      "title": "Zot特殊字符认证参数及NAT IP证书SAN风险",
+      "path": "04_Zot_Harbor与镜像仓库/REG-17.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REG-18",
+      "title": "新artifact无images但旧工作目录镜像被继续推送",
+      "path": "04_Zot_Harbor与镜像仓库/REG-18.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
+          "session_start": "2026-09-20"
+        }
+      ]
+    },
+    {
+      "id": "REG-19",
+      "title": "Harbor删除非空项目412与应用推送环境依赖",
+      "path": "04_Zot_Harbor与镜像仓库/REG-19.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        },
+        {
+          "session_id": "019fa2fa-18bc-7b81-91c4-d4f4d3ea916c",
+          "session_start": "2026-07-27"
+        }
+      ]
+    },
+    {
+      "id": "WEB-13",
+      "title": "备份配置响应多一层config造成旧页面读不到",
+      "path": "05_Web配置鉴权与任务/WEB-13.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019f49ae-385b-7a31-ae23-073fe2ed7e56",
+          "session_start": "2026-07-10"
+        },
+        {
+          "session_id": "019f25dc-f2b1-72a0-b6ee-991d2f0a228f",
+          "session_start": "2026-07-03"
+        }
+      ]
+    },
+    {
+      "id": "BK-27",
+      "title": "schema-sync文件名带连字符被错误截为库名",
+      "path": "06_Web备份恢复与导入/BK-27.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a01e56-f1c8-7c73-926c-5f4838ffbeb9",
+          "session_start": "2026-08-20"
+        }
+      ]
+    },
+    {
+      "id": "BK-28",
+      "title": "prepare漏过滤版本注释DROP导致误删原业务库",
+      "path": "06_Web备份恢复与导入/BK-28.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a01e56-f1c8-7c73-926c-5f4838ffbeb9",
+          "session_start": "2026-08-20"
+        }
+      ]
+    },
+    {
+      "id": "BK-29",
+      "title": "DROP保护正则误将datapolicyschema表名识为SCHEMA",
+      "path": "06_Web备份恢复与导入/BK-29.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "01a01e56-f1c8-7c73-926c-5f4838ffbeb9",
+          "session_start": "2026-08-20"
+        }
+      ]
+    },
+    {
+      "id": "BK-30",
+      "title": "lastpid跨时区按PID名字排序返回旧任务",
+      "path": "06_Web备份恢复与导入/BK-30.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "01a01e56-f1c8-7c73-926c-5f4838ffbeb9",
+          "session_start": "2026-08-20"
+        }
+      ]
+    },
+    {
+      "id": "BK-31",
+      "title": "备份配置接口接受只有目录没有cluster config的伪集群",
+      "path": "06_Web备份恢复与导入/BK-31.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019e5ccd-6d2d-73f3-90c2-0e8d7304c680",
+          "session_start": "2026-05-25"
+        }
+      ]
+    },
+    {
+      "id": "BK-32",
+      "title": "Images备份仍用Docker CLI而推送接口已改Go",
+      "path": "06_Web备份恢复与导入/BK-32.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019fa2fa-18bc-7b81-91c4-d4f4d3ea916c",
+          "session_start": "2026-07-27"
+        }
+      ]
+    },
+    {
+      "id": "NFS-08",
+      "title": "NFS4ERR_PERM因高位源端口需要exports匹配",
+      "path": "08_NFS与持久化存储/NFS-08.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        }
+      ]
+    },
+    {
+      "id": "NFS-09",
+      "title": "NFS端口填2049但实际测试服务20549",
+      "path": "08_NFS与持久化存储/NFS-09.md",
+      "status": "待验证",
+      "sources": [
+        {
+          "session_id": "019fa2fa-18bc-7b81-91c4-d4f4d3ea916c",
+          "session_start": "2026-07-27"
+        }
+      ]
+    },
+    {
+      "id": "NFS-10",
+      "title": "NFS删除持全局锁导致所有集群配置查询阻塞",
+      "path": "08_NFS与持久化存储/NFS-10.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        }
+      ]
+    },
+    {
+      "id": "NFS-11",
+      "title": "自动retention删除NFS失败的记录与clean_fail",
+      "path": "08_NFS与持久化存储/NFS-11.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        }
+      ]
+    },
+    {
+      "id": "NFS-12",
+      "title": "immutable手动删除限制历史被明确移除",
+      "path": "08_NFS与持久化存储/NFS-12.md",
+      "status": "历史功能验证",
+      "sources": [
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        }
+      ]
+    },
+    {
+      "id": "NFS-13",
+      "title": "NFS备份脚本和上传两阶段超时不能只给一次60分钟",
+      "path": "08_NFS与持久化存储/NFS-13.md",
+      "status": "代码已验证",
+      "sources": [
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        }
+      ]
+    },
+    {
+      "id": "NFS-14",
+      "title": "缩短retention测试策略误删真实历史备份",
+      "path": "08_NFS与持久化存储/NFS-14.md",
+      "status": "历史状态验证",
+      "sources": [
+        {
+          "session_id": "019f8c93-8796-7c53-8ef4-c07f7c0baddf",
+          "session_start": "2026-07-23"
+        }
+      ]
+    },
+    {
+      "id": "WEB-14",
+      "title": "InstallAppV1 的安装与镜像推送分支及文件格式",
+      "path": "05_Web配置鉴权与任务/WEB-14.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019e7286-2b09-7223-b53a-a19230165695",
+          "session_start": "2026-05-29"
+        },
+        {
+          "session_id": "019f8890-65af-7ad1-accc-c33bdcc287a2",
+          "session_start": "2026-07-22"
+        }
+      ]
+    },
+    {
+      "id": "WEB-15",
+      "title": "PushAppImages 的 plainHTTP 与 skipTLSVerify 只控制传输",
+      "path": "05_Web配置鉴权与任务/WEB-15.md",
+      "status": "源码结论",
+      "sources": [
+        {
+          "session_id": "019f8890-65af-7ad1-accc-c33bdcc287a2",
+          "session_start": "2026-07-22"
+        }
+      ]
+    }
+  ]
+}

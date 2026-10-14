@@ -1,0 +1,15 @@
+{
+  "title": "Neo4j对NAS只读snapshot递归chown失败",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

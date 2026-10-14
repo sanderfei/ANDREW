@@ -1,0 +1,15 @@
+{
+  "title": "MariaDB mysqldump COLUMN_STATISTICS导致假成功小包",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

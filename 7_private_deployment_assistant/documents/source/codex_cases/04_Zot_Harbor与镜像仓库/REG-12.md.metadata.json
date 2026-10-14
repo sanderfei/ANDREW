@@ -1,0 +1,14 @@
+{
+  "title": "PushAppImages对Zot误调用Harbor项目API",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "verified"
+}

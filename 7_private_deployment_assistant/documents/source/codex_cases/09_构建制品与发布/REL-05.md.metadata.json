@@ -1,0 +1,15 @@
+{
+  "title": "make kk的GIT_MAJOR警告与真实编译失败区别",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

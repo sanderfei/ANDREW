@@ -1,0 +1,15 @@
+{
+  "title": "NFS大文件10065因单次WRITE请求过大",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

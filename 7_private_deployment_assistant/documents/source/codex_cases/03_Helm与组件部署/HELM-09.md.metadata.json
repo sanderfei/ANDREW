@@ -1,0 +1,15 @@
+{
+  "title": "组件安装依赖顺序与Ready不是同一保证",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

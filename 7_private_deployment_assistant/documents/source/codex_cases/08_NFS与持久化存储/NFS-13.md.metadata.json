@@ -1,0 +1,15 @@
+{
+  "title": "NFS备份脚本和上传两阶段超时不能只给一次60分钟",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

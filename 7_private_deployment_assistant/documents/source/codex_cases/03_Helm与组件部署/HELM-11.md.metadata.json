@@ -1,0 +1,15 @@
+{
+  "title": "Nacos3初始化数据库缺config_info_gray等表",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

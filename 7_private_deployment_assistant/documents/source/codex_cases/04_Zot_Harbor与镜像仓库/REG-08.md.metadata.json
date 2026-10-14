@@ -1,0 +1,14 @@
+{
+  "title": "Zot已启动但v2空正文被就绪检查误判",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "verified"
+}

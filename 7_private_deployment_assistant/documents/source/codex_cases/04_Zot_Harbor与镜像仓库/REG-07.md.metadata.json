@@ -1,0 +1,14 @@
+{
+  "title": "Zot缺少离线二进制不能靠init自动下载",
+  "kind": "case",
+  "kubernetes_versions": [
+    "1.32.8"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

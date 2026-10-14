@@ -1,0 +1,15 @@
+{
+  "title": "立即备份trigger传状态对象导致JSON解析失败",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

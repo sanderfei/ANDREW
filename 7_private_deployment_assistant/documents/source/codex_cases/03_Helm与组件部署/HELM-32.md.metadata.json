@@ -1,0 +1,15 @@
+{
+  "title": "RocketMQ Proxy Service targetPort指向7001错误",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

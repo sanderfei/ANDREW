@@ -1,0 +1,15 @@
+{
+  "title": "Velero迁移Kubernetes资源不自动备份所有NFS文件",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

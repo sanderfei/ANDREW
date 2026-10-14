@@ -1,0 +1,15 @@
+{
+  "title": "镜像push401与PUT blob403不能混为密码或满盘",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

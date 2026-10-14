@@ -1,0 +1,15 @@
+{
+  "title": "OBS403 AccessDenied只能确认当前身份拒绝",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

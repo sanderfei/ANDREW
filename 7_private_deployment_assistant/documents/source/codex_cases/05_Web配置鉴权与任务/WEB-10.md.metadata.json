@@ -1,0 +1,15 @@
+{
+  "title": "runningProcesses并发注册和kill存在数据竞争",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

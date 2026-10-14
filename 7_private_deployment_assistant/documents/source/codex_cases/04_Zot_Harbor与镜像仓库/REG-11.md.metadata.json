@@ -1,0 +1,14 @@
+{
+  "title": "Zot数据目录改为data-zot不自动迁移旧数据",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

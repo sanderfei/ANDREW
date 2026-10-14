@@ -1,0 +1,15 @@
+{
+  "title": "Pinpoint内置MySQL初始化表缺失与依赖分支变动",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

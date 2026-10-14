@@ -1,0 +1,14 @@
+{
+  "title": "Web初始化离线仓库仍尝试从OBS下载制品",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

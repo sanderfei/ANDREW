@@ -1,0 +1,15 @@
+{
+  "title": "Atlas no-change文本写入SQL导致apply语法错误",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

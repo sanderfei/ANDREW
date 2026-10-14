@@ -1,0 +1,15 @@
+{
+  "title": "1.23.10与1.32.8的运行时和配置差异",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

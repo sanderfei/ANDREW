@@ -1,0 +1,14 @@
+{
+  "title": "离线制品的宿主机路径与容器路径不一致",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

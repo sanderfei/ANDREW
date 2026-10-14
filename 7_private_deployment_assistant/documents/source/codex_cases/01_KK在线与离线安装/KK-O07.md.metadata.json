@@ -1,0 +1,14 @@
+{
+  "title": "dpkg前端锁被unattended-upgrade占用",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "Ubuntu"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

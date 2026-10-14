@@ -1,0 +1,15 @@
+{
+  "title": "containerd1.x使用certs.d而非旧inline镜像配置",
+  "kind": "case",
+  "kubernetes_versions": [
+    "1.32.8"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

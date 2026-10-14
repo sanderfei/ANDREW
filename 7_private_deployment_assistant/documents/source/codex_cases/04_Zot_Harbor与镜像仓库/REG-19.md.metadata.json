@@ -1,0 +1,15 @@
+{
+  "title": "Harbor删除非空项目412与应用推送环境依赖",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

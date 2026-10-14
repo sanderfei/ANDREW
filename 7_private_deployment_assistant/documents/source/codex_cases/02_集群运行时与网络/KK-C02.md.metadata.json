@@ -1,0 +1,15 @@
+{
+  "title": "CoreDNS1.9.3不支持kubeadm1.32生成的新Corefile",
+  "kind": "case",
+  "kubernetes_versions": [
+    "1.32.8"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

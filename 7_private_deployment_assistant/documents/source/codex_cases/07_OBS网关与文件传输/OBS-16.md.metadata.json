@@ -1,0 +1,15 @@
+{
+  "title": "V3内容类型校验和错误日志缺上游正文",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "MongoDB导入包伪装tar.gz且多套一层目录",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

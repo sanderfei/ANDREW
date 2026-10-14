@@ -1,0 +1,15 @@
+{
+  "title": "备份工具安装在Web端而非只看数据库Pod",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

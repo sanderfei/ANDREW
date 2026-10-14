@@ -1,0 +1,15 @@
+{
+  "title": "Neo4j离线备份缩容及失败恢复方案曾被撤回",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

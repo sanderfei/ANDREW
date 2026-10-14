@@ -1,0 +1,14 @@
+{
+  "title": "ISO同步校验时报远端文件不存在",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

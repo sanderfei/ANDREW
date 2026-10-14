@@ -1,0 +1,14 @@
+{
+  "title": "离线新增节点APT依赖冲突发生在join之前",
+  "kind": "case",
+  "kubernetes_versions": [
+    "1.32.8"
+  ],
+  "operating_systems": [
+    "Ubuntu"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

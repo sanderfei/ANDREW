@@ -1,0 +1,15 @@
+{
+  "title": "Neo4j默认资源被Web低值覆盖触发Chart校验",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

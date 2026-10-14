@@ -1,0 +1,14 @@
+{
+  "title": "Zot就绪检查节点缺curl",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "Ubuntu"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}
