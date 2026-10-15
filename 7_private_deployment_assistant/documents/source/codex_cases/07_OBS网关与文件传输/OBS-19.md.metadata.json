@@ -1,0 +1,8 @@
+{
+  "title": "本地未提交改动范围包含OBS落盘离线安装与镜像归档重命名",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified"
+}

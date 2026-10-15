@@ -1,0 +1,8 @@
+{
+  "title": "离线节点重新加入时containerd2.2.1仓库配置冲突导致CRI缺失",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["offline"],
+  "verification_status": "unverified"
+}

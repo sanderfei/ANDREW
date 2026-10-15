@@ -1,6 +1,6 @@
 {
   "created_at": "2026-10-14",
-  "case_count": 167,
+  "case_count": 172,
   "raw_files_scanned": 421,
   "distinct_sessions": 378,
   "cases": [
@@ -249,6 +249,8 @@
       "title": "通配域名A正常但AAAA返回SERVFAIL",
       "path": "02_集群运行时与网络/KK-C05.md",
       "status": "历史功能验证",
+      "source_checked_at": "2026-10-15",
+      "verification_note": "本轮仅复核源码及本地合并记录；192.168.1.27 集群当前生效情况待验证。",
       "sources": [
         {
           "session_id": "01a0b396-9930-75e1-8954-874cb2cd724e",
@@ -890,9 +892,10 @@
     },
     {
       "id": "HELM-26",
-      "title": "Pinpoint HBase后台进程退出但Pod仍Running",
+      "title": "Pinpoint HBase后台进程退出、锁超时与启动探针修复",
       "path": "03_Helm与组件部署/HELM-26.md",
-      "status": "代码已验证",
+      "status": "代码已验证，现场升级待验证",
+      "updated_at": "2026-10-15",
       "sources": [
         {
           "session_id": "019fabf4-d087-7020-ba90-77a51c8c3b7b",
@@ -1769,6 +1772,13 @@
       ]
     },
     {
+      "id": "OBS-18",
+      "title": "V3上传取消日志归属及网关与接口超时边界",
+      "path": "07_OBS网关与文件传输/OBS-18.md",
+      "status": "待验证",
+      "sources": []
+    },
+    {
       "id": "NFS-01",
       "title": "多个roleGroups nfs节点不等于HA",
       "path": "08_NFS与持久化存储/NFS-01.md",
@@ -2053,6 +2063,13 @@
       ]
     },
     {
+      "id": "HELM-37",
+      "title": "Elasticsearch两版部署设计、Service兼容与手动升级",
+      "path": "03_Helm与组件部署/HELM-37.md",
+      "status": "源码结论",
+      "sources": []
+    },
+    {
       "id": "REG-17",
       "title": "Zot特殊字符认证参数及NAT IP证书SAN风险",
       "path": "04_Zot_Harbor与镜像仓库/REG-17.md",
@@ -2291,6 +2308,27 @@
           "session_start": "2026-07-22"
         }
       ]
+    },
+    {
+      "id": "KK-C11",
+      "title": "离线节点重新加入时containerd2.2.1仓库配置冲突导致CRI缺失",
+      "path": "02_集群运行时与网络/KK-C11.md",
+      "status": "待验证",
+      "sources": []
+    },
+    {
+      "id": "REL-10",
+      "title": "Web脚本容器部署与121宿主机部署及containerd配置来源",
+      "path": "09_构建制品与发布/REL-10.md",
+      "status": "源码结论",
+      "sources": []
+    },
+    {
+      "id": "OBS-19",
+      "title": "本地未提交改动范围包含OBS落盘离线安装与镜像归档重命名",
+      "path": "07_OBS网关与文件传输/OBS-19.md",
+      "status": "源码结论",
+      "sources": []
     }
   ]
 }

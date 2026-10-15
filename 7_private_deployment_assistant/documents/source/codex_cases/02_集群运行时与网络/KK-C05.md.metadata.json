@@ -11,5 +11,7 @@
     "online",
     "offline"
   ],
-  "verification_status": "verified"
+  "verification_status": "verified",
+  "source_checked_at": "2026-10-15",
+  "verification_note": "verified 沿用历史 DNS 功能证据；2026-10-15 仅复核源码及本地合并记录，未验证 192.168.1.27 集群。"
 }

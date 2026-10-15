@@ -1,0 +1,8 @@
+{
+  "title": "Web脚本容器部署与121宿主机部署及containerd配置来源",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified"
+}

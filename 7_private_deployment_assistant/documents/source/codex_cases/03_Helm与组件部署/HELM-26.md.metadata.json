@@ -1,5 +1,5 @@
 {
-  "title": "Pinpoint HBase后台进程退出但Pod仍Running",
+  "title": "Pinpoint HBase后台进程退出、锁超时与启动探针修复",
   "kind": "case",
   "kubernetes_versions": [
     "any"

@@ -1,0 +1,15 @@
+{
+  "title": "V3上传取消日志归属及网关与接口超时边界",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

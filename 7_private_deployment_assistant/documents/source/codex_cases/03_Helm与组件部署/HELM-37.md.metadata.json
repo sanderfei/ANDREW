@@ -1,0 +1,15 @@
+{
+  "title": "Elasticsearch两版部署设计、Service兼容与手动升级",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}
