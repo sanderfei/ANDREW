@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 from uuid import NAMESPACE_URL, uuid5
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from zipfile import ZipFile
 
 SUPPORTED_SUFFIXES = {".docx", ".md", ".txt"}
@@ -21,20 +22,56 @@ class ParsedDocument:
 
 
 def redact(text: str) -> str:
-    text = re.sub(
-        r"(?i)(\b(?:password|passwd|token|secret|api[_-]?key|authorization)\b\s*[:=]\s*)[^\n]+",
-        r"\1[REDACTED]",
-        text,
-    )
-    text = re.sub(r"((?:密码|口令)\s*[:：=]\s*)\S+", r"\1[REDACTED]", text)
-    text = re.sub(r"sk-[A-Za-z0-9_-]{16,}", "[REDACTED]", text)
+    """清理日志和正文中的凭据，同时保留相邻错误信息及普通文档 URL。"""
     text = re.sub(
         r"-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----",
         "[REDACTED]",
         text,
         flags=re.S,
     )
-    text = re.sub(r"(https?://)[^\s/:@]+:[^\s/@]+@", r"\1[REDACTED]@", text)
+
+    def clean_url(match):
+        original = match.group(0)
+        # 句号、Markdown 闭括号等属于正文，清理 URL 后再放回。
+        value = original.rstrip(".,;!?)]}，。；")
+        suffix = original[len(value):]
+        try:
+            parsed = urlsplit(value)
+            netloc = parsed.netloc.rsplit("@", 1)[-1]
+            sensitive = re.compile(
+                r"(?i)(password|passwd|token|secret|api[_-]?key|authorization|"
+                r"signature|credential|access[_-]?key|awsaccesskeyid|(?:^|[_-])sig$)"
+            )
+            signed = any(sensitive.search(key) for key, _ in parse_qsl(parsed.query))
+            fragment_private = any(
+                sensitive.search(key) for key, _ in parse_qsl(parsed.fragment)
+            )
+            return urlunsplit((parsed.scheme, netloc, parsed.path,
+                               "" if signed else parsed.query,
+                               "" if fragment_private or signed else parsed.fragment)) + suffix
+        except ValueError:
+            return "[REDACTED_URL]" + suffix
+
+    text = re.sub(
+        r'''(?i)\b(?:https?|postgres(?:ql)?|mysql|redis|amqp|ssh)://[^\s<>"'`]+''',
+        clean_url, text,
+    )
+    # 引号形式同时适配 JSON/YAML；只替换字段值，保留同一行的故障上下文。
+    labels = (
+        r"password|passwd|pwd|token|access[_-]?token|refresh[_-]?token|secret|"
+        r"secret[_-]?key|access[_-]?key(?:[_-]?id|[_-]?secret)?|"
+        r"client[_-]?secret|client[_-]?key[_-]?data|api[_-]?key|authorization|private[_-]?key"
+    )
+    text = re.sub(
+        rf'''(?ix)((?<![\w])["']?(?:{labels})["']?[ \t]*[:=：][ \t]*)(?:"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|(?:Bearer|Basic)[ \t]+[^\s,;}}]+|[^\s,;}}]+)''',
+        r"\1[REDACTED]", text,
+    )
+    text = re.sub(
+        r'''((?:密码|口令)["']?[ \t]*[:：=][ \t]*)(?:"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|[^\s,;}]+)''',
+        r"\1[REDACTED]", text,
+    )
+    text = re.sub(r"(?i)\bBearer[ \t]+[A-Za-z0-9._~+/-]+=*", "Bearer [REDACTED]", text)
+    text = re.sub(r"sk-[A-Za-z0-9_-]{16,}", "[REDACTED]", text)
     return text
 
 
