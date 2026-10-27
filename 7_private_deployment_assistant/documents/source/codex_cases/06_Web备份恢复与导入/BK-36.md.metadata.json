@@ -1,0 +1,16 @@
+{
+  "title": "Neo4j数据库发现失败因Web凭据与实际密码不一致",
+  "kind": "case",
+  "kubernetes_versions": [
+    "1.32.8"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-22",
+  "verification_note": "214同款Bitnami Chart 0.4.14/Neo4j 5.26.11的失败脚本凭据与实际有效密码不一致，复现列库返回认证失败。用户授权写入运行Web实际配置后，以更新凭据执行同一数据库发现查询退出0并返回__GWI_DB__neo4j；未保存密码值。库存在但节点数0，不能归因为空库。已确认配置与列库恢复，尚无新Web完整备份归档及隔离恢复证据，整体保持unverified。"
+}

@@ -1,0 +1,10 @@
+{
+  "title": "V3版本目录一键下载并导入集群数据与镜像的串行任务",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["offline"],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-26",
+  "verification_note": "Web release/5f148d0基线本地新增版本导入API、path/cluster请求及标准success/pid响应；单总PID单execute.log串行完成分页直属识别、逐包下载、全部预检、镜像优先、数据导入及统一终态，缺类跳过/无包no-op，首错停止保留原包和副作用。专用flock仅限制本入口；同步镜像/六类数据核心使用私有快照、严格新路径、context及日志脱敏，旧手动宽松脚本未全部改造。模拟网关/脚本/HTTP/WebSocket定向验证、race及server构建通过，临时测试和产物已清理；Swagger14路径19定义46引用通过。未提交推送发布，无真实OBS/Zot/数据库或现场证据，metadata保持unverified。 2026-10-26只读澄清识别：先校验压缩扩展（完整去.tar.gz），只按最后下划线后的末尾token忽略大小写映射数据库，版本/日期不参与；v_Mysql_backup.zip未知ZIP跳过，命中库但错扩展报错。未知tar类仅镜像候选，内容不符则预检失败，不扫描SQL/BSON猜库。本次未改业务或重跑测试。"
+}

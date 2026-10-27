@@ -1,0 +1,8 @@
+{
+  "title": "V3服务端登录会话缺失导致401",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified"
+}

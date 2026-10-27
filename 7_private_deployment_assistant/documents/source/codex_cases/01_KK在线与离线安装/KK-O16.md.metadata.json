@@ -1,0 +1,15 @@
+{
+  "title": "KK基于Docker与Compose的Linux主机应用安装功能设计",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "linux"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

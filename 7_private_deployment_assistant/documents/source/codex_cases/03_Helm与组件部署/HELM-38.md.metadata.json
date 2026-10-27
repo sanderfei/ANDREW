@@ -1,0 +1,15 @@
+{
+  "title": "Neo4j安装无外部中间件依赖但需要持久化存储",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

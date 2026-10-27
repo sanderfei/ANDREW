@@ -1,0 +1,8 @@
+{
+  "title": "本地文件列表迁到V1并支持批量删除",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified"
+}

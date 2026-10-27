@@ -5,7 +5,7 @@
 - 文件：`未来企业事业群—私有化安装集成站台.docx`
 - 当前状态：已复制原始文件，可从 Web 界面下载；实际录入由使用者通过指定文件接口执行。
 - 录入方式：参见 [向量数据库使用说明](../docs/vector-databases.md)，支持正文和表格，截图 OCR 未接入。
-- 历史案例：[Web / KK 部署案例索引](source/codex_cases/README.md)，历史扫描整理 167 条，持续补充后当前共 172 条记录，覆盖在线/离线安装、集群、Helm、Zot/Harbor、Web、备份导入、OBS 和 NFS。
+- 历史案例：[Web / KK 部署案例索引](source/codex_cases/README.md)，历史扫描整理 167 条，持续补充后当前共 194 条记录，覆盖在线/离线安装、集群、Helm、Zot/Harbor、Web、备份导入、OBS 和 NFS。
 - 部署设计：[ES 两版部署设计与升级](source/codex_cases/03_Helm与组件部署/HELM-37.md)，说明旧版两个 Service、新版三个 Service、双地址兼容、独立 Service YAML 和 Helm 升级边界。
 - 覆盖说明：[本地历史扫描范围](source/codex_cases/coverage.md)，区分历史功能验证、源码结论、待验证问题和已撤回方案。
 - 案例每篇附带 `.md.metadata.json`，可由现有指定文件接口录入；本次仅整理文档，尚未写入向量数据库。

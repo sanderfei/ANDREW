@@ -1,0 +1,8 @@
+{
+  "title": "214本地IAM镜像归档导入Zot的功能验证",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["offline"],
+  "verification_status": "verified"
+}

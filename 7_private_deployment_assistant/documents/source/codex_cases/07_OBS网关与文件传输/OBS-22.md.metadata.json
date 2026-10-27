@@ -1,0 +1,8 @@
+{
+  "title": "本地镜像导入迁移V1并按集群归档任务日志",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["offline"],
+  "verification_status": "unverified"
+}

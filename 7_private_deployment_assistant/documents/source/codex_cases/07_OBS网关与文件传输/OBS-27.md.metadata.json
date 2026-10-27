@@ -1,0 +1,8 @@
+{
+  "title": "V2与V3目录列表按前缀和分隔符列举单层内容",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified"
+}

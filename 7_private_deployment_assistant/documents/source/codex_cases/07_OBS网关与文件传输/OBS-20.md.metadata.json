@@ -1,0 +1,15 @@
+{
+  "title": "214本地下载接口拒绝带前导斜杠的path",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified"
+}

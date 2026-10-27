@@ -1,0 +1,8 @@
+{
+  "title": "V3用户权限配置在线读取与整体覆盖接口",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified"
+}

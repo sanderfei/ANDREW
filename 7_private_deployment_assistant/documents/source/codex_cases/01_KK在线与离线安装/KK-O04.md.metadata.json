@@ -10,5 +10,7 @@
   "install_modes": [
     "offline"
   ],
-  "verification_status": "unverified"
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-20",
+  "verification_note": "2026-10-20 双路径选包的定向测试及服务构建通过，临时测试已删除；b003027 经 PR #415 合入中央 release，合并提交 e93910b，两端远端分支已核验。未部署或验证真实离线安装功能，保持 unverified。"
 }

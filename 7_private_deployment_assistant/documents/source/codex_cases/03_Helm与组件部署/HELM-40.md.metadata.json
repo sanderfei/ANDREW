@@ -1,0 +1,17 @@
+{
+  "title": "新增StarRocks 3.5组件、PVC密码初始化与私有镜像准备",
+  "kind": "case",
+  "kubernetes_versions": [
+    "1.23.10",
+    "1.32.8"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "verified",
+  "verification_note": "verified覆盖此前214手动Helm/SQL与本次图标字节及默认密码保留的本地验证；新增Web图标/数据功能未提交发布，不能视为Web或KK安装入口已现场验证。 2026-10-21中央KK9a73986/Web1329551已在121完成构建复制替换及启动命令，PID2110256；启动后的HTTP/安装功能未验证，本地新图标、默认密码和数据补充未提交发布。 本轮实际API请求未带凭据返回401、未创建任务；认证后安装及SQL链路待验证。214当前Pod/PVC状态已只读确认，不能替代API首次安装证据。 后续提供的登录凭据实际验证未通过（HTTP500/Failed to authorize），未创建组件任务，安装API仍待验证。"
+}

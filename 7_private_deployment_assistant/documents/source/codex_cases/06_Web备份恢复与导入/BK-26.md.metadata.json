@@ -11,5 +11,7 @@
     "online",
     "offline"
   ],
-  "verification_status": "verified"
+  "verification_status": "verified",
+  "source_checked_at": "2026-10-21",
+  "verification_note": "verified 仅沿用历史 NFS 文件与本地清理的实际功能证据；2026-10-21 在 Web release/1329551 核对 local 路径为进程工作目录下 data/cluster/<cluster>/backup/files，未连接现场或执行备份、下载和恢复。"
 }

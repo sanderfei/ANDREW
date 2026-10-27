@@ -1,0 +1,15 @@
+{
+  "title": "KK安装Seata Server与业务分布式事务接入边界",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

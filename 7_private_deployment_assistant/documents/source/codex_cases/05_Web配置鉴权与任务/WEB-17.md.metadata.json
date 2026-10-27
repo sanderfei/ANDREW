@@ -1,0 +1,10 @@
+{
+  "title": "离线三步骤复用PID WebSocket推送结束状态与自动衔接",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["offline"],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-21",
+  "verification_note": "release/1329551 已核对三步各自固定的成功/失败日志及退出判断；用户成功片段与源码一致，失败未实测。专用结束事件、幂等和自动衔接仍未实现。"
+}

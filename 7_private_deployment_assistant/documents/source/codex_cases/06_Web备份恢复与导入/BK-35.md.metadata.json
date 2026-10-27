@@ -1,0 +1,16 @@
+{
+  "title": "Neo4j历史包补开APOC导出配置且重启后保留",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-22",
+  "verification_note": "2026-10-22取得客户实际Chart 0.4.14/Neo4j 5.26.11归档并在214同款部署核对镜像启动复制逻辑；PVC保存neo4j.conf与apoc.conf，用户重启日志确认加载，SHOW PROCEDURES与手动APOC导出均成功。已补两个文件在PVC及运行目录的检查、主机/Pod/Cypher执行位置、模板标签幂等与避免重复重启。214真实凭据更新后的列库成功另见BK-36；尚无完整Web备份归档和隔离恢复证据，因此整体保持unverified。归档阶段未执行远端操作。"
+}

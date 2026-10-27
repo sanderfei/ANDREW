@@ -1,5 +1,5 @@
 {
-  "title": "Neo4j5.26.28新版Chart与旧离线dump路径不匹配",
+  "title": "Neo4j升级5.26.28后从离线dump改为APOC在线导出",
   "kind": "case",
   "kubernetes_versions": [
     "any"

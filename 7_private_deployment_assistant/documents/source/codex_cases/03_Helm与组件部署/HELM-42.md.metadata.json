@@ -1,0 +1,15 @@
+{
+  "title": "KK可安装组件的功能分类与基础组件边界",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

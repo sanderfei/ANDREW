@@ -1,0 +1,16 @@
+{
+  "title": "集群Pod通过CoreDNS解析离线仓库域名",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "linux"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-20",
+  "verification_note": "实现提交 d8fcb72 已推送并通过 PR #66 合并至中央 test，合并提交 b35e7db 已经 API 和 Git 核验；聚焦测试、本地 CoreDNS A/AAAA 与构建已通过，命令依赖已审计；未部署或现场功能验证。"
+}

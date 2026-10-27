@@ -1,0 +1,16 @@
+{
+  "title": "Neo4j本地备份前置校验仅返回退出码1",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-22",
+  "verification_note": "原客户旧部署缺少app=neo4j，空Pod筛选触发test -n失败；后续客户同条件查询已返回pod/neo4j-0。214同款Chart 0.4.14/镜像5.26.11部署的重建Pod保留app=neo4j，已补模板标签幂等及滚动影响说明。APOC和密码错误分别见BK-35/BK-36；标签通过不等于完整备份通过。原校验提示改进本地测试/构建通过但未发布，未取得完整Web归档与恢复证据，整体仍unverified。"
+}

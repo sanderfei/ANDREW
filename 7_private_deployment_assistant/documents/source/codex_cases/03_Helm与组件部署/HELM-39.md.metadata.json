@@ -1,0 +1,14 @@
+{
+  "title": "Helm搜索StarRocks 3.5及kube-starrocks与starrocks Chart选择",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified"
+}

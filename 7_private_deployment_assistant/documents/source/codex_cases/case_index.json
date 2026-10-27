@@ -1,9 +1,172 @@
 {
   "created_at": "2026-10-14",
-  "case_count": 172,
+  "case_count": 195,
   "raw_files_scanned": 421,
   "distinct_sessions": 378,
   "cases": [
+    {
+      "id": "OBS-28",
+      "title": "V3版本目录一键下载并导入集群数据与镜像的串行任务",
+      "path": "07_OBS网关与文件传输/OBS-28.md",
+      "status": "本地实现及定向验证通过，未提交发布；真实导入待验证",
+      "source_checked_at": "2026-10-26",
+      "verification_note": "Web release/5f148d0基线本地新增版本导入API、path/cluster请求及标准success/pid响应；单总PID单execute.log串行完成分页直属识别、逐包下载、全部预检、镜像优先、数据导入及统一终态，缺类跳过/无包no-op，首错停止保留原包和副作用。专用flock仅限制本入口；同步镜像/六类数据核心使用私有快照、严格新路径、context及日志脱敏，旧手动宽松脚本未全部改造。模拟网关/脚本/HTTP/WebSocket定向验证、race及server构建通过，临时测试和产物已清理；Swagger14路径19定义46引用通过。未提交推送发布，无真实OBS/Zot/数据库或现场证据，metadata保持unverified。 2026-10-26只读澄清识别：先校验压缩扩展（完整去.tar.gz），只按最后下划线后的末尾token忽略大小写映射数据库，版本/日期不参与；v_Mysql_backup.zip未知ZIP跳过，命中库但错扩展报错。未知tar类仅镜像候选，内容不符则预检失败，不扫描SQL/BSON猜库。本次未改业务或重跑测试。",
+      "sources": []
+    },
+    {
+      "id": "OBS-27",
+      "title": "V2与V3目录列表按前缀和分隔符列举单层内容",
+      "path": "07_OBS网关与文件传输/OBS-27.md",
+      "status": "PR423已合并；121Web编译、替换及启动命令成功，真实OBS待验证",
+      "source_checked_at": "2026-10-26",
+      "verification_note": "实现提交5f148d0已推送origin/release，PR423核对仅1提交4文件67行新增并正常合并中央release为014f0a1，fetch确认祖先关系。新增GET /api/v3/obs/folder/top/list，以空prefix及delimiter=/按页取common_prefixes，返回全部一级目录名数组，去掉末尾斜杠、去重并保留网关顺序及原始大小写空格；按用户明确要求不读取users.json、不做目录权限过滤或排序，包含config，沿用V3会话校验。原有POST列表和删除/重命名使用的ListAll保持。开发定向测试及cmd/server构建通过，临时测试和产物已清理，本地忽略的swag.json补至13路径17定义。121通过固定SSH别名在/root/wfweb/g_web_installer从196d640快进014f0a1，保留data、配置删除状态与禁用Vue的router调整；登录Shell编译server.next、mv替换成功。单次8080监听及归属核对旧PID3027537后停止并立即启动，脚本返回PID852376，SSH退出0。仅发布Web，KK未改；未追加测试或启动后业务探测，真实OBS/IAM待验证，metadata保持unverified。",
+      "sources": []
+    },
+    {
+      "id": "OBS-26",
+      "title": "V3用户权限配置在线读取与整体覆盖接口",
+      "path": "07_OBS网关与文件传输/OBS-26.md",
+      "status": "PR421已合并；121启动命令完成，反馈all权限拒绝，实际身份与配置待核对",
+      "source_checked_at": "2026-10-26",
+      "verification_note": "Web实现f932ef9已推送origin/release，PR421核对仅1提交5文件并正常合并中央release为196d640，fetch后确认祖先关系，未将mergeable描述为CI通过。新增GET /api/v3/obs/users与POST /api/v3/obs/users/update，实时读取或完整覆盖config/users.json；当前all权限授权、V3会话、JSON及16MiB校验、无缓存和上传key/size校验保持。开发定向测试、race与cmd/server构建通过，临时测试制品已删除，本地忽略的swag.json保留原内容并补两个接口。121首轮辅助脚本因Python3.6不支持text参数在修改源码前失败，兼容调整后从96c8cf3快进196d640；保留持久data、configs/users.json已删除状态及禁用Vue的router本地改动，登录Shell编译server.next并替换server成功。单次8080监听归属核对旧PID2832810后停止并立即启动，脚本返回PID3027537、命令退出0。仅发布Web，KK未改；未追加业务探测，真实OBS和IAM功能未验证，metadata保持unverified。 2026-10-26用户反馈GET /api/v3/obs/users返回all permission is required to manage OBS users config；当前源码确认错误发生在远端配置读取解析成功后，以JWT userId查找权限数组但未精确匹配all，映射403。用户ID无匹配、空权限或非精确all均会触发，实际用户与配置未提供、未现场核对。此前取消权限过滤仅针对一级目录新接口，本轮未修改users读写规则、未运行测试或调用线上接口，具体身份配置原因待核对。",
+      "sources": []
+    },
+    {
+      "id": "OBS-25",
+      "title": "private-service版本输出同步OBS链接与目录key格式",
+      "path": "07_OBS网关与文件传输/OBS-25.md",
+      "status": "代码已验证，未提交发布，真实OBS待验证",
+      "source_checked_at": "2026-10-23",
+      "verification_note": "private-service dev/455e586d基线新增可选opt_url、rev_url，创建目录成功后复用同一folderPath读取并增量更新OBS config/versionUrl.json；创建与映射共用规范化，无前导斜杠、一个末尾斜杠，验证实际目录key与JSON key一致。每次读取最新映射，保留其他目录，不使用本地持久缓存；失败读取不会覆盖，上传校验201及key/size，进程锁不保证跨实例并发。定向测试、race、运行时Swagger测试和make build通过，临时测试与制品已删除。三份Swagger产物保留原12条路径并新增1条；全量生成受既有response.Response注释阻塞，仅生成并合并本接口。数据库回滚不能撤销OBS写入，真实OBS、事务故障及Web联调未验证；未提交、推送或发布，metadata为unverified。",
+      "sources": []
+    },
+    {
+      "id": "OBS-24",
+      "title": "V3版本链接改存OBS并按请求下载合并",
+      "path": "07_OBS网关与文件传输/OBS-24.md",
+      "status": "PR420已合并；121Web构建、替换及启动命令成功，真实OBS待验证",
+      "source_checked_at": "2026-10-23",
+      "verification_note": "Web实现8afe3ab已推送origin/release，用户授权后创建并合并中央release的PR420为96c8cf3，核对1个提交、5文件及祖先关系；没有CI状态记录。版本链接统一以config/versionUrl.json为准，每次下载临时文件并解析清理，保存保留其他目录并覆盖上传，列表按次读取；编辑入口要求网关会话。开发定向测试、race与cmd/server构建通过，临时测试已删除，进程内锁不提供跨实例并发保证。根目录versionUrl.json共137条，四组旧目录前缀修正26条，URL和其他文本保留，无key冲突；仅传输到121的/root/wfkk/configyaml/versionUrl.json，未上传OBS。121Web从6a674f4快进96c8cf3，保留users.json、data与禁用Vue的router本地修改，登录Shell构建server.next并替换server均成功；单次ss及进程归属确认旧PID2649702后停止并立即启动，脚本输出PID2832810且退出0。KK未发布，没有追加启动后业务探测，真实OBS功能未验证，metadata为unverified。",
+      "sources": []
+    },
+    {
+      "id": "HELM-42",
+      "title": "KK可安装组件的功能分类与基础组件边界",
+      "path": "03_Helm与组件部署/HELM-42.md",
+      "status": "源码功能概览，现场安装与业务功能未验证",
+      "source_checked_at": "2026-10-22",
+      "verification_note": "本地KK test/9a73986核对基础模块3项与按需组件20项，Web目录19项且MySQL被注释；mqtt对应EMQX，elastic对应Elasticsearch，pgvector为依赖PostgreSQL的扩展。集群核心流程与独立Zot初始化不计入20项。清单仅说明源码安装能力与产品职责，未连接现场、部署或验证业务功能，metadata保持unverified。",
+      "sources": []
+    },
+    {
+      "id": "HELM-41",
+      "title": "KK安装Seata Server与业务分布式事务接入边界",
+      "path": "03_Helm与组件部署/HELM-41.md",
+      "status": "源码结论与内嵌制品已核对，业务接入待验证",
+      "source_checked_at": "2026-10-22",
+      "verification_note": "本地KK test/9a73986的源码与实际内嵌seata.tgz核对，Chart 1.1.0/appVersion 2.6.0，安装Seata Server并发布Nacos服务端与客户端配置。安装职责是部署TC协调端，不能证明业务TM/RM、SDK、事务边界或TCC业务接口已接入。未连接集群、部署或执行事务功能验证，metadata保持unverified；历史Seata部署故障未混入本轮独立问题。",
+      "sources": []
+    },
+    {
+      "id": "BK-36",
+      "title": "Neo4j数据库发现失败因Web凭据与实际密码不一致",
+      "path": "06_Web备份恢复与导入/BK-36.md",
+      "status": "真实凭据更新后列库成功；Web完整备份及恢复待验证",
+      "source_checked_at": "2026-10-22",
+      "verification_note": "214同款Bitnami Chart 0.4.14/Neo4j 5.26.11的失败脚本凭据与实际有效密码不一致，复现列库返回认证失败。用户授权写入运行Web实际配置后，以更新凭据执行同一数据库发现查询退出0并返回__GWI_DB__neo4j；未保存密码值。库存在但节点数0，不能归因为空库。已确认配置与列库恢复，尚无新Web完整备份归档及隔离恢复证据，整体保持unverified。",
+      "sources": []
+    },
+    {
+      "id": "BK-35",
+      "title": "Neo4j历史包补开APOC导出配置且重启后保留",
+      "path": "06_Web备份恢复与导入/BK-35.md",
+      "status": "同款旧包PVC加载与手动APOC导出成功；Web完整备份及恢复待验证",
+      "source_checked_at": "2026-10-22",
+      "verification_note": "2026-10-22取得客户实际Chart 0.4.14/Neo4j 5.26.11归档并在214同款部署核对镜像启动复制逻辑；PVC保存neo4j.conf与apoc.conf，用户重启日志确认加载，SHOW PROCEDURES与手动APOC导出均成功。已补两个文件在PVC及运行目录的检查、主机/Pod/Cypher执行位置、模板标签幂等与避免重复重启。214真实凭据更新后的列库成功另见BK-36；尚无完整Web备份归档和隔离恢复证据，因此整体保持unverified。归档阶段未执行远端操作。",
+      "sources": []
+    },
+    {
+      "id": "BK-34",
+      "title": "Neo4j本地备份前置校验仅返回退出码1",
+      "path": "06_Web备份恢复与导入/BK-34.md",
+      "status": "客户补标签后筛选通过；同款部署模板标签保留，完整备份待验证",
+      "source_checked_at": "2026-10-22",
+      "verification_note": "原客户旧部署缺少app=neo4j，空Pod筛选触发test -n失败；后续客户同条件查询已返回pod/neo4j-0。214同款Chart 0.4.14/镜像5.26.11部署的重建Pod保留app=neo4j，已补模板标签幂等及滚动影响说明。APOC和密码错误分别见BK-35/BK-36；标签通过不等于完整备份通过。原校验提示改进本地测试/构建通过但未发布，未取得完整Web归档与恢复证据，整体仍unverified。",
+      "sources": []
+    },
+    {
+      "id": "WEB-17",
+      "title": "离线三步骤复用PID WebSocket推送结束状态与自动衔接",
+      "path": "05_Web配置鉴权与任务/WEB-17.md",
+      "status": "固定日志源码已核对；结束事件与自动衔接未实现",
+      "source_checked_at": "2026-10-21",
+      "verification_note": "release/1329551 已核对三步各自固定的成功/失败日志、退出判断和PID日志WebSocket，用户成功片段与源码一致，失败未实测；结束事件、幂等和自动衔接均未实现或功能验证。",
+      "sources": []
+    },
+    {
+      "id": "HELM-40",
+      "title": "新增StarRocks 3.5组件、PVC密码初始化与私有镜像准备",
+      "path": "03_Helm与组件部署/HELM-40.md",
+      "status": "初版KK/Web已发布121；API登录凭据校验未通过，组件任务未启动；本地补充未提交发布",
+      "source_checked_at": "2026-10-21",
+      "verification_note": "KK bbbc5d7 经PR67合并为9a73986到中央test，Web 373f3cb经PR418合并为1329551到中央release；两份隔离候选构建成功，合并后中央目录树与候选一致，原有Pinpoint和Swagger工作稿内容保留。starrocks.tgz与解包目录36文件一致；214此前使用同一包和121缓存镜像手动Helm revision 2 deployed，Operator/FE/BE就绪、5个PVC Bound、密码与10行SQL/JSON核对通过；手工Operator策略IfNotPresent，原包未改。本轮确认实际包与214均无Ingress，FE HTTP/SQL、BE HTTP为30380/30390/30480，未认证FE HTTP返回401；Web7文件包含安装校验、优先级、状态版本与命名空间，不仅是列表。121未发布，Web/KK安装入口与PVC恢复仍待验证。 后续Web本地图标替换为用户提供的200x200 PNG并核对URI一致，默认密码集中为其他组件相同常量，新增StarRocks缺省时补默认且保留已有自定义密码；此补充及数据流程未提交发布。新增数据流程生成脚本的214功能证据见BK-33，不能视为Web线上入口已验证。 2026-10-21按用户要求发布中央KK test/9a73986与Web release/1329551到121：make kk和cp至/g_web_installer/kk退出0，Web带三个tags构建替换成功；保留users.json/data和后端router调整，单次核对8080旧PID后停止并立即启动，脚本输出PID2110256、退出0。未做启动后业务探测，未同步manifest；本地未提交图标、默认密码及数据补充未发布。 后续实际组件列表/安装请求因缺少Authorization/Cookie返回HTTP401/code10004，未生成PID，待用户提供Web测试凭据；k8s_test对应214/215，214现有StarRocks revision2 deployed、3Pod就绪和5PVC Bound，KK对已部署release会跳过安装，不能作为首次安装通过证据。配置有未填写address的ssdf节点，尚未执行认证任务，未将它判为故障根因。 用户后续提供测试凭据，121本机POST/api/login真实返回HTTP500/Failed to authorize，未取得Token、未发起安装任务。已请求确认凭据或JWT，不猜测密码；原配置另有未部署组件，后续计划独立测试配置避免安装其他组件，目前尚未创建。",
+      "sources": []
+    },
+    {
+      "id": "BK-33",
+      "title": "StarRocks低频少量数据导入导出工具及MySQL dump兼容边界",
+      "path": "06_Web备份恢复与导入/BK-33.md",
+      "status": "Web导出与V2导入已实现、生成脚本在214回环验证；未提交发布，HTTP入口待验证",
+      "source_checked_at": "2026-10-21",
+      "verification_note": "Web复用已有mysql/curl实现StarRocks备份导出与/clusters/import/v2导入，旧版分支未扩展；starrocks-jsonl-v1包含DDL/JSONL/清单，校验哈希、行数、列和目标表冲突。121 mysql8.0.26运行实际Go生成脚本连接214 StarRocks3.5.21，10行逐字段一致，规范结果SHA256为9cbc75b7d2f055d987e928c238ac89735d258f92072466d2cddc1080a1a00f6a；空表空库恢复、错误密码、模拟Load失败、已有表拒绝均通过。临时库和121临时文件清理；定向验证与cmd/server构建成功，临时测试按要求删除。未提交发布，Web HTTP/PID/WebSocket、NFS/定时和全部类型未专项验证；mysqldump失败结论保留，不承诺一致性快照或完整集群恢复。 后续121发布只包含中央已合并Web1329551/KK9a73986，脚本启动成功；本地数据补充未提交合并，未包含在此次远端二进制中。 后续按真实导入器格式补充starrocks_data.tar.gz树形提示示例：根manifest.json与tables/数字.sql及数字.jsonl；仅说明文案，没有修改页面或发布。",
+      "sources": []
+    },
+    {
+      "id": "HELM-39",
+      "title": "Helm搜索StarRocks 3.5及kube-starrocks与starrocks Chart选择",
+      "path": "03_Helm与组件部署/HELM-39.md",
+      "status": "用户查询已确认；Chart组成已核对，部署功能未验证",
+      "source_checked_at": "2026-10-21",
+      "verification_note": "用户输出确认历史版本查询成功；已核对官方 v1.11.4 Chart 依赖与安装前提；未连接目标集群检查 Operator 或验证数据库功能。",
+      "sources": []
+    },
+    {
+      "id": "REG-20",
+      "title": "集群Pod通过CoreDNS解析离线仓库域名",
+      "path": "04_Zot_Harbor与镜像仓库/REG-20.md",
+      "status": "代码已验证并合并，未部署",
+      "source_checked_at": "2026-10-20",
+      "verification_note": "统一 DNS 与仓库记录已通过本地测试、构建及命令依赖审计；d8fcb72 经 PR #66 合并到中央 test/b35e7db，远端结果已核验；未部署或现场功能验证。",
+      "sources": []
+    },
+    {
+      "id": "WEB-16",
+      "title": "V3服务端登录会话缺失导致401",
+      "path": "05_Web配置鉴权与任务/WEB-16.md",
+      "status": "源码与HTTP记录已确认；具体会话失效触发待验证",
+      "sources": []
+    },
+    {
+      "id": "OBS-23",
+      "title": "本地文件列表迁到V1并支持批量删除",
+      "path": "07_OBS网关与文件传输/OBS-23.md",
+      "status": "代码已验证；121列表200，删除请求地址需改V1，功能待验证",
+      "sources": []
+    },
+    {
+      "id": "OBS-22",
+      "title": "本地镜像导入迁移V1并按集群归档任务日志",
+      "path": "07_OBS网关与文件传输/OBS-22.md",
+      "status": "代码已验证；121启动命令完成，功能待验证",
+      "sources": []
+    },
+    {
+      "id": "OBS-21",
+      "title": "214本地IAM镜像归档导入Zot的功能验证",
+      "path": "07_OBS网关与文件传输/OBS-21.md",
+      "status": "现场功能验证",
+      "sources": []
+    },
     {
       "id": "KK-O01",
       "title": "在线与离线模式的实际开关及三步安装",
@@ -48,7 +211,7 @@
       "id": "KK-O04",
       "title": "离线制品的宿主机路径与容器路径不一致",
       "path": "01_KK在线与离线安装/KK-O04.md",
-      "status": "源码结论",
+      "status": "代码已验证（2026-10-20 双路径选包已合并 release，未部署）",
       "sources": [
         {
           "session_id": "01a1335b-0dc5-78f2-8722-2aa5f948ef7d",
@@ -96,7 +259,7 @@
       "id": "KK-O08",
       "title": "Ubuntu24.04离线ISO缺项与按OS版本选择",
       "path": "01_KK在线与离线安装/KK-O08.md",
-      "status": "代码已验证",
+      "status": "历史代码已验证；2026-10-20复核osImage并同步manifest到121，24.04功能待验证",
       "sources": [
         {
           "session_id": "01a1191d-6db7-7c42-8d00-6194d609a369",
@@ -249,8 +412,8 @@
       "title": "通配域名A正常但AAAA返回SERVFAIL",
       "path": "02_集群运行时与网络/KK-C05.md",
       "status": "历史功能验证",
-      "source_checked_at": "2026-10-15",
-      "verification_note": "本轮仅复核源码及本地合并记录；192.168.1.27 集群当前生效情况待验证。",
+      "source_checked_at": "2026-10-20",
+      "verification_note": "test/a2dc312 已复核统一泛域名、地址选择、已有规则保留及生效范围；本轮仅为源码结论，未验证实时集群，192.168.1.27 当前生效情况仍待验证。",
       "sources": [
         {
           "session_id": "01a0b396-9930-75e1-8954-874cb2cd724e",
@@ -1385,9 +1548,9 @@
     },
     {
       "id": "BK-16",
-      "title": "Neo4j5.26.28新版Chart与旧离线dump路径不匹配",
+      "title": "Neo4j升级5.26.28后从离线dump改为APOC在线导出",
       "path": "06_Web备份恢复与导入/BK-16.md",
-      "status": "待验证",
+      "status": "2026-10-21源码已核对，端到端备份与恢复待验证",
       "sources": [
         {
           "session_id": "01a0eba7-7f86-7033-a5f3-e6ef05de1a2f",
@@ -1531,7 +1694,9 @@
       "id": "BK-26",
       "title": "备份目录和NFS上传成功后的本地清理",
       "path": "06_Web备份恢复与导入/BK-26.md",
-      "status": "历史功能验证",
+      "status": "历史功能验证；2026-10-21 local目录源码已核对",
+      "source_checked_at": "2026-10-21",
+      "verification_note": "历史 NFS 功能证据保留；本轮仅核对 local 路径为 Web 进程工作目录下 data/cluster/<cluster>/backup/files，未检查目标环境文件或验证备份恢复。",
       "sources": [
         {
           "session_id": "019fa651-7fbb-7fd0-a241-ca3a1dfc4512",
@@ -1810,7 +1975,9 @@
       "id": "NFS-03",
       "title": "Web NFSv4客户端不能自动兼容v3",
       "path": "08_NFS与持久化存储/NFS-03.md",
-      "status": "历史功能验证",
+      "status": "历史功能验证；2026-10-21源码复核仍保留兼容修改，现场未复测",
+      "source_checked_at": "2026-10-21",
+      "verification_note": "已核对2dfbd65及PR #404合并f962f3f和当前v4优先、明确协议拒绝才回退v3的公共客户端；121读写与真实创建任务成功属于历史功能证据，本轮未连接服务器或核验运行二进制。",
       "sources": [
         {
           "session_id": "01a0ec7f-4204-78e0-a504-3fcda2f86723",
@@ -1970,7 +2137,7 @@
       "id": "REL-06",
       "title": "错误发布仓库路径或构建旧分支",
       "path": "09_构建制品与发布/REL-06.md",
-      "status": "历史状态验证",
+      "status": "2026-10-19 test 构建替换及启动命令成功，功能待验证",
       "sources": [
         {
           "session_id": "019fca60-203c-77e3-aede-263fd60b5a7a",
@@ -2067,6 +2234,13 @@
       "title": "Elasticsearch两版部署设计、Service兼容与手动升级",
       "path": "03_Helm与组件部署/HELM-37.md",
       "status": "源码结论",
+      "sources": []
+    },
+    {
+      "id": "HELM-38",
+      "title": "Neo4j安装无外部中间件依赖但需要持久化存储",
+      "path": "03_Helm与组件部署/HELM-38.md",
+      "status": "源码已核对，现场Service/Endpoints已确认，功能待验证",
       "sources": []
     },
     {
@@ -2328,6 +2502,29 @@
       "title": "本地未提交改动范围包含OBS落盘离线安装与镜像归档重命名",
       "path": "07_OBS网关与文件传输/OBS-19.md",
       "status": "源码结论",
+      "sources": []
+    },
+    {
+      "id": "OBS-20",
+      "title": "214本地下载接口拒绝带前导斜杠的path",
+      "path": "07_OBS网关与文件传输/OBS-20.md",
+      "status": "2026-10-19 IAM 无前导斜杠下载功能已验证，列表可见性已复核；KK 制品完整下载待验证",
+      "sources": []
+    },
+    {
+      "id": "KK-O16",
+      "title": "KK基于Docker与Compose的Linux主机应用安装功能设计",
+      "path": "01_KK在线与离线安装/KK-O16.md",
+      "status": "方案设计（未实现）",
+      "sources": []
+    },
+    {
+      "id": "NFS-15",
+      "title": "Web已回退NFSv3但MOUNT返回AUTH_TOOWEAK",
+      "path": "08_NFS与持久化存储/NFS-15.md",
+      "status": "待验证；已确认v3回退和MOUNT认证拒绝，源端口与认证策略需现场证据",
+      "source_checked_at": "2026-10-21",
+      "verification_note": "截图和本地源码确认v3已回退、MOUNT收到auth_stat=5；当前RPC未绑定保留源端口，但尚无现场导出配置或mountd日志，未修复或验证功能。",
       "sources": []
     }
   ]

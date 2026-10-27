@@ -1,0 +1,8 @@
+{
+  "title": "private-service版本输出同步OBS链接与目录key格式",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified"
+}

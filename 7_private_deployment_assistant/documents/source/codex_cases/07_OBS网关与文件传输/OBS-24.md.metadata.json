@@ -1,0 +1,8 @@
+{
+  "title": "V3版本链接改存OBS并按请求下载合并",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified"
+}

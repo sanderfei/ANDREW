@@ -1,0 +1,15 @@
+{
+  "title": "StarRocks低频少量数据导入导出工具及MySQL dump兼容边界",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "verified",
+  "verification_note": "verified仅覆盖214命令行及本次Go生成脚本的10行真实回环、空对象和失败处理；Web HTTP/PID/WebSocket与部署、NFS/定时、其他字段类型仍待验证。 后续121只发布中央Web1329551与KK9a73986，不包含本地未提交的StarRocks数据功能；生成脚本验证不等于Web线上API验证。 数据包树形提示根据当前后端格式补充，不代表页面已修改。"
+}

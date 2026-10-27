@@ -1,0 +1,15 @@
+{
+  "title": "Web已回退NFSv3但MOUNT返回AUTH_TOOWEAK",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified"
+}
