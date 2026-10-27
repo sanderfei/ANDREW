@@ -1,0 +1,182 @@
+.chat-toolbar,
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chat-action {
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #527c70;
+  font-size: 11px;
+}
+
+.chat-action:hover:not(:disabled) {
+  background: var(--teal-light);
+}
+
+.conversation {
+  height: clamp(390px, 52vh, 600px);
+  overscroll-behavior: contain;
+}
+
+.message {
+  max-width: 92%;
+  font-size: 14px;
+}
+
+.message.assistant {
+  align-self: flex-start;
+  width: 100%;
+}
+
+.message.assistant .message-body {
+  padding-left: 0;
+  padding-right: 0;
+  color: var(--ink);
+}
+
+.message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.chat-action.feedback-selected {
+  background: var(--teal-light);
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.diagnostic-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 15px;
+}
+
+.diagnostic-status {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+}
+
+.diagnostic-status strong { color: var(--teal); font-weight: 500; }
+.diagnostic-status span { color: var(--muted); }
+.diagnostic-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.business-dialog {
+  width: min(580px, calc(100vw - 28px));
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 24px 90px #142c3340;
+}
+
+.business-dialog::backdrop { background: #142c3380; }
+.dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dialog-heading .icon-button { color: var(--muted); }
+.dialog-help { color: var(--muted); font-size: 12px; margin: 10px 0 16px; }
+.dialog-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 14px; }
+.business-dialog .field { margin-top: 14px; }
+.business-dialog input:not([type="checkbox"]),
+.business-dialog textarea { width: 100%; padding: 10px 12px; font-size: 13px; }
+.business-dialog textarea { resize: vertical; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.form-status { min-height: 20px; color: #91694d; font-size: 12px; margin-top: 12px; white-space: pre-wrap; }
+.confirmation-check { display: flex; gap: 9px; align-items: flex-start; margin-top: 15px; font-size: 12px; }
+.confirmation-check input { margin-top: 4px; }
+
+.message.user .message-actions {
+  justify-content: flex-end;
+}
+
+.composer textarea {
+  font-size: 14px;
+}
+
+.chat-status {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.reply-pending {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.waiting-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+}
+
+body.chat-expanded {
+  overflow: hidden;
+}
+
+.toast {
+  z-index: 30;
+}
+
+.chat-expanded .conversation-card {
+  position: fixed;
+  inset: 18px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 0 100vmax #142c3380;
+}
+
+.chat-expanded .conversation {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.chat-expanded .messages,
+.chat-expanded .reply-pending,
+.chat-expanded .composer > * {
+  width: 100%;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 650px) {
+  .sidebar .session-list {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    min-height: 0;
+    overflow-x: auto;
+  }
+  .session-item { width: auto; max-width: 180px; flex-shrink: 0; }
+  .chat-toolbar { gap: 5px; }
+  .chat-toolbar > .muted { display: none; }
+  .composer-bottom { flex-wrap: wrap; }
+  .composer-actions { margin-left: auto; }
+  .chat-expanded .conversation-card { inset: 0; border-radius: 0; }
+  .diagnostic-actions { width: 100%; }
+  .diagnostic-actions .outline-button, .diagnostic-actions .primary-button { flex: 1; }
+  .business-dialog { padding: 18px; }
+  .dialog-grid { grid-template-columns: 1fr; gap: 0; }
+}

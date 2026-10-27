@@ -7,6 +7,7 @@
   <title>私有化部署助手 · Web / KK</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/chat.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -22,17 +23,17 @@
       <button class="nav-item" data-view="documents"><span aria-hidden="true">▤</span> 知识文档 <span id="nav-doc-count" class="nav-count">—</span></button>
       <button class="nav-item" data-view="evaluations"><span aria-hidden="true">◷</span> 评测实验</button>
     </nav>
-    <div class="history-heading"><p class="nav-label">本地会话</p><button id="clear-sessions" class="icon-button" aria-label="清空本地会话" title="清空本地会话">×</button></div>
+    <div class="history-heading"><p class="nav-label">诊断会话</p><div><button id="refresh-sessions" class="icon-button" aria-label="恢复服务端会话" title="恢复服务端会话">↻</button><button id="clear-sessions" class="icon-button" aria-label="清空本地会话缓存" title="清空本地会话缓存">×</button></div></div>
     <div id="session-list" class="session-list"></div>
     <div class="sidebar-bottom">
-      <span class="status-dot"></span><span>项目框架已就绪<small>智能问答与集群连接待接入</small></span>
+      <span class="status-dot"></span><span>诊断工作流<small id="assistant-summary">正在读取运行模式</small></span>
     </div>
   </aside>
 
   <main>
     <header class="topbar">
       <div><span class="breadcrumb">Web / KK</span><span class="separator">/</span><span id="view-title">运维工作台</span></div>
-      <div class="topbar-right"><span class="framework-badge">框架模式</span><span class="avatar">运维</span></div>
+      <div class="topbar-right"><span id="assistant-mode" class="framework-badge">LangGraph 框架</span><span class="avatar">运维</span></div>
     </header>
 
     <div class="page-content">
@@ -47,38 +48,45 @@
             <button class="outline-button refresh-button" disabled title="集群配置读取尚未接入">↻ 读取配置</button>
           </div>
           <div class="context-summary"><span>K8s 版本 <b>待读取</b></span><span>操作系统 <b>待读取</b></span><span>安装模式 <b>待读取</b></span><span>节点信息 <b>待读取</b></span></div>
-          <p class="field-help">地址仅保存为浏览器草稿。当前不会连接服务器或读取 config.yaml。</p>
+          <p class="field-help">Web 地址仅保存为浏览器草稿。远程只读诊断请单独授权 SSH 连接。</p>
+          <div class="diagnostic-toolbar" aria-label="远程诊断与验证">
+            <div class="diagnostic-status"><strong id="remote-status">未授权远程连接</strong><span id="workflow-status">等待提问</span></div>
+            <div class="diagnostic-actions"><button id="authorize-remote" type="button" class="outline-button">授权只读诊断</button><button id="collect-diagnostics" type="button" class="outline-button" disabled>采集基础信息</button><button id="revoke-remote" type="button" class="chat-action" disabled>撤销连接</button><button id="verify-resolution" type="button" class="primary-button" disabled>确认复测并归档</button></div>
+          </div>
+          <p class="field-help">远程检查仅包含固定只读命令。确认原故障恢复后，填写实际处理步骤和复测结果，才会生成案例并尝试入库。</p>
         </section>
 
         <div class="workspace-grid">
           <section class="conversation-card" aria-labelledby="conversation-title">
-            <div class="section-heading"><h2 id="conversation-title"><span class="section-icon">◫</span> 问题会话</h2><span class="muted">本地记录</span></div>
+            <div class="section-heading"><h2 id="conversation-title"><span class="section-icon">◫</span> 部署助手</h2><div class="chat-toolbar"><span class="muted">纯文本对话</span><button id="expand-chat" class="chat-action" type="button" aria-pressed="false">展开窗口 ↗</button></div></div>
             <div id="conversation" class="conversation" aria-live="polite">
               <div id="welcome" class="welcome">
                 <div class="welcome-icon" aria-hidden="true">⌘</div>
                 <h2>从一个部署问题开始</h2>
-                <p>记录问题、查看部署资料，逐步搭建你的运维知识库。</p>
+                <p>描述问题、粘贴报错，在同一个会话中补充信息和继续追问。</p>
                 <div class="suggestions">
                   <button data-question="私有化离线部署需要提前准备哪些内容？"><span>离线部署</span>安装准备与制品清单 <b>↗</b></button>
                   <button data-question="Pod 镜像拉取失败时，应该先检查哪些信息？"><span>故障排查</span>镜像仓库与运行时配置 <b>↗</b></button>
                   <button data-question="Helm 部署后 Pod 未就绪，如何逐步定位问题？"><span>Helm 部署</span>配置与工作负载排查 <b>↗</b></button>
                   <button data-question="Web 与 KK 发布前，需要核对哪些部署条件？"><span>发布支持</span>版本与环境核对 <b>↗</b></button>
                 </div>
-                <div class="scope-note"><span aria-hidden="true">ⓘ</span> 当前为项目框架，发送问题不会生成诊断结论或调用模型。</div>
+                <div class="scope-note"><span aria-hidden="true">ⓘ</span><span id="assistant-scope">默认运行 LangGraph 框架，按规则整理信息；不调用模型或向量库。</span></div>
               </div>
               <div id="messages" class="messages"></div>
+              <div id="reply-pending" class="reply-pending" role="status" hidden><span class="waiting-dot" aria-hidden="true"></span> 正在等待回复…</div>
             </div>
             <form id="question-form" class="composer">
               <label class="sr-only" for="question">输入部署或运维问题</label>
-              <textarea id="question" rows="3" maxlength="12000" placeholder="描述你的部署问题，例如：离线添加节点时依赖安装失败……"></textarea>
-              <div class="composer-bottom"><span>Shift + Enter 换行 · Enter 发送</span><button id="send-question" class="primary-button" type="submit">发送问题 <span aria-hidden="true">↑</span></button></div>
+              <textarea id="question" rows="3" maxlength="12000" aria-describedby="composer-help" placeholder="输入问题或粘贴日志，例如：离线添加节点时依赖安装失败……"></textarea>
+              <div class="composer-bottom"><span id="composer-help">Enter 发送 · Shift + Enter 换行 · 仅支持文本</span><div class="composer-actions"><button id="stop-question" class="outline-button" type="button" hidden>停止等待</button><button id="send-question" class="primary-button" type="submit" disabled>发送 <span aria-hidden="true">↑</span></button></div></div>
+              <p id="chat-status" class="chat-status" role="status">会话可从服务端恢复；输入草稿保存在当前浏览器。</p>
             </form>
           </section>
 
           <aside class="workspace-aside">
             <section class="info-card"><p class="eyebrow">KNOWLEDGE BASE</p><h2>部署参考资料</h2><div class="document-count"><strong id="workspace-doc-count">—</strong><span>份原始文档</span></div><p>私有化安装文档已归档，在线与离线流程作为后续知识来源。</p><button class="text-button" data-open-view="documents">浏览知识文档 <span>→</span></button></section>
             <section class="info-card"><h2>版本支持范围</h2><div id="support-matrix" class="support-matrix"></div><p class="small-note">按当前 Web / KK 产品范围展示，实际集群环境待读取。</p></section>
-            <section class="info-card roadmap-card"><h2>后续能力</h2><ul><li><span>01</span>读取集群配置与任务历史</li><li><span>02</span>按版本检索部署资料</li><li><span>03</span>生成带引用的支持建议</li><li><span>04</span>Langfuse 质量评测</li></ul></section>
+            <section class="info-card roadmap-card"><h2>诊断闭环</h2><ul><li><span>01</span>追问环境与关键报错</li><li><span>02</span>检索案例与授权现场取证</li><li><span>03</span>给出方案并确认功能恢复</li><li><span>04</span>案例归档、入库与调用追踪</li></ul></section>
           </aside>
         </div>
       </section>
@@ -91,13 +99,39 @@
       </section>
 
       <section id="evaluations-view" class="view" hidden>
-        <div class="page-heading"><div><p class="eyebrow">QUALITY EVALUATION</p><h1>评测实验</h1><p class="subtitle">用真实问题与固定环境快照，比较每次迭代的效果。</p></div><button class="outline-button" disabled title="评测运行器尚未接入">＋ 创建实验</button></div>
-        <div class="metric-grid"><div class="metric-card"><span>检索命中</span><strong>—</strong><small>是否找到适用资料</small></div><div class="metric-card"><span>回答正确性</span><strong>—</strong><small>关键判断与步骤</small></div><div class="metric-card"><span>引用支持</span><strong>—</strong><small>结论是否有据可查</small></div><div class="metric-card"><span>追问与拒答</span><strong>—</strong><small>信息不足时的处理</small></div></div>
-        <section class="empty-panel"><div class="welcome-icon" aria-hidden="true">◷</div><h2>还没有评测实验</h2><p>后续接入真实问题集和 Langfuse，记录评分、耗时与失败原因。</p><span class="muted-badge">评测能力待接入</span></section>
+        <div class="page-heading"><div><p class="eyebrow">QUALITY &amp; COST</p><h1>运行观测与成本</h1><p class="subtitle">读取本地实际执行记录，按模型和阶段查看用量。离线质量实验通过评测运行器执行。</p></div><button id="refresh-evaluations" class="outline-button" type="button">↻ 刷新记录</button></div>
+        <div class="metric-grid"><div class="metric-card"><span>执行 Trace</span><strong id="metric-traces">—</strong><small>用户轮次与诊断操作</small></div><div class="metric-card"><span>模型调用</span><strong id="metric-calls">—</strong><small id="metric-usage-detail">包含失败及未返回用量的调用</small></div><div class="metric-card"><span>Token 总量</span><strong id="metric-tokens">—</strong><small id="metric-token-detail">输入 / 输出</small></div><div class="metric-card"><span>费用</span><strong id="metric-cost">—</strong><small id="metric-cost-detail">缺少计价数据时明确显示未知</small></div></div>
+        <p id="evaluation-status" class="field-help" role="status">打开此页后加载实际运行记录。</p>
+        <section class="info-card document-plan"><h2>模型与阶段用量</h2><div id="usage-breakdown"><p class="field-help">尚未加载。</p></div></section>
+        <section class="documents-panel"><div class="section-heading"><h2>最近执行</h2><span id="trace-total" class="muted">—</span></div><div id="trace-list"></div></section>
       </section>
     </div>
     <footer>Web / KK 运维知识工作空间<span>界面与项目框架 · v0.1</span></footer>
   </main>
+  <dialog id="remote-dialog" class="business-dialog" aria-labelledby="remote-dialog-title">
+    <form id="remote-form" autocomplete="off">
+      <div class="dialog-heading"><h2 id="remote-dialog-title">授权本会话只读诊断</h2><button id="close-remote-dialog" type="button" class="icon-button" aria-label="关闭连接窗口">×</button></div>
+      <p class="dialog-help">密码仅交给后端临时连接执行器，不进入聊天记录或浏览器存储。连接会自动到期；此操作只登记授权，首次采集时才验证网络连接。</p>
+      <div class="dialog-grid"><div class="field"><label for="remote-host">Master / 诊断入口地址</label><input id="remote-host" name="host" required maxlength="253" placeholder="192.168.1.10" autocomplete="off"></div><div class="field"><label for="remote-port">SSH 端口</label><input id="remote-port" name="port" type="number" min="1" max="65535" value="22" required></div></div>
+      <div class="dialog-grid"><div class="field"><label for="remote-username">用户名</label><input id="remote-username" name="username" required maxlength="64" placeholder="运维账号" autocomplete="off"></div><div class="field"><label for="remote-password">密码</label><input id="remote-password" name="password" type="password" required maxlength="4096" autocomplete="new-password"></div></div>
+      <div class="field"><label for="remote-fingerprint">主机 SHA256 指纹（可选）</label><input id="remote-fingerprint" name="host_key_sha256" maxlength="64" placeholder="SHA256:..." autocomplete="off"></div>
+      <p class="dialog-help">默认只连接后端 known_hosts 已信任的主机。首次连接可填写通过可信渠道核验的指纹。</p>
+      <p id="remote-form-status" class="form-status" role="status"></p>
+      <div class="dialog-actions"><button id="cancel-remote-dialog" type="button" class="outline-button">取消</button><button id="submit-remote" type="submit" class="primary-button">授权只读检查</button></div>
+    </form>
+  </dialog>
+  <dialog id="verification-dialog" class="business-dialog" aria-labelledby="verification-dialog-title">
+    <form id="verification-form">
+      <div class="dialog-heading"><h2 id="verification-dialog-title">确认原故障已恢复</h2><button id="close-verification-dialog" type="button" class="icon-button" aria-label="关闭验证窗口">×</button></div>
+      <p class="dialog-help">请填写实际执行和复测的结果。提交将记录用户确认，并自动整理案例、尝试导入向量库；结果以服务端回复为准。</p>
+      <div class="field"><label for="verified-cause">已确认的根因</label><textarea id="verified-cause" required minlength="2" maxlength="4000" rows="2" placeholder="写明最终定位的原因及依据"></textarea></div>
+      <div class="field"><label for="verified-steps">实际执行的解决步骤（每行一步）</label><textarea id="verified-steps" required maxlength="12000" rows="4" placeholder="只填写实际执行且有效的步骤"></textarea></div>
+      <div class="field"><label for="verified-evidence">原故障功能复测结果（至少 8 字）</label><textarea id="verified-evidence" required minlength="8" maxlength="8000" rows="3" placeholder="例如：重新执行离线添加节点，任务完成且新节点能够正常运行测试工作负载"></textarea></div>
+      <label class="confirmation-check"><input id="verified-confirmed" type="checkbox" required> 我已复测原故障功能，确认本次问题已解决</label>
+      <p id="verification-form-status" class="form-status" role="status"></p>
+      <div class="dialog-actions"><button id="cancel-verification-dialog" type="button" class="outline-button">继续排查</button><button id="submit-verification" type="submit" class="primary-button">提交验证结果</button></div>
+    </form>
+  </dialog>
   <div id="toast" class="toast" role="status" hidden></div>
 </body>
 </html>

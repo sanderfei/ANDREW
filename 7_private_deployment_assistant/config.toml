@@ -24,3 +24,32 @@ chunk_size = 800
 chunk_overlap = 120
 # 相对路径以目录 7 为基准；需要录入其他目录时，在这里显式添加绝对路径。
 allowed_roots = ["documents/source"]
+
+[assistant]
+# framework：只演示流程，不调用真实模型或向量库；改为 glm 才启用真实问答。
+mode = "framework"
+# 下列模型和地址可被 ZHIPU_CHAT_MODEL、ZHIPU_BASE_URL 覆盖。
+# 密钥仅从 ZHIPU_API_KEY 读取，不要写入此文件。
+# 环境优先级：进程环境 > runtime/local.env > 仓库根目录 .env。
+model = "glm-4-flash"
+base_url = "https://open.bigmodel.cn/api/paas/v4/"
+temperature = 0.1
+timeout = 60.0
+max_retries = 1
+top_k = 5
+max_remote_rounds = 2
+
+[business]
+runtime_dir = "runtime"
+auto_index = true
+index_interval = 15
+connection_ttl = 1800
+command_timeout = 20
+max_output_chars = 24000
+# 默认读取当前运行用户 ~/.ssh/known_hosts，也可在授权连接时指定已核验的 SHA256 指纹。
+
+[langfuse]
+# 本地执行记录始终启用；此开关控制是否额外上报 Langfuse。
+enabled = false
+base_url = "http://127.0.0.1:3000"
+# 密钥只读取 LANGFUSE_PUBLIC_KEY、LANGFUSE_SECRET_KEY，不写入 TOML。
