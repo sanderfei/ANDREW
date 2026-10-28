@@ -552,9 +552,18 @@ async function loadEvaluations() {
     document.getElementById("metric-cost").textContent = costText(metrics);
     document.getElementById("metric-cost-detail").textContent = metrics.missing_cost_count
       ? `${countText(metrics.missing_cost_count)} 次用量记录缺少费用；不按零元计算` : "按接口实际费用或已配置计价记录统计";
-    document.getElementById("evaluation-status").textContent = result.langfuse_reporting
-      ? "以下数据来自本地观测记录。Langfuse 已启用；单次上报异常会在最近执行中标注。"
-      : "以下数据来自本地观测记录。Langfuse 当前未启用，配置后可同步追踪与反馈。";
+    const langfuse = result.langfuse || {state: result.langfuse_reporting ? "configured" : "disabled"};
+    const langfuseStates = {
+      disabled: "未启用",
+      unconfigured: "配置尚不完整",
+      configured: "已配置，连接与认证尚未校验",
+      connected: "连接与认证检查通过",
+      error: "当前不可用",
+    };
+    const langfuseState = langfuseStates[langfuse.state] || "状态未知";
+    const langfuseMessage = langfuse.message ? ` ${safeText(langfuse.message)}` : "";
+    document.getElementById("evaluation-status").textContent =
+      `以下数据来自本地观测记录。Langfuse：${langfuseState}。${langfuseMessage}`;
     const breakdown = document.getElementById("usage-breakdown");
     breakdown.replaceChildren();
     for (const [field, label] of [["by_model", "模型"], ["by_stage", "阶段"]]) {
@@ -587,6 +596,8 @@ async function loadEvaluations() {
       const values = [workflowLabels[trace.status] || trace.status || "未知状态", trace.created_at,
         Number.isFinite(trace.duration_ms) ? `${Math.round(trace.duration_ms)} ms` : "执行中",
         `Trace ${trace.trace_id || "—"}`];
+      if (trace.langfuse_trace_id) values.push(`Langfuse Trace ${trace.langfuse_trace_id}`);
+      if (trace.langfuse_observation_id) values.push(`Langfuse Observation ${trace.langfuse_observation_id}`);
       if (Array.isArray(trace.report_errors) && trace.report_errors.length) values.push("Langfuse 上报有异常，记录已保存在本地");
       values.filter(Boolean).forEach(value => {
         const span = document.createElement("span");

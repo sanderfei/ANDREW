@@ -1,0 +1,25 @@
+{
+  "checked_at": "2026-10-28T11:44:46.989109+08:00",
+  "server_url": "http://127.0.0.1:8070",
+  "server_pid": 1846382,
+  "health": {
+    "status": "ok",
+    "mode": "framework",
+    "agent_enabled": false,
+    "workflow_enabled": true,
+    "persistent_checkpoints": true
+  },
+  "vector": {
+    "backend": "qdrant",
+    "namespace": "private_deployment_1d864d88e5",
+    "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "dimension": 384,
+    "retrieval_mode": "dense_vector",
+    "connected": true,
+    "initialized": true,
+    "chunks": 604
+  },
+  "documents": 198,
+  "chat_model_calls": 0,
+  "langfuse_state": "disabled"
+}

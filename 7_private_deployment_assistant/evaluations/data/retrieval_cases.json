@@ -1,0 +1,458 @@
+{
+  "schema_version": 1,
+  "created_date": "2026-10-28",
+  "purpose": "教程7本地检索对比，跳过聊天模型",
+  "label_level": "document",
+  "labeling": "逐篇阅读候选案例的现象、已确认机制和处理段落后手写查询；每题只标一个主要相关文档，不是穷尽相关性标签。",
+  "limitations": [
+    "小规模人工样本、同一批案例衍生查询，未独立留出真实用户盲测集。",
+    "expected_sources为主要参考文档；同主题其他案例也可能相关，未全库逐对判定。",
+    "无答案题为跨域观察题，不进入Recall/MRR分母；不用于证明拒答机制。",
+    "不加环境filters，先观察基础检索排序，避免将元数据标注误差混入本轮指标。",
+    "在26条案例问题之外，追加4条原始DOCX安装参考问题；未按结果修改算法参数，仍非独立盲测集。"
+  ],
+  "cases": [
+    {
+      "id": "retrieval-001",
+      "query": "Ubuntu 22.04.5 的离线节点加入集群时找不到匹配 ISO，manifest 的系统版本应该写 22.04 还是 22.04.5？",
+      "expected_source": "codex_cases/01_KK在线与离线安装/KK-O08.md",
+      "expected_sources": [
+        "codex_cases/01_KK在线与离线安装/KK-O08.md"
+      ],
+      "expected_case_ids": [
+        "KK-O08"
+      ],
+      "category": "01_KK在线与离线安装",
+      "query_style": "environment",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-002",
+      "query": "导出离线安装包时 curl 报 56，另一个下载文件只有九个字节并写着 Not Found，这两种情况该怎么排查？",
+      "expected_source": "codex_cases/01_KK在线与离线安装/KK-O13.md",
+      "expected_sources": [
+        "codex_cases/01_KK在线与离线安装/KK-O13.md"
+      ],
+      "expected_case_ids": [
+        "KK-O13"
+      ],
+      "category": "01_KK在线与离线安装",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-003",
+      "query": "第二套离线集群能直接复用第一套的镜像仓库吗？两个仓库如果用了同一个域名会不会互相影响？",
+      "expected_source": "codex_cases/01_KK在线与离线安装/KK-O15.md",
+      "expected_sources": [
+        "codex_cases/01_KK在线与离线安装/KK-O15.md"
+      ],
+      "expected_case_ids": [
+        "KK-O15"
+      ],
+      "category": "01_KK在线与离线安装",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-004",
+      "query": "MongoDB 的 NodePort 用工作节点地址能连，用控制节点地址就超时，Pod 都正常，应该先看什么？",
+      "expected_source": "codex_cases/02_集群运行时与网络/KK-C09.md",
+      "expected_sources": [
+        "codex_cases/02_集群运行时与网络/KK-C09.md"
+      ],
+      "expected_case_ids": [
+        "KK-C09"
+      ],
+      "category": "02_集群运行时与网络",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-005",
+      "query": "SSH 已经能登录节点，为什么在远端执行 kubectl 或 Helm 还是没有权限访问集群 API？",
+      "expected_source": "codex_cases/02_集群运行时与网络/KK-C10.md",
+      "expected_sources": [
+        "codex_cases/02_集群运行时与网络/KK-C10.md"
+      ],
+      "expected_case_ids": [
+        "KK-C10"
+      ],
+      "category": "02_集群运行时与网络",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-006",
+      "query": "重新加入离线节点后 CRI 插件没加载，containerd 2.2.1 提示 mirrors cannot be set when config_path is provided，应该检查哪里？",
+      "expected_source": "codex_cases/02_集群运行时与网络/KK-C11.md",
+      "expected_sources": [
+        "codex_cases/02_集群运行时与网络/KK-C11.md"
+      ],
+      "expected_case_ids": [
+        "KK-C11"
+      ],
+      "category": "02_集群运行时与网络",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-007",
+      "query": "helm search repo 查 StarRocks 只看到 4.1，grep 3.5 没结果，怎么找旧的 3.5 应用版本并选择安装包？",
+      "expected_source": "codex_cases/03_Helm与组件部署/HELM-39.md",
+      "expected_sources": [
+        "codex_cases/03_Helm与组件部署/HELM-39.md"
+      ],
+      "expected_case_ids": [
+        "HELM-39"
+      ],
+      "category": "03_Helm与组件部署",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-008",
+      "query": "通过 KK 把 Seata 装好了，是不是业务服务就自动有分布式事务了，应用端还需要做哪些事情？",
+      "expected_source": "codex_cases/03_Helm与组件部署/HELM-41.md",
+      "expected_sources": [
+        "codex_cases/03_Helm与组件部署/HELM-41.md"
+      ],
+      "expected_case_ids": [
+        "HELM-41"
+      ],
+      "category": "03_Helm与组件部署",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-009",
+      "query": "安装 StarRocks 后希望 FE 和 BE 的数据、日志都持久化，默认 StorageClass 和初始密码是怎么配置的？",
+      "expected_source": "codex_cases/03_Helm与组件部署/HELM-40.md",
+      "expected_sources": [
+        "codex_cases/03_Helm与组件部署/HELM-40.md"
+      ],
+      "expected_case_ids": [
+        "HELM-40"
+      ],
+      "category": "03_Helm与组件部署",
+      "query_style": "environment",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-010",
+      "query": "Zot 登录密码带特殊字符导致认证异常，改用 NAT IP 访问又提示证书不匹配，这两个问题该分别怎么处理？",
+      "expected_source": "codex_cases/04_Zot_Harbor与镜像仓库/REG-17.md",
+      "expected_sources": [
+        "codex_cases/04_Zot_Harbor与镜像仓库/REG-17.md"
+      ],
+      "expected_case_ids": [
+        "REG-17"
+      ],
+      "category": "04_Zot_Harbor与镜像仓库",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-011",
+      "query": "Harbor 删除项目返回 412，是不是项目里还有仓库没清理？Web 从镜像 tar 推送是否必须装 Docker 服务？",
+      "expected_source": "codex_cases/04_Zot_Harbor与镜像仓库/REG-19.md",
+      "expected_sources": [
+        "codex_cases/04_Zot_Harbor与镜像仓库/REG-19.md"
+      ],
+      "expected_case_ids": [
+        "REG-19"
+      ],
+      "category": "04_Zot_Harbor与镜像仓库",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-012",
+      "query": "宿主机已经在 hosts 配好了离线仓库域名，为什么 Pod 里仍解析不到？CoreDNS 和 NodeLocalDNS 应该怎样处理？",
+      "expected_source": "codex_cases/04_Zot_Harbor与镜像仓库/REG-20.md",
+      "expected_sources": [
+        "codex_cases/04_Zot_Harbor与镜像仓库/REG-20.md"
+      ],
+      "expected_case_ids": [
+        "REG-20"
+      ],
+      "category": "04_Zot_Harbor与镜像仓库",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-013",
+      "query": "镜像推送遇到 HTTP 和 HTTPS 不匹配，plainHTTP 跟 skipTLSVerify 分别管什么，关闭证书校验能解决登录认证吗？",
+      "expected_source": "codex_cases/05_Web配置鉴权与任务/WEB-15.md",
+      "expected_sources": [
+        "codex_cases/05_Web配置鉴权与任务/WEB-15.md"
+      ],
+      "expected_case_ids": [
+        "WEB-15"
+      ],
+      "category": "05_Web配置鉴权与任务",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-014",
+      "query": "Web 重启后浏览器还能登录，但 OBS 目录列表返回 v3 login session is missing or expired, please login again，该重新登录哪一层？",
+      "expected_source": "codex_cases/05_Web配置鉴权与任务/WEB-16.md",
+      "expected_sources": [
+        "codex_cases/05_Web配置鉴权与任务/WEB-16.md"
+      ],
+      "expected_case_ids": [
+        "WEB-16"
+      ],
+      "category": "05_Web配置鉴权与任务",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-015",
+      "query": "离线仓库初始化接口已经返回 PID，前端要等什么日志才能自动开始推镜像？Command Finished 能不能当成成功？",
+      "expected_source": "codex_cases/05_Web配置鉴权与任务/WEB-17.md",
+      "expected_sources": [
+        "codex_cases/05_Web配置鉴权与任务/WEB-17.md"
+      ],
+      "expected_case_ids": [
+        "WEB-17"
+      ],
+      "category": "05_Web配置鉴权与任务",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-016",
+      "query": "Neo4j 备份前置校验只报 remote validation failed: exit status 1，Pod 是 Running，但按 app=neo4j 查不到，如何确认标签问题？",
+      "expected_source": "codex_cases/06_Web备份恢复与导入/BK-34.md",
+      "expected_sources": [
+        "codex_cases/06_Web备份恢复与导入/BK-34.md"
+      ],
+      "expected_case_ids": [
+        "BK-34"
+      ],
+      "category": "06_Web备份恢复与导入",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-017",
+      "query": "在 Neo4j 容器里加了 apoc.export.file.enabled=true，重建 Pod 后就丢了，使用 Bitnami 历史 Chart 时怎样持久保存配置？",
+      "expected_source": "codex_cases/06_Web备份恢复与导入/BK-35.md",
+      "expected_sources": [
+        "codex_cases/06_Web备份恢复与导入/BK-35.md"
+      ],
+      "expected_case_ids": [
+        "BK-35"
+      ],
+      "category": "06_Web备份恢复与导入",
+      "query_style": "environment",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-018",
+      "query": "Web 已识别 Neo4j 组件，但备份仍然无法列出数据库，cypher-shell 提示 unauthorized，应该核对哪份凭据？",
+      "expected_source": "codex_cases/06_Web备份恢复与导入/BK-36.md",
+      "expected_sources": [
+        "codex_cases/06_Web备份恢复与导入/BK-36.md"
+      ],
+      "expected_case_ids": [
+        "BK-36"
+      ],
+      "category": "06_Web备份恢复与导入",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-019",
+      "query": "OBS 文件列表只想看到当前目录下一层文件和子文件夹，不要一次拿出整个桶，Prefix 和 Delimiter 应该怎么用？",
+      "expected_source": "codex_cases/07_OBS网关与文件传输/OBS-27.md",
+      "expected_sources": [
+        "codex_cases/07_OBS网关与文件传输/OBS-27.md"
+      ],
+      "expected_case_ids": [
+        "OBS-27"
+      ],
+      "category": "07_OBS网关与文件传输",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-020",
+      "query": "想把 OBS 某个版本目录里的已审核镜像包和数据库包一键导入集群，如何做到一个 PID 串行执行并判断最终完成？",
+      "expected_source": "codex_cases/07_OBS网关与文件传输/OBS-28.md",
+      "expected_sources": [
+        "codex_cases/07_OBS网关与文件传输/OBS-28.md"
+      ],
+      "expected_case_ids": [
+        "OBS-28"
+      ],
+      "category": "07_OBS网关与文件传输",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-021",
+      "query": "NFS 定时备份包含生成备份和上传两个阶段，每阶段都允许六十分钟，总任务为什么过一小时就被判超时？",
+      "expected_source": "codex_cases/08_NFS与持久化存储/NFS-13.md",
+      "expected_sources": [
+        "codex_cases/08_NFS与持久化存储/NFS-13.md"
+      ],
+      "expected_case_ids": [
+        "NFS-13"
+      ],
+      "category": "08_NFS与持久化存储",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-022",
+      "query": "为了测试把备份保留天数调短，新备份成功后老归档就被清掉了，retention 是否也会影响已有历史？",
+      "expected_source": "codex_cases/08_NFS与持久化存储/NFS-14.md",
+      "expected_sources": [
+        "codex_cases/08_NFS与持久化存储/NFS-14.md"
+      ],
+      "expected_case_ids": [
+        "NFS-14"
+      ],
+      "category": "08_NFS与持久化存储",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-023",
+      "query": "Web 已经从 NFSv4 回退到 v3，连上 mountd 后 MOUNT 返回 AUTH_TOOWEAK，为什么还不能挂载导出目录？",
+      "expected_source": "codex_cases/08_NFS与持久化存储/NFS-15.md",
+      "expected_sources": [
+        "codex_cases/08_NFS与持久化存储/NFS-15.md"
+      ],
+      "expected_case_ids": [
+        "NFS-15"
+      ],
+      "category": "08_NFS与持久化存储",
+      "query_style": "exact_error",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-024",
+      "query": "测试节点重装后 SSH 指纹变了且免密登录失效，ssh -G 看配置正常，下一步怎样恢复可信连接？",
+      "expected_source": "codex_cases/09_构建制品与发布/REL-07.md",
+      "expected_sources": [
+        "codex_cases/09_构建制品与发布/REL-07.md"
+      ],
+      "expected_case_ids": [
+        "REL-07"
+      ],
+      "category": "09_构建制品与发布",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-025",
+      "query": "Neo4j 的 Chart 显示 5.3.0，镜像却是 5.26.28，这算版本装错了吗，应该以什么判断实际应用版本？",
+      "expected_source": "codex_cases/09_构建制品与发布/REL-09.md",
+      "expected_sources": [
+        "codex_cases/09_构建制品与发布/REL-09.md"
+      ],
+      "expected_case_ids": [
+        "REL-09"
+      ],
+      "category": "09_构建制品与发布",
+      "query_style": "environment",
+      "filters": {}
+    },
+    {
+      "id": "retrieval-026",
+      "query": "Web 用安装脚本跑在容器里和直接在宿主机跑 server，更新方式与数据目录有什么区别？",
+      "expected_source": "codex_cases/09_构建制品与发布/REL-10.md",
+      "expected_sources": [
+        "codex_cases/09_构建制品与发布/REL-10.md"
+      ],
+      "expected_case_ids": [
+        "REL-10"
+      ],
+      "category": "09_构建制品与发布",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "docx-001",
+      "query": "安装集成站台能和 Kubernetes 集群节点放在同一台机器吗？安装时为什么会影响容器引擎？",
+      "expected_source": "未来企业事业群—私有化安装集成站台.docx",
+      "expected_sources": [
+        "未来企业事业群—私有化安装集成站台.docx"
+      ],
+      "expected_case_ids": [],
+      "category": "installation_reference_docx",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "docx-002",
+      "query": "离线安装包应该放到 Web 服务器哪个目录，文件名有什么要求？",
+      "expected_source": "未来企业事业群—私有化安装集成站台.docx",
+      "expected_sources": [
+        "未来企业事业群—私有化安装集成站台.docx"
+      ],
+      "expected_case_ids": [],
+      "category": "installation_reference_docx",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "docx-003",
+      "query": "有外网的准备机下载离线资源后，packages 和 images 目录分别要怎么处理？",
+      "expected_source": "未来企业事业群—私有化安装集成站台.docx",
+      "expected_sources": [
+        "未来企业事业群—私有化安装集成站台.docx"
+      ],
+      "expected_case_ids": [],
+      "category": "installation_reference_docx",
+      "query_style": "colloquial",
+      "filters": {}
+    },
+    {
+      "id": "docx-004",
+      "query": "Kubernetes 的 Master Etcd 和 Worker 最低建议多少 CPU、内存和硬盘？",
+      "expected_source": "未来企业事业群—私有化安装集成站台.docx",
+      "expected_sources": [
+        "未来企业事业群—私有化安装集成站台.docx"
+      ],
+      "expected_case_ids": [],
+      "category": "installation_reference_docx",
+      "query_style": "colloquial",
+      "filters": {}
+    }
+  ],
+  "unanswerable": [
+    {
+      "id": "unanswerable-001",
+      "query": "请给出日式抹茶戚风蛋糕的配方、烤箱温度和烘烤时间。",
+      "expected_sources": [],
+      "category": "out_of_domain",
+      "include_in_recall": false
+    },
+    {
+      "id": "unanswerable-002",
+      "query": "如何用纯数学方法证明费马大定理？请列出证明的主要定理。",
+      "expected_sources": [],
+      "category": "out_of_domain",
+      "include_in_recall": false
+    },
+    {
+      "id": "unanswerable-003",
+      "query": "贝多芬第九交响曲各乐章分别使用什么调式和曲式？",
+      "expected_sources": [],
+      "category": "out_of_domain",
+      "include_in_recall": false
+    },
+    {
+      "id": "unanswerable-004",
+      "query": "月球背面的南极艾特肯盆地是怎样形成的，年龄大约是多少？",
+      "expected_sources": [],
+      "category": "out_of_domain",
+      "include_in_recall": false
+    }
+  ]
+}

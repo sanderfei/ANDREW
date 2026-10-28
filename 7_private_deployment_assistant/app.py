@@ -157,6 +157,10 @@ def create_app(workflow: AssistantWorkflow | None = None) -> FastAPI:
     def metrics(thread_id: str | None = None) -> dict:
         return workflow.business.observability.metrics(thread_id)
 
+    @application.get("/api/assistant/observability")
+    def observability_status(check_connection: bool = False) -> dict:
+        return workflow.business.observability.status(check_connection=check_connection)
+
     @application.get("/api/assistant/index-jobs")
     def index_jobs(thread_id: str | None = None) -> dict:
         return {"items": workflow.business.knowledge.list_jobs(thread_id)}
@@ -174,6 +178,7 @@ def create_app(workflow: AssistantWorkflow | None = None) -> FastAPI:
     def evaluations() -> dict:
         return {"status": "ready", "items": workflow.business.observability.list_traces(),
                 "metrics": workflow.business.observability.metrics(),
+                "langfuse": workflow.business.observability.status(),
                 "langfuse_reporting": workflow.business.settings.langfuse_enabled}
 
     @application.get("/api/vector/status")

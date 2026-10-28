@@ -49,7 +49,8 @@ max_output_chars = 24000
 # 默认读取当前运行用户 ~/.ssh/known_hosts，也可在授权连接时指定已核验的 SHA256 指纹。
 
 [langfuse]
-# 本地执行记录始终启用；此开关控制是否额外上报 Langfuse。
-enabled = false
+# 本地执行记录始终启用；LANGFUSE_ENABLED=false 可临时关闭远程上报。
+enabled = true
 base_url = "http://127.0.0.1:3000"
+environment = "andrew-private-deployment"
 # 密钥只读取 LANGFUSE_PUBLIC_KEY、LANGFUSE_SECRET_KEY，不写入 TOML。

@@ -386,6 +386,11 @@ class AssistantWorkflow:
             }) as trace:
                 initial["trace_id"] = trace.trace_id
                 options["callbacks"] = [*(options.get("callbacks") or []), *trace.callbacks]
+                options.setdefault("run_name", "deployment-assistant-workflow")
+                options["metadata"] = {**(options.get("metadata") or {}),
+                    "langfuse_session_id": request.thread_id,
+                    "local_trace_id": trace.trace_id, "action": request.action,
+                    "mode": self.settings.mode}
                 options["recursion_limit"] = 30
                 try:
                     resume = snapshot.values.get("request_id") == request_id and bool(snapshot.next)

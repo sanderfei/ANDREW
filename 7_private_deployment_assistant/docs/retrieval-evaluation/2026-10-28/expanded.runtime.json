@@ -1,0 +1,21 @@
+{
+  "checked_at": "2026-10-28T16:02:26.220076+08:00",
+  "server_url": "http://127.0.0.1:8070",
+  "health": {
+    "status": "ok",
+    "mode": "framework",
+    "agent_enabled": false,
+    "workflow_enabled": true,
+    "persistent_checkpoints": true
+  },
+  "namespace": "private_deployment_1d864d88e5",
+  "documents": 198,
+  "chunks": 604,
+  "chat_model_calls": 0,
+  "database_writes_in_expanded_benchmark": 0,
+  "positive_questions": 322,
+  "negative_observations": 24,
+  "http_search_requests": 349,
+  "local_candidate_queries": 993,
+  "status_ablation_queries": 10
+}

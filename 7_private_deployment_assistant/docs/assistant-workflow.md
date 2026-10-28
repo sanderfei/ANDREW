@@ -142,10 +142,34 @@ CLI 不启动 worker，`verify` 也不自动访问向量库，需要显式执行
 .venv/bin/python 7_private_deployment_assistant/workflow_cli.py metrics --thread-id incident-7
 ```
 
-`GET /api/evaluations` 返回本地真实 Trace 和统计，不是固定问题集质量评测报告。
-`[langfuse].enabled=false` 默认关闭远端上报；开启后从环境读取 `LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY`，
-地址使用 `LANGFUSE_BASE_URL` 或 `[langfuse].base_url`。远端上报失败和 usage 缺失均不能视为零消耗。
-关闭工作流会 flush 观测并释放 SQLite，CLI 所有退出路径也会清理。
+`GET /api/evaluations` 返回本地真实 Trace、统计和 Langfuse 配置/连接状态，不是固定问题集质量评测报告。
+仓库配置为 `[langfuse].enabled=true`；可用 `LANGFUSE_ENABLED=false` 关闭远端上报。
+`LANGFUSE_ENABLED` 只接受 `true`、`false`、`1`、`0`。项目公钥、密钥从环境中的
+`LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY` 读取，地址使用 `LANGFUSE_BASE_URL` 或 `[langfuse].base_url`。
+环境优先级为进程环境、教程 7 的 `runtime/local.env`、仓库根 `.env`；实际密钥不写入 TOML、日志或案例。
+`LANGFUSE_TRACING_ENVIRONMENT` 可覆盖 `[langfuse].environment`，默认 `andrew-private-deployment`。
+
+先安装本目录 requirements，再检查配置与连接：
+
+```bash
+.venv/bin/python -m pip install -r 7_private_deployment_assistant/requirements.txt
+.venv/bin/python 7_private_deployment_assistant/workflow_cli.py langfuse-status
+.venv/bin/python 7_private_deployment_assistant/workflow_cli.py langfuse-status --check
+```
+
+状态查看默认不联网；`--check` 才调用项目认证检查，连接或认证失败返回非零退出码。
+Web 对应接口为 `GET /api/assistant/observability`，显式检查使用 `?check_connection=true`。
+状态区分未启用、配置不完整、客户端已配置、连接与认证检查通过、检查失败；已配置不表示已经上报成功。
+
+LangGraph 节点、LangChain 模型调用和用户反馈关联到请求的远端 Trace，同一 `thread_id` 作为 Langfuse
+Session 聚合多轮请求；Session 不替代 LangGraph 检查点。已有实验父上下文时，工作流沿用其远端 Trace，
+每轮仍保留独立本地 `trace_id`；执行列表中的 `langfuse_trace_id`、`langfuse_observation_id` 用于定位远端记录。
+`framework` 模式也能记录流程节点，仍不执行 GLM 和向量检索。
+
+SDK 使用异步批量上报；认证通过、已生成远端 ID 或 flush 完成都不证明记录已经能从平台查询。
+远端上报失败保留本地观测，不中断排障；上报失败和 usage 缺失均不能视为零消耗。
+关闭工作流会 flush 并 shutdown 自有 Langfuse 客户端、释放 SQLite，CLI 所有退出路径也会清理。
+固定问题集、Judge 评分和 Langfuse 实验运行器仍待实现。
 
 ## 配置和 API
 
@@ -156,7 +180,7 @@ CLI 不启动 worker，`verify` 也不自动访问向量库，需要显式执行
 | `[business]` | `auto_index`、`index_interval` | Web 自动入库与轮询秒数 |
 | `[business]` | `connection_ttl`、`command_timeout`、`max_output_chars` | 连接有效期、命令超时及输出上限 |
 | `[business]` | `known_hosts_path`（可选） | 自定义可信主机文件 |
-| `[langfuse]` | `enabled`、`base_url` | 上报开关和地址，密钥只从环境读取 |
+| `[langfuse]` | `enabled`、`base_url`、`environment` | 上报开关、地址和环境标识，密钥只从环境读取 |
 
 业务接口公共前缀为 `/api/assistant`：
 
@@ -167,6 +191,7 @@ CLI 不启动 worker，`verify` 也不自动访问向量库，需要显式执行
 | `GET /diagnostics/catalog`、`POST /diagnostics` | 固定检查目录和取证 |
 | `POST /verification`、`POST /feedback` | 功能验证及回答反馈 |
 | `GET /metrics`、`GET /index-jobs` | 统计及入库任务列表 |
+| `GET /observability` | Langfuse 状态；`check_connection=true` 显式检查连接与认证 |
 | `POST /index-jobs/retry` | 唤醒 Web worker |
 
 `POST /index-jobs/retry` 仅唤醒 worker，`auto_index=false` 时不会替代 CLI 执行。完整字段合同见 `/docs`。

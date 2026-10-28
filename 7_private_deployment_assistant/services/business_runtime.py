@@ -106,7 +106,8 @@ class BusinessRuntime:
         self.observability = observability or ObservabilityService(
             directory / "assistant.sqlite3", enabled=self.settings.langfuse_enabled,
             base_url=self.settings.langfuse_base_url, public_key=self.settings.langfuse_public_key,
-            secret_key=self.settings.langfuse_secret_key)
+            secret_key=self.settings.langfuse_secret_key,
+            environment=self.settings.langfuse_environment)
         self._stop = Event()
         self._wake = Event()
         self._worker = None

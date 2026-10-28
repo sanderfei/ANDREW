@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-28T11:43:34.390842+08:00",
+  "chat_model_calls": 0,
+  "database_writes": 0,
+  "corpus": {
+    "namespace": "private_deployment_1d864d88e5",
+    "chunks": 604,
+    "documents": 198,
+    "snapshot_sha256": "b9794ebd8007335a5adfc6fbd70e1a2116f5b5783e167632d520cc3cef5d8330",
+    "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  },
+  "dataset": {
+    "cases": 30,
+    "negative_cases": 4,
+    "sha256": "e43af0ce680a2355079f0d82d0292c9591a8594ac8b799b61009c1cec883e089",
+    "single_label_all_cases": true
+  },
+  "parameters": {
+    "candidate_k": 20,
+    "final_k": 5,
+    "rrf_k": 60,
+    "bm25_k1": 1.2,
+    "bm25_b": 0.75,
+    "repeats": 3,
+    "bm25_index_text": "stored chunk content only",
+    "shuffle_seed": 20261028
+  },
+  "setup": {
+    "snapshot_scroll_ms": 39.776188001269475,
+    "lexical_index_build_ms": 173.5089840076398,
+    "process_embedding_initialization_ms": 744.0325430070516,
+    "api_warmup": [
+      {
+        "id": "retrieval-001",
+        "latency_ms": 53.50305899628438
+      },
+      {
+        "id": "retrieval-002",
+        "latency_ms": 54.04970998642966
+      },
+      {
+        "id": "retrieval-003",
+        "latency_ms": 48.51118300575763
+      }
+    ],
+    "process_warmup": [
+      {
+        "id": "retrieval-001",
+        "embedding_ms": 10.224122001091018,
+        "qdrant_ms": 5.073173990240321,
+        "lexical_ms": 1.9108809938188642,
+        "fusion_ms": 0.02873301855288446
+      },
+      {
+        "id": "retrieval-002",
+        "embedding_ms": 9.621797013096511,
+        "qdrant_ms": 3.5463290114421397,
+        "lexical_ms": 1.8832719943020493,
+        "fusion_ms": 0.03131700213998556
+      },
+      {
+        "id": "retrieval-003",
+        "embedding_ms": 8.220196992624551,
+        "qdrant_ms": 4.115738003747538,
+        "lexical_ms": 1.9672850030474365,
+        "fusion_ms": 0.026271998649463058
+      }
+    ]
+  },
+  "api_baseline": {
+    "hit_at1": 0.4666666666666667,
+    "hit_at3": 0.7333333333333333,
+    "hit_at5": 0.8,
+    "mrr_at5": 0.5855555555555556,
+    "recall_at5": 0.8,
+    "context_chars_mean": 3346.3333333333335,
+    "latency": {
+      "count": 30,
+      "mean_ms": 52.80947773038255,
+      "p50_ms": 50.39063000003807,
+      "p95_ms": 56.86190497362986
+    }
+  },
+  "variants": {
+    "dense_top5": {
+      "hit_at1": 0.4666666666666667,
+      "hit_at3": 0.7333333333333333,
+      "hit_at5": 0.8,
+      "mrr_at5": 0.5855555555555556,
+      "recall_at5": 0.8,
+      "context_chars_mean": 3346.3333333333335,
+      "latency": {
+        "count": 90,
+        "mean_ms": 13.072935825200855,
+        "p50_ms": 12.990358023671433,
+        "p95_ms": 15.719942020950839
+      }
+    },
+    "dense20_dedup5": {
+      "hit_at1": 0.4666666666666667,
+      "hit_at3": 0.7333333333333333,
+      "hit_at5": 0.8333333333333334,
+      "mrr_at5": 0.6011111111111112,
+      "recall_at5": 0.8333333333333334,
+      "context_chars_mean": 3268.3,
+      "latency": {
+        "count": 90,
+        "mean_ms": 13.072935825200855,
+        "p50_ms": 12.990358023671433,
+        "p95_ms": 15.719942020950839
+      }
+    },
+    "bm25_top5": {
+      "hit_at1": 0.9,
+      "hit_at3": 1.0,
+      "hit_at5": 1.0,
+      "mrr_at5": 0.9444444444444444,
+      "recall_at5": 1.0,
+      "context_chars_mean": 3707.633333333333,
+      "latency": {
+        "count": 90,
+        "mean_ms": 2.0059904798270307,
+        "p50_ms": 1.9759460119530559,
+        "p95_ms": 2.6459729997441173
+      }
+    },
+    "bm25_dedup5": {
+      "hit_at1": 0.9,
+      "hit_at3": 1.0,
+      "hit_at5": 1.0,
+      "mrr_at5": 0.9444444444444444,
+      "recall_at5": 1.0,
+      "context_chars_mean": 3706.6,
+      "latency": {
+        "count": 90,
+        "mean_ms": 2.0059904798270307,
+        "p50_ms": 1.9759460119530559,
+        "p95_ms": 2.6459729997441173
+      }
+    },
+    "hybrid_rrf_top5": {
+      "hit_at1": 0.8333333333333334,
+      "hit_at3": 0.9333333333333333,
+      "hit_at5": 0.9666666666666667,
+      "mrr_at5": 0.8844444444444445,
+      "recall_at5": 0.9666666666666667,
+      "context_chars_mean": 3525.4666666666667,
+      "latency": {
+        "count": 90,
+        "mean_ms": 15.112929803500366,
+        "p50_ms": 15.032258001156151,
+        "p95_ms": 17.834192025475204
+      }
+    },
+    "hybrid_rrf_dedup5": {
+      "hit_at1": 0.8333333333333334,
+      "hit_at3": 0.9666666666666667,
+      "hit_at5": 0.9666666666666667,
+      "mrr_at5": 0.9,
+      "recall_at5": 0.9666666666666667,
+      "context_chars_mean": 3451.0666666666666,
+      "latency": {
+        "count": 90,
+        "mean_ms": 15.112929803500366,
+        "p50_ms": 15.032258001156151,
+        "p95_ms": 17.834192025475204
+      }
+    }
+  },
+  "process_stages": {
+    "embedding_ms": {
+      "count": 90,
+      "mean_ms": 9.176092679263093,
+      "p50_ms": 9.03718697372824,
+      "p95_ms": 11.583016021177173
+    },
+    "qdrant_ms": {
+      "count": 90,
+      "mean_ms": 3.8968431459377624,
+      "p50_ms": 3.8115070201456547,
+      "p95_ms": 4.46780800120905
+    },
+    "lexical_ms": {
+      "count": 90,
+      "mean_ms": 2.0059904798270307,
+      "p50_ms": 1.9759460119530559,
+      "p95_ms": 2.6459729997441173
+    },
+    "fusion_ms": {
+      "count": 90,
+      "mean_ms": 0.03400349847248031,
+      "p50_ms": 0.031337986001744866,
+      "p95_ms": 0.05231201066635549
+    }
+  },
+  "status_check_ablation": {
+    "full_status_then_query": {
+      "count": 5,
+      "mean_ms": 15.433227200992405,
+      "p50_ms": 15.292472002329305,
+      "p95_ms": 17.124281002907082
+    },
+    "collection_exists_then_query": {
+      "count": 5,
+      "mean_ms": 4.133218200877309,
+      "p50_ms": 4.119935998460278,
+      "p95_ms": 4.310874006478116
+    },
+    "identical_result_ids": true
+  },
+  "limitations": [
+    "小规模人工样本、同一批案例衍生查询，未独立留出真实用户盲测集。",
+    "expected_sources为主要参考文档；同主题其他案例也可能相关，未全库逐对判定。",
+    "无答案题为跨域观察题，不进入Recall/MRR分母；不用于证明拒答机制。",
+    "不加环境filters，先观察基础检索排序，避免将元数据标注误差混入本轮指标。",
+    "在26条案例问题之外，追加4条原始DOCX安装参考问题；未按结果修改算法参数，仍非独立盲测集。",
+    "同一片段快照的受控本地模拟；尚未接入业务检索接口。",
+    "六方案共享同一次 candidate_k 的向量/词法候选；dense_top5为该候选池截断，不是单独limit=5计时。",
+    "进程内方案延迟为各阶段串行时间之和，未含HTTP和客户端构造；不能直接声称比API加速。",
+    "文档级匹配但结果槽位仍按片段计数，重复来源消耗Top-K槽位；去重方案每来源保留最高位片段。",
+    "只保存来源、分数和字符数；context_chars不是模型Token。",
+    "冷启动、暖查询、索引构建和全量统计开销分别报告；小样本P95不代表线上SLA。",
+    "负例只观察返回结果，尚未标定拒答阈值；近邻非空不代表可回答。"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "documents": 198,
+  "chunks": 604,
+  "namespace": "private_deployment_1d864d88e5",
+  "source_tree_sha256": "318088a9317196aee43c932e43ae1a65f88396f3c04102bf13bb521759daf06e",
+  "checks": [
+    {
+      "name": "repeat_ingestion_keeps_chunk_count",
+      "passed": true,
+      "chunks": 604
+    },
+    {
+      "name": "search_with_metadata_filters",
+      "passed": true,
+      "sources": [
+        "codex_cases/01_KK在线与离线安装/KK-O08.md",
+        "codex_cases/01_KK在线与离线安装/KK-O09.md",
+        "codex_cases/01_KK在线与离线安装/KK-O08.md",
+        "codex_cases/01_KK在线与离线安装/KK-O08.md",
+        "codex_cases/01_KK在线与离线安装/KK-O08.md"
+      ]
+    },
+    {
+      "name": "plain_search",
+      "passed": true,
+      "sources": [
+        "codex_cases/03_Helm与组件部署/HELM-41.md",
+        "codex_cases/02_集群运行时与网络/KK-C09.md",
+        "codex_cases/05_Web配置鉴权与任务/WEB-17.md",
+        "codex_cases/02_集群运行时与网络/KK-C05.md",
+        "codex_cases/08_NFS与持久化存储/NFS-03.md"
+      ]
+    },
+    {
+      "name": "invalid_top_k_and_filter_rejected",
+      "passed": true
+    },
+    {
+      "name": "out_of_allowed_directory_rejected",
+      "passed": true
+    },
+    {
+      "name": "chat_model_calls_zero",
+      "passed": true,
+      "model_call_count": 0
+    }
+  ]
+}

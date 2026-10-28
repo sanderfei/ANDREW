@@ -18,6 +18,7 @@ from workflows.assistant import AssistantWorkflow, WorkflowExecutionError
 # ask 环境参数：--k8s 1.23.10/1.32.8、--os Ubuntu/CentOS、--install-mode online/offline。
 # 顶级 --mode framework/glm 放在子命令前；glm 会访问真实模型和向量库。
 # metrics [--thread-id ID]：Token/费用统计；jobs [--thread-id ID]：持久入库任务。
+# langfuse-status [--check]：查看上报配置；--check 才连接平台检查项目认证。
 # verify ID --root-cause "明确根因" --step "实际步骤" [--step "另一步"]
 #   --evidence "原故障功能复测的具体证据" --confirmed：确认并归档，不自动入库。
 # index-pending [--limit 5]：显式执行待入库/失败任务，会调用本地 Embedding 和向量库。
@@ -35,6 +36,8 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("--thread-id", help="使用已有会话续聊；省略时新建")
     ask.add_argument("--request-id", help="重试同一次失败请求时使用相同 ID")
     commands.add_parser("sessions")
+    langfuse_status = commands.add_parser("langfuse-status", help="查看 Langfuse 上报状态")
+    langfuse_status.add_argument("--check", action="store_true", help="连接平台检查项目认证")
     for command in ("metrics", "jobs"):
         child = commands.add_parser(command)
         child.add_argument("--thread-id")
@@ -61,6 +64,8 @@ def main(argv: list[str] | None = None) -> int:
             result = {"items": workflow.sessions()}
         elif args.command == "metrics":
             result = workflow.business.observability.metrics(args.thread_id)
+        elif args.command == "langfuse-status":
+            result = workflow.business.observability.status(check_connection=args.check)
         elif args.command == "jobs":
             result = {"items": workflow.business.knowledge.list_jobs(args.thread_id)}
         elif args.command == "index-pending":
@@ -85,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             result = {**workflow.invoke(request).model_dump(), "request_id": request.request_id}
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        if args.command == "langfuse-status" and args.check and result.get("connection_verified") is not True:
+            return 1
         if args.command == "index-pending" and any(item["status"] == "failed" for item in result["items"]):
             return 1
         return 0

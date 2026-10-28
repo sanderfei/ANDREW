@@ -6,7 +6,7 @@ Qdrant / PostgreSQL+pgvector 录入与检索，以及 LangChain / LangGraph 多�
 显式启用 `glm` 模式后，才运行真实检索与 GLM 分析；回答会区分追问、待补充证据与待验证方案。
 已提供临时 SSH 授权与只读取证、功能复测确认、案例自动归档及可靠入库任务，
 服务端会话和 LangGraph 检查点写入本地 SQLite。执行记录、反馈与 Token 统计始终启用，
-Langfuse 远程上报通过配置单独开启。
+Langfuse 远程上报由配置单独控制，仓库配置已开启；连接和认证状态可通过独立接口核验。
 
 两套数据库的最简启动命令、配置切换、指定本地文件的录入接口见
 [向量数据库使用说明](docs/vector-databases.md)。原始资料由使用者指定文件录入；
@@ -61,13 +61,71 @@ Web 的 `/api/health`、`/api/workspace` 和 `/docs` 返回 200。
 参数：`--host` 默认 `127.0.0.1`；`--port` 默认 `8070`。
 例如：`.venv/bin/python 7_private_deployment_assistant/app.py --port 8071`。
 
+## 本地检索验证（2026-10-28）
+
+已逐文件调用 `POST /api/documents/ingest`，将 1 份 DOCX、196 篇案例和 1 份覆盖范围说明录入本地 Qdrant，
+共 198 份文档、604 个片段。集合为 `private_deployment_1d864d88e5`。只运行本地 MiniLM Embedding，
+聊天模型调用数为 0；应用保持 `framework` 模式，本次启动临时关闭 Langfuse 上报。
+DOCX 的正文和表格参与检索，50 张图片未执行 OCR。
+
+首轮 30 条人工问题的结果如下。Hit@5 表示前 5 条包含已标注的主要相关文档，不是最终回答正确率。
+
+| 方案 | Hit@1 | Hit@5 | MRR@5 |
+| --- | ---: | ---: | ---: |
+| 原向量检索 | 46.67% | 24/30，80.00% | 0.5856 |
+| 向量召回 20 条后按文档去重 | 46.67% | 25/30，83.33% | 0.6011 |
+| 本地 BM25 | 90.00% | 30/30，100.00% | 0.9444 |
+| 向量 + BM25 + RRF + 去重 | 83.33% | 29/30，96.67% | 0.9000 |
+
+原 API 暖查询端到端 P50 为 50.39 ms。另以固定向量做独立消融，将查询前的全量统计替换为
+轻量集合检查后，“检查 + 数据库查询”P50 从 15.29 ms 降至 4.12 ms，返回 ID 完全一致。
+两者计量范围不同，不能把后者当作优化后的 API 端到端延迟。
+这些是小型、来源衍生的探索问题，不能据首轮 BM25 全命中宣称真实请求普遍有 100% 成功率。
+
+随后扩充为 **322 条唯一正例、24 条无答案观察题**，覆盖全部 198 份入库来源：保留原 30 题，
+新增 269 题，另有 23 条环境过滤题。每题重复 3 次仅用于计时和稳定性，独立样本量仍是 322。
+本次执行了 349 次 HTTP 检索、993 次本地候选查询，另有 10 次检查开销消融查询；六方案共享候选。
+
+| 方案 | 扩展集 Hit@1 | 扩展集 Hit@5 | MRR@5 |
+| --- | ---: | ---: | ---: |
+| 原向量检索 | 30.75% | 170/322，52.80% | 0.3820 |
+| 向量召回 20 条后按文档去重 | 30.75% | 179/322，55.59% | 0.3987 |
+| 本地 BM25 | 77.64% | 300/322，93.17% | 0.8364 |
+| 本地 BM25 去重 | 77.64% | 301/322，93.48% | 0.8417 |
+| 向量 + BM25 + RRF | 56.21% | 272/322，84.47% | 0.6637 |
+| 向量 + BM25 + RRF + 去重 | 56.21% | 288/322，89.44% | 0.6849 |
+
+原 30 题控制组的结果与首轮一致；扩大后的总分不能直接当作同一测试集上的回归。
+扩展集显示：BM25 不再全命中；等权混合相对 BM25 去重丢 16 题、另救 3 题；混合按来源去重救回 16 题。
+当前优先记录的优化项为：移出查询热路径的全量统计、复核多相关来源标签、保存完整候选与融合贡献、
+评估来源聚合和融合权重、补充非模型术语归一化与少上下文问题的追问策略。均尚未替换业务算法。
+扩展 API 端到端 P50/P95 为 49.32/61.01 ms；依然不等于进程内阶段计时。
+
+[详细执行结果、扩展集对比与优化记录](docs/retrieval-evaluation/2026-10-28/README.md)
+保留首轮数据并记录后续扩充结果。完整本地逐题输出位于 Git 忽略的 `reports/`；
+文档目录保存脱敏后的汇总和可核验逐题结果。
+
+```bash
+# 默认运行首轮 30 题；只读检索，不调用聊天模型或向量入库。
+.venv/bin/python 7_private_deployment_assistant/evaluations/retrieval_benchmark.py \
+  --output-dir 7_private_deployment_assistant/reports/retrieval-repeat
+
+# 扩展集：322条正例、24条观察题；详细结果按类别、问法、过滤和新旧题组拆分。
+.venv/bin/python 7_private_deployment_assistant/evaluations/retrieval_benchmark.py \
+  --questions 7_private_deployment_assistant/evaluations/data/retrieval_cases_expanded.json \
+  --output-dir 7_private_deployment_assistant/reports/retrieval-expanded-repeat \
+  --repeats 3 --candidate-k 20
+```
+
+混合召回、去重和 BM25 当前位于独立实验脚本，尚未替换业务检索接口。
+
 ## 当前界面
 
 - 运维工作台：环境摘要、可展开的纯文本对话窗口、临时 SSH 连接与只读取证。
 - 对话支持 Enter 发送、Shift + Enter 换行、粘贴日志、复制文本、失败重试和停止等待；支持会话切换和每个会话的输入草稿。
 - 知识文档：展示原始 DOCX、Markdown、TXT 文件，提供下载和录入接口文档入口。
 - 确认解决：提交明确根因、实际处理步骤与原故障功能复测证据，生成脱敏案例并排队入库。
-- 执行与评测：展示本地真实执行记录、Token 汇总和用户反馈；固定问题集的批量质量评测仍待补充。
+- 执行与评测：展示本地真实执行记录、Token 汇总和用户反馈；已有独立纯检索批测，端到端回答质量和 Langfuse 实验仍待补充。
 - 已完成会话由服务端保存，浏览器保留输入草稿与会话选择；没有用户账号和多租户权限系统。
 - 发送问题进入 LangGraph 工作流。默认模式返回信息追问或框架待接入说明，不将未执行的检索写成“未命中”；清空会话需要在页面确认。
 
@@ -153,8 +211,25 @@ SSH 当前支持主机概况、节点、Pod、事件、Pod describe、Pod 日志
 模型只接收连接引用和脱敏取证结果。当前不执行任意 Shell、配置变更、重启或升级。
 命令退出成功不自动标记故障解决，仍需提交具体功能复测证据。
 
-Langfuse 的 `[langfuse].enabled` 默认 `false`；开启时从环境读取
-`LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY` 和可选 `LANGFUSE_BASE_URL`。
+Langfuse 的仓库配置为 `[langfuse].enabled=true`，使用 SDK `4.15.4`，依赖中已包含
+LangChain 回调所需的 `langchain`。从进程环境、教程 7 的 `runtime/local.env`、仓库根 `.env`
+依次读取 `LANGFUSE_PUBLIC_KEY`、`LANGFUSE_SECRET_KEY` 和可选 `LANGFUSE_BASE_URL`；不把实际密钥写入 TOML。
+`LANGFUSE_ENABLED=false` 可关闭远端上报，`LANGFUSE_TRACING_ENVIRONMENT` 可覆盖
+`[langfuse].environment`，默认环境标识为 `andrew-private-deployment`。
+
+```bash
+.venv/bin/python -m pip install -r 7_private_deployment_assistant/requirements.txt
+# 只查看配置和客户端初始化状态，不访问 Langfuse。
+.venv/bin/python 7_private_deployment_assistant/workflow_cli.py langfuse-status
+# 显式检查服务连接与项目认证；失败返回非零退出码。
+.venv/bin/python 7_private_deployment_assistant/workflow_cli.py langfuse-status --check
+```
+
+`framework` 模式也可上报流程 Trace 和节点，仍不调用 GLM 或向量检索。GLM 模式的模型调用、
+实际 usage 和用户反馈会关联到对应远端 Trace。Web“执行与评测”区分未启用、配置不完整、
+已配置、认证通过和检查失败；只开启开关不会显示为已连接。SDK 使用异步批量上报，
+关闭时执行 flush/shutdown；认证通过或 flush 完成不等于记录已经能在平台查询。
+
 本地统计使用模型实际返回的 usage；缺少 usage 时标记未知，不按字符串估算，
 没有价格时费用为 `null`。按模型和阶段聚合的数据用于后续优化，不代表已有固定问题集的自动质量评分。
 
@@ -181,7 +256,7 @@ workflow_cli.py        问答、恢复、验证、会话与统计、显式入库
 compose.yaml           两套本地数据库
 adapters/              Web 配置读取的预留适配层
 workflows/             LangGraph 状态图、LangChain 提示词与扩展协议
-evaluations/           固定问题集评测的扩展入口
+evaluations/           纯检索对比脚本、固定问题集及端到端评测的扩展入口
 documents/source/      原始部署资料
 ```
 
@@ -191,7 +266,7 @@ documents/source/      原始部署资料
 2. 按 `1.23.10 → Ubuntu/CentOS`、`1.32.8 → Ubuntu` 的支持范围选择适用资料。
 3. 集群配置与实时运行状态分开采集并标注时间；在线/离线模式结合配置和任务记录确认。
 4. 完善证据质量判断、混合检索和针对不同原故障的专项功能复测工具。
-5. 增加固定问题集的批量评测、引用支持检查与不同配置的实验对比。
+5. 在已有纯检索批测基础上，增加端到端回答质量、引用支持检查与 Langfuse 实验对比。
 6. 按实际 GLM 计价配置 Langfuse 模型价格，再评估成本优化收益。
 
 当前 API：`GET /api/health`、`GET /api/workspace`、`GET /api/documents`、
@@ -200,8 +275,9 @@ documents/source/      原始部署资料
 
 业务 API（公共前缀 `/api/assistant`）：`GET /sessions`、`POST /connections`、
 `DELETE /connections/{connection_id}`、`GET /diagnostics/catalog`、`POST /diagnostics`、
-`POST /verification`、`POST /feedback`、`GET /metrics`、`GET /index-jobs`、`POST /index-jobs/retry`。
-`GET /api/evaluations` 返回本地真实 Trace 和统计，不是模拟列表。
+`POST /verification`、`POST /feedback`、`GET /metrics`、`GET /index-jobs`、`POST /index-jobs/retry`、
+`GET /observability`。后者默认只查看状态，添加 `?check_connection=true` 才访问 Langfuse 检查连接与认证。
+`GET /api/evaluations` 返回本地真实 Trace、统计和 Langfuse 状态，不是固定问题集的质量评测报告。
 
 向量 API：`GET /api/vector/status`、`POST /api/documents/ingest`、`POST /api/vector/search`。
 录入请求必须指定 `file_path`，只处理该文件，不扫描整个目录。

@@ -1,0 +1,12 @@
+{
+  "method": "reviewed questions and sources without retrieval rankings; kept labels and scores unchanged",
+  "reviewed_other_partition_questions": 20,
+  "reviewed_other_partition_filter_cases": 13,
+  "ambiguous_question_ids": {
+    "expanded-OBS-03-b": "缺少NoSuchUpload等限定；清理失败还有其他可能原因。",
+    "expanded-OBS-05-b": "长请求受理与异步终态在多篇案例中通用。",
+    "expanded-NFS-04-b": "缺少NFS/RPC或报错限定，写请求过大并非唯一场景。",
+    "expanded-BK-13-b": "缺少kubectl exec/heredoc/数据库限定，标准输入问题可跨场景。"
+  },
+  "limitations": "only principal source annotated, no exhaustive relevance judgments or independent human blind evaluation"
+}

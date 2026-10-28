@@ -72,6 +72,8 @@ class TraceHandle:
     def __init__(self, service, trace_id: str, metadata: dict | None = None):
         self._service = service
         self.trace_id = trace_id
+        self.langfuse_trace_id = None
+        self.langfuse_observation_id = None
         self.callbacks: list = [_UsageCallback(self)]
         self._metadata = _safe(metadata or {})
         self._root = None
@@ -286,7 +288,8 @@ class ObservabilityService:
     """SQLite 为本地观测事实来源，Langfuse 为可选的远端分析服务。"""
 
     def __init__(self, db_path: Path, enabled=False, base_url=None,
-                 public_key=None, secret_key=None, client=None):
+                 public_key=None, secret_key=None, client=None,
+                 environment="andrew-private-deployment"):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.enabled = bool(enabled)
@@ -294,6 +297,9 @@ class ObservabilityService:
         self._public_key = public_key
         self._injected_client = client is not None
         self._startup_error = None
+        self._base_url = base_url
+        self._environment = environment
+        self._connection_verified = None
         self._last_trace_id = None
         self._closed = False
         with self._connection() as connection:
@@ -335,6 +341,11 @@ class ObservabilityService:
                     comment TEXT NOT NULL, created_at TEXT NOT NULL
                 );
             """)
+            # 本地请求 ID 始终独立；实验的一条远端 Trace 可以包含多轮请求。
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(obs_traces)")}
+            for name in ("langfuse_trace_id", "langfuse_observation_id"):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE obs_traces ADD COLUMN {name} TEXT")
         if self.enabled:
             if client is not None:
                 self._client = client
@@ -347,9 +358,36 @@ class ObservabilityService:
                     self._client = Langfuse(
                         base_url=base_url, public_key=public_key, secret_key=secret_key,
                         mask=lambda *, data, **kwargs: _safe(data), timeout=5,
+                        environment=environment, tracing_enabled=True,
                     )
                 except Exception as error:
                     self._startup_error = str(_safe(str(error)))
+
+    def status(self, check_connection=False) -> dict:
+        """默认只报告配置；显式检查认证，不能据此宣称某条 Trace 已可查询。"""
+        if not self.enabled:
+            state, message = "disabled", "Langfuse 未启用，本地执行记录仍会保存。"
+        elif self._client is None:
+            state = "unconfigured" if self._startup_error == "Langfuse 已启用，但地址或凭据尚未配置。" else "error"
+            message = self._startup_error or "Langfuse 客户端尚未就绪。"
+        else:
+            if check_connection:
+                try:
+                    self._connection_verified = bool(self._client.auth_check())
+                except Exception:
+                    self._connection_verified = False
+            if self._connection_verified is True:
+                state, message = "connected", "Langfuse 连接与项目认证已通过；上报记录需等待平台处理。"
+            elif self._connection_verified is False:
+                state, message = "error", "Langfuse 连接或项目认证失败，请检查服务地址与项目凭据。"
+            else:
+                state, message = "configured", "Langfuse 已配置，尚未检查连接与项目认证。"
+        return {
+            "enabled": self.enabled, "configured": self._client is not None,
+            "state": state, "message": message,
+            "connection_verified": self._connection_verified,
+            "base_url": self._base_url, "environment": self._environment,
+        }
 
     @contextmanager
     def _connection(self):
@@ -364,7 +402,8 @@ class ObservabilityService:
 
     def _update_trace(self, trace_id, fields):
         # 字段名仅来自本模块的固定集合，值始终参数化。
-        allowed = {"output", "status", "metadata", "finished_at", "duration_ms"}
+        allowed = {"output", "status", "metadata", "finished_at", "duration_ms",
+                   "langfuse_trace_id", "langfuse_observation_id"}
         if not fields or not set(fields).issubset(allowed):
             raise ValueError("无效的观测字段。")
         self._execute(
@@ -411,7 +450,7 @@ class ObservabilityService:
         trace_id = uuid4().hex
         self._last_trace_id = trace_id
         started = perf_counter()
-        handle = TraceHandle(self, trace_id, metadata)
+        handle = TraceHandle(self, trace_id, {**(metadata or {}), "local_trace_id": trace_id})
         self._execute(
             "INSERT INTO obs_traces "
             "(trace_id, thread_id, question, status, metadata, created_at) "
@@ -425,19 +464,33 @@ class ObservabilityService:
         if self._client is not None:
             try:
                 from langfuse import propagate_attributes
+                from opentelemetry.trace import get_current_span
 
+                # 实验 task 内继承外层观测；普通 HTTP/CLI 请求使用自己的远端 Trace。
+                has_parent = get_current_span().get_span_context().is_valid
+                current_trace = getattr(self._client, "get_current_trace_id", lambda: None)() if has_parent else None
+                current_span = getattr(self._client, "get_current_observation_id", lambda: None)() if has_parent else None
+                context = {"trace_id": current_trace or trace_id}
+                if current_trace and current_span:
+                    context["parent_span_id"] = current_span
                 stack.enter_context(propagate_attributes(session_id=str(thread_id)))
                 handle._root = stack.enter_context(
                     self._client.start_as_current_observation(
                         name="deployment-assistant", as_type="agent",
-                        trace_context={"trace_id": trace_id},
+                        trace_context=context,
                         input={"question": _safe(question)}, metadata=handle._metadata,
                     )
                 )
+                handle.langfuse_trace_id = getattr(handle._root, "trace_id", None) or context["trace_id"]
+                handle.langfuse_observation_id = getattr(handle._root, "id", None)
+                self._update_trace(trace_id, {
+                    "langfuse_trace_id": handle.langfuse_trace_id,
+                    "langfuse_observation_id": handle.langfuse_observation_id,
+                })
                 if not self._injected_client:
                     from langfuse.langchain import CallbackHandler
 
-                    context = {"trace_id": trace_id}
+                    context = {"trace_id": handle.langfuse_trace_id}
                     parent_id = getattr(handle._root, "id", None)
                     if parent_id:
                         context["parent_span_id"] = parent_id
@@ -468,26 +521,30 @@ class ObservabilityService:
             raise ValueError("反馈分数必须在 0 到 1 之间。")
         identity = uuid4().hex
         with self._connection() as connection:
-            if not connection.execute(
-                "SELECT 1 FROM obs_traces WHERE trace_id=?", (trace_id,)
-            ).fetchone():
+            record = connection.execute(
+                "SELECT langfuse_trace_id, langfuse_observation_id FROM obs_traces WHERE trace_id=?", (trace_id,)
+            ).fetchone()
+            if record is None:
                 raise ValueError("找不到对应的 Trace。")
             connection.execute(
                 "INSERT INTO obs_feedback VALUES (?, ?, ?, ?, ?)",
                 (identity, trace_id, float(score), str(_safe(comment)), _now()),
             )
         forwarded = False
-        if self._client is not None:
+        if self._client is not None and record["langfuse_trace_id"]:
             try:
                 self._client.create_score(
-                    score_id=identity, trace_id=trace_id, name="user_feedback",
+                    score_id=identity, trace_id=record["langfuse_trace_id"],
+                    observation_id=record["langfuse_observation_id"], name="user_feedback",
                     value=float(score), data_type="NUMERIC", comment=_safe(comment),
                 )
                 forwarded = True
             except Exception as error:
                 self._report_error(trace_id, "langfuse.feedback", error)
         return {"id": identity, "trace_id": trace_id, "score": float(score),
-                "saved": True, "langfuse_submitted": forwarded}
+                "saved": True, "langfuse_submitted": forwarded,
+                "langfuse_trace_id": record["langfuse_trace_id"],
+                "langfuse_delivery": "queued" if forwarded else "not_submitted"}
 
     def finalize_recovered(self, trace_id: str, output, status: str) -> dict:
         """完成检查点已成功、但业务响应尚未落盘的原本地 Trace。

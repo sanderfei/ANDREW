@@ -1,0 +1,33 @@
+{
+  "method": "POST /api/documents/ingest one explicit file per request",
+  "completed_at": "2026-10-28T11:41:10.548360+08:00",
+  "documents": 198,
+  "chunks": 604,
+  "metadata_overrides": [
+    {
+      "file_path": "documents/source/codex_cases/01_KK在线与离线安装/KK-O16.md",
+      "metadata": {
+        "operating_systems": [
+          "any"
+        ]
+      }
+    },
+    {
+      "file_path": "documents/source/codex_cases/02_集群运行时与网络/KK-C12.md",
+      "metadata": {
+        "operating_systems": [
+          "any"
+        ]
+      }
+    },
+    {
+      "file_path": "documents/source/codex_cases/04_Zot_Harbor与镜像仓库/REG-20.md",
+      "metadata": {
+        "operating_systems": [
+          "any"
+        ]
+      }
+    }
+  ],
+  "docx_images_unprocessed": 50
+}

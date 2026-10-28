@@ -5,6 +5,7 @@ import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
 
@@ -68,6 +69,7 @@ class BusinessSettings:
     known_hosts_path: str | None = None
     langfuse_enabled: bool = False
     langfuse_base_url: str = "http://127.0.0.1:3000"
+    langfuse_environment: str = "andrew-private-deployment"
     langfuse_public_key: str = field(default="", repr=False)
     langfuse_secret_key: str = field(default="", repr=False)
 
@@ -80,6 +82,12 @@ def load_business_settings(config_path: Path | None = None) -> BusinessSettings:
     telemetry = config.get("langfuse", {})
     environment = {**dotenv_values(PROJECT_DIR.parent / ".env"),
                    **dotenv_values(PROJECT_DIR / "runtime" / "local.env"), **os.environ}
+    langfuse_enabled = telemetry.get("enabled", False)
+    if "LANGFUSE_ENABLED" in environment:
+        value = str(environment["LANGFUSE_ENABLED"]).strip().lower()
+        if value not in {"true", "false", "1", "0"}:
+            raise ValueError("LANGFUSE_ENABLED 必须为 true、false、1 或 0。")
+        langfuse_enabled = value in {"true", "1"}
     settings = BusinessSettings(
         runtime_dir=(PROJECT_DIR / Path(business.get("runtime_dir", "runtime")).expanduser()).resolve(),
         source_dir=Settings().document_dir.resolve(),
@@ -89,13 +97,27 @@ def load_business_settings(config_path: Path | None = None) -> BusinessSettings:
         command_timeout=int(business.get("command_timeout", 20)),
         max_output_chars=int(business.get("max_output_chars", 24000)),
         known_hosts_path=business.get("known_hosts_path"),
-        langfuse_enabled=telemetry.get("enabled", False),
+        langfuse_enabled=langfuse_enabled,
         langfuse_base_url=environment.get("LANGFUSE_BASE_URL") or telemetry.get("base_url", "http://127.0.0.1:3000"),
+        langfuse_environment=environment.get("LANGFUSE_TRACING_ENVIRONMENT") or telemetry.get("environment", "andrew-private-deployment"),
         langfuse_public_key=environment.get("LANGFUSE_PUBLIC_KEY") or "",
         langfuse_secret_key=environment.get("LANGFUSE_SECRET_KEY") or "",
     )
     if type(settings.auto_index) is not bool or type(settings.langfuse_enabled) is not bool:
         raise ValueError("auto_index 和 langfuse.enabled 必须为布尔值。")
+    try:
+        address = urlsplit(settings.langfuse_base_url)
+        valid_address = (address.scheme in {"http", "https"} and address.hostname
+                         and address.username is None and address.password is None
+                         and not address.query and not address.fragment)
+        address.port
+    except (TypeError, ValueError):
+        valid_address = False
+    if not valid_address:
+        raise ValueError("LANGFUSE_BASE_URL 必须是无内嵌凭据、查询参数和片段的 HTTP(S) 地址。")
+    if (not isinstance(settings.langfuse_environment, str)
+            or not settings.langfuse_environment.strip()):
+        raise ValueError("langfuse.environment 必须为非空字符串。")
     if not math.isfinite(settings.index_interval) or settings.index_interval < 1:
         raise ValueError("index_interval 必须至少为 1 秒。")
     if not 1 <= settings.connection_ttl <= 86400 or not 1 <= settings.command_timeout <= 120:

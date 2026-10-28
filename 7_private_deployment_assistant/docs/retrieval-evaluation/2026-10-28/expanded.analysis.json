@@ -1,0 +1,75 @@
+{
+  "positive_questions": 322,
+  "negative_questions": 24,
+  "source_macro_hit_at5": {
+    "dense_top5": 0.49747474747474746,
+    "dense20_dedup5": 0.5298821548821548,
+    "bm25_top5": 0.9407617845117845,
+    "bm25_dedup5": 0.9432870370370371,
+    "hybrid_rrf_top5": 0.8526936026936027,
+    "hybrid_rrf_dedup5": 0.9082491582491582
+  },
+  "bm25_to_hybrid_regression_ids": [
+    "retrieval-005",
+    "expanded-KK-C06-a",
+    "expanded-HELM-05-a",
+    "expanded-KK-O01-b",
+    "expanded-filter-HELM-05",
+    "expanded-REG-09-a",
+    "expanded-REG-04-b",
+    "expanded-WEB-16-b",
+    "expanded-REG-01-filter",
+    "expanded-REG-02-filter",
+    "expanded-REG-04-filter",
+    "expanded-OBS-01-a",
+    "expanded-OBS-10-a",
+    "expanded-NFS-07-a",
+    "expanded-OBS-03-b",
+    "expanded-OBS-20-b"
+  ],
+  "hybrid_rescue_ids": [
+    "expanded-REG-18-a",
+    "expanded-docx-c-02",
+    "expanded-OBS-20-filter-offline"
+  ],
+  "hybrid_dedup_gain_ids": [
+    "expanded-KK-O01-a",
+    "expanded-KK-O11-a",
+    "expanded-KK-C10-a",
+    "expanded-HELM-19-a",
+    "expanded-HELM-21-a",
+    "expanded-HELM-28-a",
+    "expanded-HELM-29-a",
+    "expanded-filter-HELM-28",
+    "expanded-BK-08-a",
+    "expanded-BK-26-a",
+    "expanded-WEB-01-b",
+    "expanded-BK-03-b",
+    "expanded-REG-16-filter",
+    "expanded-OBS-15-a",
+    "expanded-REL-09-a",
+    "expanded-NFS-04-b"
+  ],
+  "negative_top_score": {
+    "min": 0.13619366,
+    "median": 0.339914915,
+    "max": 0.58479595
+  },
+  "positive_top_score": {
+    "min": 0.36449713,
+    "median": 0.560243635,
+    "max": 0.7358258
+  },
+  "api_vs_process_rankings_identical": true,
+  "repeats_identical": true,
+  "dataset_sha256": "dd9002004502039926dcfa84bcbe9a3331c6b1fe39edd3bd9ced3696954295ee",
+  "corpus_sha256": "b9794ebd8007335a5adfc6fbd70e1a2116f5b5783e167632d520cc3cef5d8330",
+  "summary_sha256": "68aa3118b4a580ed8c27d77bf050110ad5d47bb10f1e6f20921d73a88ab47c86",
+  "data_construction": {
+    "docx": 1,
+    "case_markdown": 196,
+    "coverage_markdown": 1,
+    "total_documents": 198,
+    "total_chunks": 604
+  }
+}
