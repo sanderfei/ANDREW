@@ -1,0 +1,10 @@
+{
+  "title": "Web接口ERR_EMPTY_RESPONSE且未取得HTTP响应",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-29",
+  "verification_note": "用户确认是Web接口的浏览器ERR_EMPTY_RESPONSE，具体URL/Method/耗时/部署目标和日志缺失。Chromium定义仅确认未取得有效HTTP响应时连接结束，责任方未知。本地release/290fd15默认明文HTTP8080、读写90分钟、JWT401完整响应路径已核对；Gin Recovery通常捕获普通请求panic并返500。已提供实际Web运行环境中无凭据GET profile只读探测与同刻日志核对方案，未执行现场命令、改业务代码、部署或重启，根因及恢复未验证。"
+}

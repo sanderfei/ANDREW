@@ -1,0 +1,16 @@
+{
+  "title": "Neo4j空库立即备份与测试图数据基线",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "verified",
+  "source_checked_at": "2026-10-30",
+  "verification_note": "用户k8s_test Neo4j5.26.28空库立即备份日志145字节后授权插入数据，随后由用户手动备份。实际预查节点0关系0，通过121调用现有HTTP NodePort30030，在neo4j库原子创建batch=neo4j_backup_verify_20261030的100节点(20客户30订单50商品)、140关系(30下单90明细20推荐)。包含中文、数值、布尔、数组和原生日期，全量标签属性端点及日期类型验证通过；源/读回规范化SHA256均1101c051ce43934bc9aa94e823c37cca11ede062b53bd33fa7c0fac2fedaf63c。认证仅复用已知组件配置在内存，无输出保存；数据保留，无drop、索引约束、新Pod、代码发布或备份恢复操作。unverified限后续用户新备份与恢复尚未验证。 2026-10-30用户新手动备份PID2026-10-30_01-58-42.987_backup_neo4j的实际包已只读核对：4167字节，归档SHA256为9d48a2540d3d4be1a470634f95e8a5bf0f5578bf94ca4a208671aa42ae3d9b26，单一neo4j.cypher47526字节/58行，gzip检查通过。受限静态解析APOC UNWIND记录，逐对象比较100节点140关系全部标签属性及端点，日期表达式100/140保留，规范化图SHA256与写入/读回基线同为1101c051ce43934bc9aa94e823c37cca11ede062b53bd33fa7c0fac2fedaf63c。独立静态复核一致。verified仅限实际导出归档与包内数据静态匹配，未执行Cypher或还原、未修改原文件/集群数据、未重备份或发布重启。 2026-10-30最新214新Web/新安装服务的备份准备：用户授权先插数、随后自己触发备份，并明确允许进程内复用214 Web安装配置中对应组件凭据，不输出另存。批次backupverify_20261030_155051。Neo4j实际5.26.28 Community、插数前0节点，neo4j库创建120节点(20客户40订单60商品)、180关系(40PLACED120CONTAINS20KNOWS)，含中文数组布尔数字原生DATE和ZONED DATETIME；3唯一约束及5相关索引ONLINE，全部属性类型和关系端点读回，图SHA256 64d951d8c8da40cf68e2aaa4ee230365fa5a73ac2e3f1ab176462ee417b59942。Community只支持单业务库，不把system或标签当多库。Milvus实际2.6.0，default及新建bkv_sales_20261030_155051、bkv_docs_20261030_155051三个数据库，各有bkv_products_20261030_155051和bkv_documents_20261030_155051集合，均100行，共6集合600行，含8维向量、Int64、VarChar、Double、Bool、JSON及Array。各集合Strong查询100行，解包REST JSON/ARRAY表现后全部字段及向量逐项匹配并保存哈希；保留已完成集合，不删除或重复覆盖现有数据。214的/root/backup-validation-20261030_155051下保存baseline-summary.json、neo4j-baseline.json、milvus-baseline.json，0600，15:58:31完成。不含凭据，无常驻临时脚本，未触发备份恢复或改部署代码；本轮新归档与还原仍待用户触发后验证，不能复用历史归档替代。 2026-10-30用户要求交付121固定插数/清库脚本，并提供214 Web手动备份日志。已交付/root/wfweb/shscript/insert_neo4j.sh、insert_milvus.sh、clear_neo4j.sh、clear_milvus.sh，数据及214连接参数、已授权实际凭据按用户明确要求写死，仅四脚本保存凭据且0700，不在归档输出值。Bash及121 Python3.6语法通过；四脚本--check全部实跑只读通过，未执行清库或备份后插数写分支。Neo4j清理范围为neo4j业务库图数据/约束/非LOOKUP索引，保留system账号；Milvus为default和本批次两个bkv测试库，其他数据库保留。214实际新包Neo4j5284字节/SHA230da5dbafffc121c8845776b81337af55f7fb20a04d17c8a802ad0160a7cc85，静态完整匹配120节点180关系全部标签属性原生类型及端点，图SHA64d951d8c8da40cf68e2aaa4ee230365fa5a73ac2e3f1ab176462ee417b59942，3约束2普通索引定义保留，普通索引名未导出。Milvus28746字节/SHA833fb4832c335c69e70ef5fe8183d84132ad5f419cd934e2d85a31ca0521c9f7，5元数据61binlog全部结构和引用检查，真实Parquet+ARRAY protobuf解码，3库6集合600行所有字段、JSON数组及4800向量分量逐条匹配六份原基线摘要。100条upsert delta与插入同时间戳，按v2.6.0 DeletedRecord.h忽略相同时间戳删除规则处理，保持600有效行；浮点JSON编码差异仅作等值规范化。源服务、原归档未改，没有清库或恢复；结果在214 /root/backup-validation-20261030_155051/backup-files-validation.json，临时校验代码及离线依赖随后清理。"
+}

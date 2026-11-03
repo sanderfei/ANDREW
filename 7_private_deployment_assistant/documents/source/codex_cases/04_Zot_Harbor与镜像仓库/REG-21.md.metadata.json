@@ -1,0 +1,14 @@
+{
+  "title": "init registry被Zot仓库地址格式校验提前拒绝",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}

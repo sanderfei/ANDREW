@@ -10,5 +10,7 @@
   "install_modes": [
     "offline"
   ],
-  "verification_status": "unverified"
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-27",
+  "verification_note": "历史代码验证与121 manifest复制记录保留；2026-10-27复核test/9a73986当前manifest、artifact打包及ID/VERSION_ID/arch选择链路，Ubuntu22.04.5的VERSION_ID为22.04时匹配现有22.04条目，osImage仅描述。客户主机输出与实际artifact未取得，未构建、导出、发布或执行断网安装；22.04.5离线安装及24.04现场功能仍待验证。"
 }

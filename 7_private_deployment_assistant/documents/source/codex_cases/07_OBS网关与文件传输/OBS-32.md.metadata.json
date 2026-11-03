@@ -1,0 +1,16 @@
+{
+  "title": "版本镜像导入Registry层PATCH触发Zot读超时",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-29",
+  "verification_note": "2026-10-29仅只读。121尾7c272993首镜像CDN4520712744B下载/预检通过，7tag顺序copy前三返回成功，rag-parse层PATCH reset；images0是整包计数，不能否认部分tag/层副作用，未见包结构错误。121原01:39:41-04=UTC05:39:41/上海13:39:41。214实际Zot2.1.21无http读写超时覆盖，默认60s；同goroutine474/失败UUID/连接05:39:32 read i/o timeout及PATCH500 latency1m0s闭环，直接为服务端读upload body超时，未定该层传不完的进一步原因。包/tag串行但6层并发、64秒tag耗时非单PATCH耗时、readiness10s隔离。未改配置/重启/上传，30m及原包重试仅建议，整体恢复unverified。 2026-10-29后续仅本地放宽普通importImage push错误：Error/按包images_failed，cleanup后继续其它镜像和DB，无后续fatal则run nil仅调度完成，通用executor不改；summary尾加images_failed与明确失败汇总。下载/prep/cleanup/DB/context仍fatal，readySkip非failed。focused/整包race/server构建及格式diff通过，临时测试/产物删除；随后290fd150f03af9f72c5a825fd2d89eb9ac5ccc37推送origin/release，经PR429合并98af373bfb6b836221987290cce8347027fd0440并核对祖先；121ff-only更新、CGO0三tags build/mv成功，单次旧2689696归属确认后停止并立即启动，脚本报告PID2715819/startup true、SSH0。data/router/users本地状态保留，未追加API等检查或触发导入，KK与214Zot未改，真实容错导入unverified。"
+}

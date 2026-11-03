@@ -1,0 +1,16 @@
+{
+  "title": "Milvus备份GC管理地址误选coordinator导致404",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "verified",
+  "source_checked_at": "2026-10-30",
+  "verification_note": "用户真实手动Milvus备份在工具0.5.15下create成功并生成403字节归档，但GC pause/resume返回404。官方Milvus2.6.0源码确认管理HTTP入口在proxy，发布代码错误选择coordinatorIP。读取实际记录及tar：五metadata、1database、0collection/binlog、size0，不能证明业务数据恢复。proxy纯节点列表查询通过。最初OPTIONS探测因handler不限制method可能执行resume，已停止此类控制路径探测并如实记录。本地改用proxyService实际HTTP端口，针对性临时测试通过后删除；尚未提交发布、未重新备份或恢复，功能状态unverified。 2026-10-30用户授权提交发布并写测试数据：仅GC源文件提交21b5aa0并推个人release，中央release合并0a59b63；121快进后编译替换与启动命令退出0，新PID3013004，保留配置data及无关.gitignore。随后REST在default新建web_backup_verify_20261030_gc并分5批写1000条8维向量、中文text与batch，Strong count1000，全1000行读回一致，向量检索top1=1；源与读回摘要均67009672c772f3a7a56a32697307d753559a421b1299120b62136ddcce004a81。flush接受后初始stats0，后续有界只读检查stats已1000。原集合保留，无drop、新Pod或额外依赖；未再调用GC控制、未触发修正后备份或恢复，功能状态仍unverified。 2026-10-30用户再次手动立即备份PID2026-10-30_01-52-15.449_backup_milvus成功。只读检查实际execute.log确认create和归档完成且无GC失败警告；实际tar37188字节，SHA256为9714e72cffbbcaad5ee0ebd9e7f88ff31740ea06f429732b6723784811da2475，5meta和6非空binlog(42824字节)。目标default.web_backup_verify_20261030_gc、collectionID470112696659616506，对应一个segment元数据num_of_rows1000。verified仅指本次Web带数据备份、归档和GC告警修复，未还原或逐行验证binlog数据；本轮无代码变更、重发、备份触发或GC控制调用。"
+}

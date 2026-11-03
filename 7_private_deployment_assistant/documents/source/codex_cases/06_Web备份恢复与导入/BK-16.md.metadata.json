@@ -11,5 +11,7 @@
     "online",
     "offline"
   ],
-  "verification_status": "unverified"
+  "verification_status": "unverified",
+  "verification_note": "2026-10-29只读核对当前Web release/290fd15：9月30日db0a020将离线dump改为APOC，06e31fe对齐Chart服务/Pod标签，4c8d515允许空导出文件；当前sh -s导出调用仍来自db0a020。10月22日a0a4095对文件的主要变化是StarRocks，Neo4j导出及前置校验未新增exec修复；本轮客户Pod配置处理也未改业务代码。客户日志进入Exporting后exec报空白服务端错误，尚不能判断APOC已调用或客户二进制具体版本，完整Web归档恢复仍待验证。",
+  "source_checked_at": "2026-10-29"
 }

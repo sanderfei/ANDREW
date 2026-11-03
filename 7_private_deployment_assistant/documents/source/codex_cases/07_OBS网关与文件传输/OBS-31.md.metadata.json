@@ -1,0 +1,16 @@
+{
+  "title": "版本导入因数据组件配置缺失而全量预检失败",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-29",
+  "verification_note": "旧PR42783109a4c因elastic未配置触发旧屏障，Mongo未执行；121缺elastic/mongodb，214有Mongo且未见ES，配置未修改。用户新策略镜像优先、逐组件依赖不满足日志跳过继续，实错/取消停，不自动补配置；开发normal/race/build通过后42bbcb8推送并经PR428合a024faf，121规定build/mv及启动完成PID2689696、SSH0，未触发新流程导入，整体业务unverified。"
+}

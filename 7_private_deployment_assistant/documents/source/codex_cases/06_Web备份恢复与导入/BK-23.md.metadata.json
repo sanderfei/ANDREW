@@ -11,5 +11,7 @@
     "online",
     "offline"
   ],
+  "source_checked_at": "2026-10-29",
+  "verification_note": "2026-10-29复核release/934701b后端源码，补充四接口流程、prepare PID关联、B临时导入warning、apply拒绝重放及restore删除A并B后恢复全量备份的边界；后续补充POST /api/v1/files/:cluster上传契约、filename固定mariadb_data.zip及省略task_id；未做真实上传HTTP或数据库验证。",
   "verification_status": "unverified"
 }

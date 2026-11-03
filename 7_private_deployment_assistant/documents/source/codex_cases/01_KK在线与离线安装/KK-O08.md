@@ -1,6 +1,6 @@
 # KK-O08：Ubuntu24.04离线ISO缺项与按OS版本选择
 
-项目：g_kube_installer。记录状态：历史代码已验证；2026-10-20 补充源码复核，24.04 现场功能待验证。来源会话起始日期：2026-10-08（含之后续问，不是本次现场检查日期）。
+项目：g_kube_installer。记录状态：历史代码已验证；2026-10-20 补充源码复核，2026-10-27 补充 Ubuntu 22.04.5 匹配结论；22.04.5 离线安装与 24.04 现场功能待验证。来源会话起始日期：2026-10-08（含之后续问，不是本次现场检查日期）。
 
 适用标签：Kubernetes 1.32.8；系统 Ubuntu；安装模式 offline。any 表示历史证据未限定，需按实际版本再次核对；不是承诺所有环境兼容。
 
@@ -63,9 +63,50 @@ manifest 为 Ubuntu 22.04、24.04 分列，重新导出包含二者的 artifact�
 - 执行 `scp /home/wangfei/code/g_kube_installer/cmd/kk/manifest-v1.32.8.yaml codex-test-121:/root/wfkk/manifest/manifest-v1.32.8.yaml`，退出码为 0，直接覆盖完成，没有生成备份文件。
 - 本次结果仅覆盖 manifest 文件传输；不构成 artifact 重新导出、ISO 内容检查或集群安装功能验证。元数据仍为 `unverified`。
 
+## KK-O08 2026-10-27 补充：Ubuntu 22.04.5 与 manifest 22.04 的匹配
+
+记录日期：2026-10-27。适用环境：私有化主机计划采用 `ubuntu-22.04.5-live-server-amd64.iso` 安装的 Ubuntu Server 22.04.5，目标 Kubernetes 1.32.8、amd64、KK artifact 离线安装。本轮核对本地 `g_kube_installer` 的 `test` 分支，HEAD `9a73986d8382ce2830273c2c01ba7f404598b5fc`。客户实际 KK 二进制、主机输出和 artifact 内容未取得，未连接客户环境。
+
+### 问题表现
+
+用户担心系统镜像标为 `22.04.5`，而 `manifest-v1.32.8.yaml` 的系统版本是 `22.04`，是否因此不能离线安装。本轮没有安装失败日志。
+
+### 已确认边界与关键证据
+
+- Ubuntu 官方 [22.04 下载页](https://releases.ubuntu.com/22.04/) 标题为 Ubuntu 22.04.5 LTS，并列出 `ubuntu-22.04.5-live-server-amd64.iso`。22.04.5 属于 22.04 LTS 系列。
+- 当前 manifest 的 Ubuntu 条目为 `arch: amd64`、`id: ubuntu`、`version: "22.04"`（`cmd/kk/manifest-v1.32.8.yaml:9-17`），依赖源指向 `ubuntu-22.04-debs-amd64.iso`。`osImage: Ubuntu 22.04.6 LTS` 只是描述文本，不参与该 ISO 的下载和安装匹配；本轮未修改该字段，也不以该描述证明具体系统版本或兼容性。
+- 导出阶段按 manifest 的 `id/version/arch` 命名和打包（`cmd/kk/pkg/artifact/tasks.go:45`、`:99-104`）；安装阶段读取目标 `/etc/os-release`（`cmd/kk/pkg/bootstrap/os/tasks.go:292`），使用 `ID`、`VERSION_ID` 和配置中的节点架构精确选择 ISO（`:353-354`）。因此，Ubuntu 22.04.5 主机的 `VERSION_ID="22.04"` 对应现有 `version: "22.04"`，不应因系统镜像名称中的 `.5` 改成 `22.04.5`。
+- `ubuntu-22.04.5-live-server-amd64.iso` 用于安装主机操作系统；KK 的 `ubuntu-22.04-debs-amd64.iso` 提供离线 APT 依赖。两者用途不同，不能用系统安装盘替换 manifest 的依赖 ISO。
+
+### 可执行核对与处理步骤
+
+1. 在目标主机只读核对系统与架构：
+
+   ```bash
+   cat /etc/os-release
+   uname -m
+   ```
+
+   核对 `ID=ubuntu`、`VERSION_ID="22.04"`；`uname -m` 的 `x86_64` 对应 KK 节点配置的 `amd64`。`PRETTY_NAME` 可带 `22.04.5`，不会替代 `VERSION_ID` 参与匹配。
+
+2. 保留 manifest 的 `version: "22.04"`，并核对节点配置为 `arch: amd64`。需要调整展示文字时，可以将 `osImage` 改为主机实际 `PRETTY_NAME`；这不是解决匹配问题的必要步骤。
+3. 在保存实际离线包的目录核对包内路径：
+
+   ```bash
+   tar -tzf g_kube_installer-artifact.tar.gz | rg 'repository/amd64/ubuntu/22\.04/ubuntu-22\.04-amd64\.iso$'
+   ```
+
+   预期存在 `repository/amd64/ubuntu/22.04/ubuntu-22.04-amd64.iso`（允许包内有统一顶层目录）。已有制品包含此项时，无需仅因系统版本显示 `22.04.5` 重新导出；缺少时，需在可取得依赖的环境按对应 manifest 重新导出并传入隔离环境。
+4. 在同版本主机上完成实际断网安装，确认系统依赖、运行时、镜像和 Kubernetes 安装结果；若 APT 报错，应依据节点包状态和该 ISO 内容定位，不能仅凭版本匹配认定依赖完整。
+
+### 验证结果与遗留事项
+
+已通过当前源码和配置确认 Ubuntu 22.04.5 使用 `VERSION_ID=22.04` 时可走现有 Ubuntu 22.04 的离线制品选择路径。本轮未修改业务代码或 manifest，未执行测试、构建、ISO 下载、artifact 导出、远程命令或集群安装。上述主机和制品命令是待执行核对步骤，不是已取得结果；实际离线包依赖完整性及客户主机断网安装功能仍待验证，元数据保持 `verification_status: unverified`。
+
 ## KK-O08 来源定位
 
 - Codex 会话 `01a1191d-6db7-7c42-8d00-6194d609a369`；始于 2026-10-08。可按本条标题及关键错误定位相关提问与后续结论。
 - 2026-10-20 本地源码复核；不属于 2026-10-14 历史扫描，也不增加独立案例数量。
+- 2026-10-27 当前 manifest、artifact 打包及 OS 选择源码复核，结合 Ubuntu 官方下载页补充 22.04.5 问题；更新既有案例，不增加独立案例数量。
 
 [返回案例索引](../README.md)

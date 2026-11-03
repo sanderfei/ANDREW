@@ -1,0 +1,8 @@
+{
+  "title": "KK与Web的GPU节点隔离及模型服务调度设计",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["linux"],
+  "install_modes": ["online", "offline"],
+  "verification_status": "unverified"
+}

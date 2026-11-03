@@ -1,0 +1,16 @@
+{
+  "title": "Neo4j备份时APOC导出过程未注册",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-02",
+  "verification_note": "用户回传 Helm release revision 1 于 2026-09-24 安装，Chart 5.3.0、Neo4j 5.26.28；镜像内存在 APOC 5.26.28 JAR，但 user/default ConfigMap 中插件目录和过程配置均为空，APOC ConfigMap 不存在且 Pod 无对应挂载。这些证据与 9 月 29 日 APOC 配置未应用高度吻合；尚未核对环境变量或执行修复，插件重新加载、Web 备份及恢复待验证。"
+}

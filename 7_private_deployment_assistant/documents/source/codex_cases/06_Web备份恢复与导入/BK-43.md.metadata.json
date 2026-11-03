@@ -1,0 +1,16 @@
+{
+  "title": "MariaDB结构同步多字段索引与失败重试实测",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "verified",
+  "source_checked_at": "2026-11-03",
+  "verification_note": "121宿主机Web通过真实上传ZIP、prepare及WebSocket终态，在214专属临时测试库完成五轮。首轮旧50列100行逐行哈希不变，旧5列保留、新25列生成，索引包含增删改，B2保留、B3/C1空；二次执行无表列索引变更。坏SQL报1064且无prepare.done/apply.started，原库未变；重复数据导致新增唯一索引1062，prepare.done/apply.started存在、apply.done不存在，本例一条ALTER且原数据索引未变；有效包在独立旧库基线重试成功。此前发布记录为中央release 38f56b5，本轮未重验服务二进制哈希。仅验证上述场景，未测restore、生产大数据性能及全部失败路径。 测试结束后已确认清理本次四个测试库及专属临时库、121临时集群和tmpfs测试包、本机测试包与工具/SSH转发；原k8s_test锁已释放，未调用restore，原配置未改。 d15a46d发布121后，临时cluster schema_verify_3eca88211c再走真实上传、prepare WebSocket终态、独立apply WebSocket终态五轮。正常prepare仅生成计划、目标仍50列与旧数据，计划25增列3删索引3增索引；apply成功后75列，原50列100行和另一3行表哈希不变，索引增删改符合预期，同一prepare再次apply被拒绝。第二轮无结构变化，第三轮坏SQL 1064且无prepare.done/apply.started，第四轮prepare成功但唯一索引冲突apply 1062、started有done无，单条ALTER原数据索引不变不可推广至多DDL；第五轮bad旧库用有效包prepare/apply重试成功。预检查包默认排序规则导致额外旧列修改，未apply，修正包后正式验证。未测本轮restore、大数据性能及所有失败组合；本轮结束已确认214四个唯一测试库及专属临时库不存在，121临时集群、客户端临时包和工具及SSH转发已清理，原k8s_test锁已释放，未改原配置、未调用restore。"
+}

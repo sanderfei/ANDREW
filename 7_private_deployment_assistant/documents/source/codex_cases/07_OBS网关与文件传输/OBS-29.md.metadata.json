@@ -1,0 +1,16 @@
+{
+  "title": "版本导入大镜像包下载被HTTP2对端重置",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-28",
+  "verification_note": "2026-10-28已确认214:8080容器g_web_installer进程43745，精准wfoff17:29任务首包4311.29MiB、8.50MiB采样后17:33:33 HTTP2 stream23 INTERNAL_ERROR peer，完整包/预检/导入全0且packages空。nerdctl inspect对应JSON主日志同对象GET无Range，HTTP200、elapsed_ms121仅响应头，requestID5a145d0def2a45e1c68c6a6447a5bf5d，host private-obs-gw.digiwincloud.com；仍需该ID关联网关/代理读OBS/写客户端日志，不能定具体内部原因。17:45同版本任务因新事件补查，3/6分钟8.42/16.63MiB，临时文件17776060字节且无正式包/终态，约47KiB/s样本仅证慢传非成功或限速根因。当前磁盘约51.37GiB不倒推故障时；有效编译超时/二进制仍未核。全部只读，未触发下载重试/配置或进程改动，无恢复证据，unverified。 2026-10-28后续出口选路：每任务一次ipwho检测Web出口CN/TW（3秒/4KiB，未知失败回CN、父ctx取消停），逐包现签CN sign-direct或TW sign-cdn，无IAM/Cookie、identity禁redirect下载，原part/size与单PID串行保留；region/client/整合、联合race及server构建通过，3临时测试/产物清理。用户要求交付后3源文件+165/-3提交934701bf68a6c300e5313efd3cafe66c0887ce68，push origin release成功9e5b1e8..934701b；PR427核对范围/head/base后普通merge为bc6cd1a200ec92dd23643f7a270340d45a9aa6d9并fetch祖先核实。121固定alias从69cf625快进bc6cd1a，保留data/配置删除/禁Vue，规定build/mv退出0；单次旧PID1998781归属核对后停止并立即启动，脚本报告PID2084894、web_start_exit=0、SSH退出0。仅121Web，214未发、KK未动，未追加探测或实际GeoIP/4GiBCDN导入验证；未加retry/resume，CN仍网关，不能宣称214旧H2故障恢复，整体unverified。"
+}

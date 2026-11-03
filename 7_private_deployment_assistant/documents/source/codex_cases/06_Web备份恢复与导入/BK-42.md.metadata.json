@@ -1,0 +1,16 @@
+{
+  "title": "MariaDB schema-sync apply提示prepare.done不存在",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "verified",
+  "source_checked_at": "2026-11-03",
+  "verification_note": "旧版server.log确认apply早于prepare完成。中央提交38f56b5发布121后，用户授权真实调用prepare，同PID日志显示prepare及自动apply成功，上传包与214源包SHA256一致、含B/C SQL，备份及完成标记存在，warnings为空，临时库已清理。214核对A(a1,a2)、B(b1,b2,b3)、C(c1,c2)，旧四表各100行，B1保留旧字段且新增new_code/new_note，新三表0行。指定备份完整导入214隔离MariaDB 10.11.10成功；初次HEX数字列核对可能丢失小数精度，结果已撤销。2026-11-03北京时间11:13:16–18使用HEX(CAST(col AS BINARY))比较恢复备份10库79表原字段定义、全部行哈希多重集含NULL和重复行以及行数，79/79一致，0缺失0错误；唯一double列所在表为空。11:14:16–26另核对79表207个索引、285条索引列定义均一致，10库触发器、例程、事件两边均为0。两实例分时读取且未冻结，结论限比对时刻；当时 Web restore、apply失败处理与业务应用完整性未验证。 2026-11-03进一步通过121真实Web对隔离cluster schema_restore_verify_2071ca031b9d调用restore，HTTP200后restore PID 2026-11-02_22-22-03.579_mariadb_schema_sync_restore的WebSocket终态成功。隔离Pod独立emptyDir，先导入真实备份及应用真实计划构造同步后状态；恢复为10库79表，A1/A2/B1/B2各100行、B1旧字段恢复、B3和C消失。对另一独立恢复Pod比对664字段、207索引、285索引列及79表全部行SHA256多重集均一致，0错误；double列所在表为空。Helm/K8s组件健康检查由本地回环sshd模拟，不是真实检查；恢复经真实121服务和双SSH隧道访问隔离Pod。隔离验证当时尚未对214测试实例执行restore；随后经用户授权执行（详见后续记录）。此前备份验证Pod实际/var/lib/mysql位于Pod临时可写层而非emptyDir；本轮restore验证为独立emptyDir。 验证后已清理121隔离集群目录、SSH测试服务及tmpfs密钥配置、两个隔离Pod和两条SSH隧道，相关端口监听已解除。 2026-11-03用户明确授权后，121 Web对k8s_test真实prepare PID 2026-11-02_22-03-00.13_mariadb_schema_sync_prepare调用restore，HTTP200返回PID 2026-11-02_22-30-14.496_mariadb_schema_sync_restore，同PID WebSocket最终成功，EST 22:30:14–22:31:43，restore.started和restore.done存在。214实查恢复10业务库79表，A1/A2/B1/B2各100行，B1仅id/name/old_code/old_note，C、B3及临时库不存在；实际回退备份中的10库。本轮只检查指定结构和行数，未重比全库逐行内容或其他业务健康，其他生产环境回退和失败路径未验证。 后续北京时间11:39:17–20把214真实恢复后的数据库与原121备份导入的隔离参考Pod对比，双方10库79表、664字段、207索引及285索引列定义一致；79/79表以NULL、HEX(CAST(col AS BINARY))和SHA256行多重集及行数逐行比对一致，差异及查询失败为0；唯一double列对应表两侧均0行，真实C不存在。两侧分时快照未冻结写入，结果仅覆盖比对时刻；其他业务健康未验证。 本次独立参考Pod已删除并确认不存在，其emptyDir已随Pod清理。"
+}

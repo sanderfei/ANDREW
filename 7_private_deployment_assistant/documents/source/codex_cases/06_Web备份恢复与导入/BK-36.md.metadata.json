@@ -1,5 +1,5 @@
 {
-  "title": "Neo4j数据库发现失败因Web凭据与实际密码不一致",
+  "title": "Neo4j Web备份认证失败因组件凭据与数据库不一致",
   "kind": "case",
   "kubernetes_versions": [
     "1.32.8"
@@ -10,7 +10,7 @@
   "install_modes": [
     "any"
   ],
-  "verification_status": "unverified",
-  "source_checked_at": "2026-10-22",
-  "verification_note": "214同款Bitnami Chart 0.4.14/Neo4j 5.26.11的失败脚本凭据与实际有效密码不一致，复现列库返回认证失败。用户授权写入运行Web实际配置后，以更新凭据执行同一数据库发现查询退出0并返回__GWI_DB__neo4j；未保存密码值。库存在但节点数0，不能归因为空库。已确认配置与列库恢复，尚无新Web完整备份归档及隔离恢复证据，整体保持unverified。"
+  "verification_status": "verified",
+  "source_checked_at": "2026-10-30",
+  "verification_note": "214同款Bitnami Chart 0.4.14/Neo4j 5.26.11的失败脚本凭据与实际有效密码不一致，复现列库返回认证失败。用户授权写入运行Web实际配置后，以更新凭据执行同一数据库发现查询退出0并返回__GWI_DB__neo4j；未保存密码值。库存在但节点数0，不能归因为空库。已确认配置与列库恢复，尚无新Web完整备份归档及隔离恢复证据，整体保持unverified。 2026-10-30用户手动修改Web保存的Neo4j配置密码后，wfoff的11:07:34手动备份任务成功。实际检查214宿主文件/root/g_web_installer_data/cluster/wfoff/backup/files/neo4j-20261030-110734.tar.gz，压缩包1084字节，gzip/tar完整，只有neo4j.cypher一个数据文件、3938字节，摘要da6f24d471f1a098e3213e96d5f228cc83e06f29c79ae0caf9b88d315a41694e，与此前实际导出文件逐字节一致，含5.26.11旧数据标记及升级后新增中文标记。将包内原始脚本不做改写，使用Cypher Shell导入独立临时5.26.28 Pod；仅emptyDir、无Service、不挂原PVC，监听回环地址，通过本机port-forward查询。用原库和恢复库的HTTP事务查询比较全部标签、属性及类型、关系端点/类型/属性、约束及索引定义；12节点10关系、3约束7索引定义一致，规范化摘要均为894e1f5ceee7460e8bc0f3d288d079adc06d0e9b4400a59768113d4d1d4ac23b。比较不要求内部elementId一致；索引名称另行报告：migration_customer_name变为index_afbf319a，migration_product_price变为index_572ae426，因为脚本为无名称的CREATE RANGE INDEX。约束名称保留，索引定义未缺失。临时Pod已清理，原Pod UID及重启计数未变，原服务与备份文件未修改。此证据验证用户触发的Web备份实际归档及手工隔离恢复，不代表Web恢复API已验证；包为业务图数据与schema，不包含system数据库账号密码或服务配置。完整脱敏结果位于214的/root/neo4j-rehearsal-20261030-yFOomU/evidence/web-backup-20261030-110734-validation.json。 2026-10-30最新核验：121 Web工作目录为/root/wfweb/g_web_installer，k8s_test集群control-plane为214。本次立即备份任务2026-10-30_02-30-10.139_backup_neo4j于EDT02:30即北京时间14:30，在Exporting Neo4j database之后报The client is unauthorized due to authentication failure并退出1。backup/files中neo4j-20261030-023010.tar.gz不存在，records.json没有本次成功记录，214没有该任务导出目录；该Web集群最近成功归档仍为01:58旧文件，早于14:09重装和14:22用户升级。当前214 Pod镜像5.26.28、Ready、0重启，但不能证明备份可用。用户提供的12节点10关系为数据库查询结果，本次没有新归档可核对。未查找或比较具体凭据值，未修改配置或重跑备份；需对齐121 Web该集群Neo4j实际登录凭据后重试。历史214 wfoff的11:07成功归档和隔离恢复属于更早的独立证据。 用户随后说明已修改配置密码并再次执行。重新检查121后仍未找到比02:30更新的Neo4j任务或比01:58更新的Neo4j归档；补充成功日志实际为Milvus，生成milvus-20261030-023116.tar.gz，该文件已在121归档列表中确认。不能据此确认Neo4j改密重试成功，12节点10关系的新Neo4j包核验仍待实际文件。未推断用户UI操作，未读取修改密码或代为触发备份。 2026-10-30最新闭环：用户确认此前误点Milvus后，正确触发Neo4j任务2026-10-30_02-40-19.691_backup_neo4j，于北京时间14:40完成。直接读取121实际文件/root/wfweb/g_web_installer/data/cluster/k8s_test/backup/files/neo4j-20261030-024019.tar.gz：962字节，gzip CRC与tar结构有效，仅neo4j.cypher一个数据文件3094字节。归档SHA256 c2b738c7219f005570b7cdd7b6d36364a50e445dd26ce5e2e172b5cfed8db3ba，脚本SHA256 707c6bec72473357a497e718c482848b98e52c36f9c50e51b622b6301ebeee64。逐条解析UNWIND数组得到ManualUpgradeCustomer/Product/Order各4节点，总12节点；KNOWS2、CONTAINS4、PLACED4，总10关系。标签内业务id唯一、全部关系端点存在；包含old-5.26.11-manual-20261030旧版标记及真实中文名，另有3唯一约束和2普通RANGE索引定义。数量与用户数据库查询一致。本轮为新归档内容检查，没有恢复或全属性快照比较；更早wfoff隔离恢复不替代此新包恢复验证。未读取修改凭据、改业务代码或重启服务。"
 }

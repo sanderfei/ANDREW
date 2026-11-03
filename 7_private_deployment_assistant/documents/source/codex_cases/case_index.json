@@ -1,16 +1,124 @@
 {
   "created_at": "2026-10-14",
-  "case_count": 195,
+  "case_count": 212,
   "raw_files_scanned": 421,
   "distinct_sessions": 378,
   "cases": [
     {
+      "id": "HELM-45",
+      "title": "pgvector 已完成 Job 检查的 JSONPath 引号丢失导致组件安装失败",
+      "path": "03_Helm与组件部署/HELM-45.md",
+      "status": "KK 源码已修复并通过隔离测试；现场验证待完成",
+      "source_checked_at": "2026-11-03",
+      "verification_note": "2026-11-03用户提供组件安装日志，已有 pgvector Job 检查时因嵌套 shell 使 JSONPath 中 Complete 的引号丢失，kubectl 报 unrecognized identifier Complete。日志中的旧 Job Complete=True、succeeded=1，不证明当前数据库扩展状态。KK 源码已为 PgvectorRun.PreCheck 的双引号增加跨 shell 转义，保持原判断语义；隔离测试通过真实 PreCheck、SudoPrefix 和两层 shell，模拟完成、未完成、失败、无条件及 NotFound 场景，临时测试已删除。现场 KK 版本未核实，未构建发布或访问现场，实际功能和恢复未验证。",
+      "sources": []
+    },
+    {
+      "id": "BK-43",
+      "title": "MariaDB结构同步多字段索引与失败重试实测",
+      "path": "06_Web备份恢复与导入/BK-43.md",
+      "status": "两版五轮API验证通过，独立prepare/apply与失败边界已测",
+      "source_checked_at": "2026-11-03",
+      "verification_note": "121宿主机Web通过真实上传ZIP、prepare及WebSocket终态，在214专属临时测试库完成五轮。首轮旧50列100行逐行哈希不变，旧5列保留、新25列生成，索引包含增删改，B2保留、B3/C1空；二次执行无表列索引变更。坏SQL报1064且无prepare.done/apply.started，原库未变；重复数据导致新增唯一索引1062，prepare.done/apply.started存在、apply.done不存在，本例一条ALTER且原数据索引未变；有效包在独立旧库基线重试成功。此前发布记录为中央release 38f56b5，本轮未重验服务二进制哈希。仅验证上述场景，未测restore、生产大数据性能及全部失败路径。 测试结束后已确认清理本次四个测试库及专属临时库、121临时集群和tmpfs测试包、本机测试包与工具/SSH转发；原k8s_test锁已释放，未调用restore，原配置未改。 d15a46d发布121后，临时cluster schema_verify_3eca88211c再走真实上传、prepare WebSocket终态、独立apply WebSocket终态五轮。正常prepare仅生成计划、目标仍50列与旧数据，计划25增列3删索引3增索引；apply成功后75列，原50列100行和另一3行表哈希不变，索引增删改符合预期，同一prepare再次apply被拒绝。第二轮无结构变化，第三轮坏SQL 1064且无prepare.done/apply.started，第四轮prepare成功但唯一索引冲突apply 1062、started有done无，单条ALTER原数据索引不变不可推广至多DDL；第五轮bad旧库用有效包prepare/apply重试成功。预检查包默认排序规则导致额外旧列修改，未apply，修正包后正式验证。未测本轮restore、大数据性能及所有失败组合；本轮结束已确认214四个唯一测试库及专属临时库不存在，121临时集群、客户端临时包和工具及SSH转发已清理，原k8s_test锁已释放，未改原配置、未调用restore。",
+      "sources": []
+    },
+    {
+      "id": "BK-42",
+      "title": "MariaDB schema-sync apply提示prepare.done不存在",
+      "path": "06_Web备份恢复与导入/BK-42.md",
+      "status": "121正向同步及214真实restore后10库79表完整比对通过",
+      "source_checked_at": "2026-11-03",
+      "verification_note": "旧版server.log确认apply早于prepare完成。中央提交38f56b5发布121后，用户授权真实调用prepare，同PID日志显示prepare及自动apply成功，上传包与214源包SHA256一致、含B/C SQL，备份及完成标记存在，warnings为空，临时库已清理。214核对A(a1,a2)、B(b1,b2,b3)、C(c1,c2)，旧四表各100行，B1保留旧字段且新增new_code/new_note，新三表0行。指定备份完整导入214隔离MariaDB 10.11.10成功；初次HEX数字列核对可能丢失小数精度，结果已撤销。2026-11-03北京时间11:13:16–18使用HEX(CAST(col AS BINARY))比较恢复备份10库79表原字段定义、全部行哈希多重集含NULL和重复行以及行数，79/79一致，0缺失0错误；唯一double列所在表为空。11:14:16–26另核对79表207个索引、285条索引列定义均一致，10库触发器、例程、事件两边均为0。两实例分时读取且未冻结，结论限比对时刻；当时 Web restore、apply失败处理与业务应用完整性未验证。 2026-11-03进一步通过121真实Web对隔离cluster schema_restore_verify_2071ca031b9d调用restore，HTTP200后restore PID 2026-11-02_22-22-03.579_mariadb_schema_sync_restore的WebSocket终态成功。隔离Pod独立emptyDir，先导入真实备份及应用真实计划构造同步后状态；恢复为10库79表，A1/A2/B1/B2各100行、B1旧字段恢复、B3和C消失。对另一独立恢复Pod比对664字段、207索引、285索引列及79表全部行SHA256多重集均一致，0错误；double列所在表为空。Helm/K8s组件健康检查由本地回环sshd模拟，不是真实检查；恢复经真实121服务和双SSH隧道访问隔离Pod。隔离验证当时尚未对214测试实例执行restore；随后经用户授权执行（详见后续记录）。此前备份验证Pod实际/var/lib/mysql位于Pod临时可写层而非emptyDir；本轮restore验证为独立emptyDir。 验证后已清理121隔离集群目录、SSH测试服务及tmpfs密钥配置、两个隔离Pod和两条SSH隧道，相关端口监听已解除。 2026-11-03用户明确授权后，121 Web对k8s_test真实prepare PID 2026-11-02_22-03-00.13_mariadb_schema_sync_prepare调用restore，HTTP200返回PID 2026-11-02_22-30-14.496_mariadb_schema_sync_restore，同PID WebSocket最终成功，EST 22:30:14–22:31:43，restore.started和restore.done存在。214实查恢复10业务库79表，A1/A2/B1/B2各100行，B1仅id/name/old_code/old_note，C、B3及临时库不存在；实际回退备份中的10库。本轮只检查指定结构和行数，未重比全库逐行内容或其他业务健康，其他生产环境回退和失败路径未验证。 后续北京时间11:39:17–20把214真实恢复后的数据库与原121备份导入的隔离参考Pod对比，双方10库79表、664字段、207索引及285索引列定义一致；79/79表以NULL、HEX(CAST(col AS BINARY))和SHA256行多重集及行数逐行比对一致，差异及查询失败为0；唯一double列对应表两侧均0行，真实C不存在。两侧分时快照未冻结写入，结果仅覆盖比对时刻；其他业务健康未验证。 本次独立参考Pod已删除并确认不存在，其emptyDir已随Pod清理。",
+      "sources": []
+    },
+    {
+      "id": "BK-41",
+      "title": "Neo4j备份时APOC导出过程未注册",
+      "path": "06_Web备份恢复与导入/BK-41.md",
+      "status": "截图和源码已分析；现场根因与修复待验证",
+      "source_checked_at": "2026-11-02",
+      "verification_note": "用户截图显示已找到neo4j-0并开始导出neo4j库，服务器返回apoc.export.cypher.all过程未注册，备份退出1。当前Web源码以cypher-shell调用APOC后读取导出并tar打包；错误发生在导出阶段。现场部署、插件目录、版本、配置和日志未取得，不能将插件缺失或历史BK-35原因认定为根因。未访问目标或重启，修复、Web备份与隔离恢复待验证。",
+      "sources": []
+    },
+    {
+      "id": "REG-21",
+      "title": "init registry被Zot仓库地址格式校验提前拒绝",
+      "path": "04_Zot_Harbor与镜像仓库/REG-21.md",
+      "status": "截图与源码已定位；实际配置及修正后初始化待验证",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "用户截图的原始错误精确对应KK common/zot.go:23。只读核对Web release/290fd15脚本在data/cluster/<cluster>执行kk init registry -f config.yaml；KK test/9a73986在NewKubeRuntime经ValidateZotRegistry调用ZotEndpoint拒绝非法privateRegistry，初始化流水线尚未启动。字段仅接受域名或IPv4及可选端口，协议头、路径、末尾斜杠等均可触发此错误；未取得实际值，不能定具体误填项。续问已核对本机UpdateLocalHosts与远端GenerateHosts均调用GetHostname去端口，当前错误先于所有hosts写入，不能归因于hosts携带端口。已给配置位置与修正格式；未连现场、改代码或配置、执行重试，修复后任务与仓库功能unverified。",
+      "sources": []
+    },
+    {
+      "id": "WEB-18",
+      "title": "Web接口ERR_EMPTY_RESPONSE且未取得HTTP响应",
+      "path": "05_Web配置鉴权与任务/WEB-18.md",
+      "status": "待定位；失败接口、部署链路及日志尚未确认",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "用户确认浏览器ERR_EMPTY_RESPONSE发生在Web接口；具体URL/Method/耗时/目标与日志缺失。Chromium EMPTY_RESPONSE -324仅表明连接未发送有效HTTP响应即结束，非HTTP码，不能认定JWT/CORS/崩溃/超时/代理故障。本地release/290fd15默认HTTP8080、90分钟读写及JWT401完整响应路径已核对；Gin Recovery捕获的普通请求panic通常500。已给实际Web环境GET profile的无凭据只读探测与同刻应用/系统/容器/已有代理日志核对步骤，无现场执行、业务代码变更或恢复证据，保持unverified。",
+      "sources": []
+    },
+    {
+      "id": "BK-37",
+      "title": "Neo4j Guava缺类与保留原PVC升级5.26.28实测",
+      "path": "06_Web备份恢复与导入/BK-37.md",
+      "status": "214已再次重装5.26.11并核验12/10；等待用户第二轮手操",
+      "source_checked_at": "2026-10-30",
+      "verification_note": "2026-10-30用户明确授权删除214的neo4j命名空间，用客户原始Chart0.4.14/Neo4j5.26.11和原安装命令重新安装，随后验证最新逐条命令与单行Helm方案。客户旧包SHA256为63c5ef5b5195cf56948bd1d09bf0f645d084ff895749ad68d512b8195863039e，新包为KK现有Chart5.3.0/app5.26.28，SHA256为bd7d30a4c698ca67ebe719cc083895b86a4b6acac1c3f710173ed6091e497543，均未重打包。旧镜像缓存配置摘要与客户归档dcf99e402e70917e20d7bf340938ce42a6d1d1961b36f6043ade2dd1e2138b19一致，实际旧PID1为tail。只将测试登录凭据对齐方案已有值；旧包业务配置保持默认，本轮旧版APOC未注册，不把此结果写成再次复现Guava缺类。先在5.26.11写入12节点10关系、中文/数组/布尔/浮点/日期属性、3约束7索引，再保存完整标签、属性、关系、索引约束和账号基线。依次读取PID、发送SIGTERM、确认本次Stopped、缩容0、等待Pod删除、删除旧控制器并保留PVC，最后原样执行README单行helm upgrade --reset-values及--set参数。新版使用Zot域名444的5.26.28镜像；只覆盖原密码、原PVC和runAsUser1001，GID/fsGroup为新版默认7474，无自定义初始化容器。升级前后数据基线摘要均为4eb70590c5588c36de5f3f4060361efa99c254e4d88e9b639f0377e4fece19d1；PVC UID 13cf3e42-1645-4dde-806b-4be256d685be、Service身份及NodePort不变。在迁入旧节点写入中文标记并rollout restart，Pod UID变化、PVC不变，旧数据和新写入完整一致；重建后实际APOC导出12/10、3938字节，摘要da6f24d471f1a098e3213e96d5f228cc83e06f29c79ae0caf9b88d315a41694e，含旧数据和新增中文标记，并已复制到卷外证据目录。HTTP NodePort返回200、原密码经Bolt NodePort认证成功，neo4j-pvc-check命名空间未变化。verified仅指214可重建合成数据的当前迁移方案；本轮未制作升级前物理冷备或验证冷备恢复，卷外文件是升级后APOC导出。客户生产、完整Web/JWT备份恢复、无缓存镜像拉取未验证。此前Python和新PVC方案文件已按用户要求清理，当前唯一执行文档为g_web_installer/neo4j-reuse-pvc/README.md。 2026-10-30用户手动修改Web保存的Neo4j配置密码后，wfoff的11:07:34手动备份任务成功。实际检查214宿主文件/root/g_web_installer_data/cluster/wfoff/backup/files/neo4j-20261030-110734.tar.gz，压缩包1084字节，gzip/tar完整，只有neo4j.cypher一个数据文件、3938字节，摘要da6f24d471f1a098e3213e96d5f228cc83e06f29c79ae0caf9b88d315a41694e，与此前实际导出文件逐字节一致，含5.26.11旧数据标记及升级后新增中文标记。将包内原始脚本不做改写，使用Cypher Shell导入独立临时5.26.28 Pod；仅emptyDir、无Service、不挂原PVC，监听回环地址，通过本机port-forward查询。用原库和恢复库的HTTP事务查询比较全部标签、属性及类型、关系端点/类型/属性、约束及索引定义；12节点10关系、3约束7索引定义一致，规范化摘要均为894e1f5ceee7460e8bc0f3d288d079adc06d0e9b4400a59768113d4d1d4ac23b。比较不要求内部elementId一致；索引名称另行报告：migration_customer_name变为index_afbf319a，migration_product_price变为index_572ae426，因为脚本为无名称的CREATE RANGE INDEX。约束名称保留，索引定义未缺失。临时Pod已清理，原Pod UID及重启计数未变，原服务与备份文件未修改。此证据验证用户触发的Web备份实际归档及手工隔离恢复，不代表Web恢复API已验证；包为业务图数据与schema，不包含system数据库账号密码或服务配置。完整脱敏结果位于214的/root/neo4j-rehearsal-20261030-yFOomU/evidence/web-backup-20261030-110734-validation.json。 2026-10-30最新现场交接：用户要求再次delete namespace neo4j后恢复客户旧版供本人手操。214在14:09:16按客户原包、原镜像及原命令安装Chart0.4.14/Neo4j5.26.11，revision1。测试库与旧Secret密码已对齐现有指导文档，不记录凭据。新合成旧数据为12节点10关系、3约束7索引且全部ONLINE，中文属性已核验，标记old-5.26.11-manual-20261030。Pod neo4j-0为1/1 Running、0重启，UID为0f4946fc-813c-4384-8a7b-35608d248352；PVC data-neo4j-0为Bound、8Gi，UID为34028fe7-8f6f-4fc6-8ab3-10e6b5b4513f。服务保持5.26.11运行，本次没有停库或执行升级。neo4j-pvc-check资源UID未变。KK新原包仍在214的/root/neo4j-rehearsal-20261030-yFOomU/upgrade/neo4j.tgz，最新脱敏证据为同任务evidence/old-manual-preparation-20261030.json。历史升级和Web备份/隔离恢复证据保留，不能将其当成本次用户手工升级的结果。 2026-10-30用户手工执行当前指导后提供14:22:21 Helm revision2 deployed输出及12节点10关系查询结果。本轮只读确认214 Pod UID d21aab11-3c23-4a76-ae6b-a99aea4c13e0，镜像为digiwin.gkubeinstaller.local:444/bitnami/neo4j:5.26.28，Ready=true、0重启；没有再次登录数据库取完整图基线。121 k8s_test在北京时间14:30的立即备份因数据库认证失败退出1，未生成新的归档，详见BK-36。因此用户本轮手工升级后的新包12/10核验未完成，不能复用更早wfoff归档或旧演练的成功证据代替。 2026-10-30最新闭环：用户确认此前误点Milvus后，正确触发Neo4j任务2026-10-30_02-40-19.691_backup_neo4j，于北京时间14:40完成。直接读取121实际文件/root/wfweb/g_web_installer/data/cluster/k8s_test/backup/files/neo4j-20261030-024019.tar.gz：962字节，gzip CRC与tar结构有效，仅neo4j.cypher一个数据文件3094字节。归档SHA256 c2b738c7219f005570b7cdd7b6d36364a50e445dd26ce5e2e172b5cfed8db3ba，脚本SHA256 707c6bec72473357a497e718c482848b98e52c36f9c50e51b622b6301ebeee64。逐条解析UNWIND数组得到ManualUpgradeCustomer/Product/Order各4节点，总12节点；KNOWS2、CONTAINS4、PLACED4，总10关系。标签内业务id唯一、全部关系端点存在；包含old-5.26.11-manual-20261030旧版标记及真实中文名，另有3唯一约束和2普通RANGE索引定义。数量与用户数据库查询一致。本轮为新归档内容检查，没有恢复或全属性快照比较；更早wfoff隔离恢复不替代此新包恢复验证。未读取修改凭据、改业务代码或重启服务。 2026-10-30用户发现手操升级后Pod Startup告警，本轮只读现场验证：按当前Pod UID d21aab11-3c23-4a76-ae6b-a99aea4c13e0过滤，6次7687连接拒绝仅发生北京时间14:22:24至14:22:49。容器14:22:20启动，日志14:22:52开放Bolt、14:22:56开放HTTP并Started，当前Ready=true、started=true、0重启，确认startup已通过。经10.40.46.214:30032 NodePort实际认证执行只读Cypher：RETURN1成功、dbms.components为5.26.28、12节点10关系及old-5.26.11-manual-20261030旧标记保留；HTTP NodePort30030返回200。历史事件不是当前故障，未改探针或重启服务，未扩大验证客户业务。 2026-10-30最新现场恢复：用户要求全部卸载再用原命令装旧版并插数。214 neo4j旧命名空间及PVC已完整删除；命名空间等待180秒超时后，确认全部可列举命名空间资源为空，固定旧UID和deletionTimestamp并使用resourceVersion仅完成空命名空间finalize收尾，未清除Pod/PVC保护或触碰其他命名空间。新命名空间预置文档中已知测试密码的Helm归属Secret，由客户原Chart标准管理模板复用，不查找记录随机凭据。原Helm安装命令不添加参数，旧包SHA256 63c5ef5b5195cf56948bd1d09bf0f645d084ff895749ad68d512b8195863039e，14:55:15安装Chart0.4.14/app5.26.11、revision1 deployed。真实Cypher版本5.26.11、12节点10关系、3约束7索引ONLINE，中文属性正常，新标记old-5.26.11-manual-20261030-repeat2。Pod UID 1be0f878-5f4f-43a7-9c4f-afc180051a91，Ready且0重启；新8Gi Bound PVC UID 6b8b0a00-9db8-407f-a9b5-fe5a3c07c021。neo4j-pvc-check的8个资源UID未变，/root/neo4j.tgz仍为KK5.26.28原包bd7d30a4完整摘要。本轮保持旧版运行，未升级，等待用户再次手操。",
+      "sources": []
+    },
+    {
+      "id": "OBS-32",
+      "title": "版本镜像导入Registry层PATCH触发Zot读超时",
+      "path": "07_OBS网关与文件传输/OBS-32.md",
+      "status": "push容错PR429已合并并启动121；Zot超时未修，真实容错导入待验证",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "2026-10-29仅只读。121尾7c272993首镜像CDN4520712744B下载/预检通过，7tag顺序copy前三返回成功，rag-parse层PATCH reset；images0是整包计数，不能否认部分tag/层副作用，未见包结构错误。121原01:39:41-04=UTC05:39:41/上海13:39:41。214实际Zot2.1.21无http读写超时覆盖，默认60s；同goroutine474/失败UUID/连接05:39:32 read i/o timeout及PATCH500 latency1m0s闭环，直接为服务端读upload body超时，未定该层传不完的进一步原因。包/tag串行但6层并发、64秒tag耗时非单PATCH耗时、readiness10s隔离。未改配置/重启/上传，30m及原包重试仅建议，整体恢复unverified。 2026-10-29后续仅本地放宽普通importImage push错误：Error/按包images_failed，cleanup后继续其它镜像和DB，无后续fatal则run nil仅调度完成，通用executor不改；summary尾加images_failed与明确失败汇总。下载/prep/cleanup/DB/context仍fatal，readySkip非failed。focused/整包race/server构建及格式diff通过，临时测试/产物删除；随后290fd150f03af9f72c5a825fd2d89eb9ac5ccc37推送origin/release，经PR429合并98af373bfb6b836221987290cce8347027fd0440并核对祖先；121ff-only更新、CGO0三tags build/mv成功，单次旧2689696归属确认后停止并立即启动，脚本报告PID2715819/startup true、SSH0。data/router/users本地状态保留，未追加API等检查或触发导入，KK与214Zot未改，真实容错导入unverified。",
+      "sources": []
+    },
+    {
+      "id": "OBS-31",
+      "title": "版本导入因数据组件配置缺失而全量预检失败",
+      "path": "07_OBS网关与文件传输/OBS-31.md",
+      "status": "按组件跳过PR428已发布121；旧版配置缺失事实保持，新业务未验证",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "旧PR42783109a4c因elastic未配置触发旧屏障，Mongo未执行；121缺elastic/mongodb，214有Mongo且未见ES，配置未修改。用户新策略镜像优先、逐组件依赖不满足日志跳过继续，实错/取消停，不自动补配置；开发normal/race/build通过后42bbcb8推送并经PR428合a024faf，121规定build/mv及启动完成PID2689696、SSH0，未触发新流程导入，整体业务unverified。",
+      "sources": []
+    },
+    {
+      "id": "OBS-30",
+      "title": "121版本包下载ENOSPC与保留组件的磁盘清理",
+      "path": "07_OBS网关与文件传输/OBS-30.md",
+      "status": "5个历史版本下载目录已清理，history/config保留；业务恢复未验证",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "121清盘/旧任务83109a4c及下载history删除事实保持；旧任务五包CDN及三镜像预检未再ENOSPC，最终配置缺失失败。镜像逐包清理/按组件readiness跳过策略已42bbcb8经PR428合a024faf并完成121Web编译替换启动PID2689696，保留data及本地配置调整。没有新下载/导入或追加清理，既有空间快照不作为新业务保证，导入恢复仍unverified。 后续按版本接口历史下载清理授权，121仅删k8s_test/obs-import下5旧目录尾9cbcbe01/84d952cb/c808436d/58978c3f/7c272993；2有Completed、3无日志且mtime早于当前Web启动，全部无proc引用并验证realpath。SSH0、5路径不存在，移除约4.210GiB，free52.41到56.62GiB；两history日志inode/size及config inode/size/mtime保持，Web仍2715819未重启。此次保留history，未新导入或改代码，业务恢复unverified。",
+      "sources": []
+    },
+    {
+      "id": "OBS-29",
+      "title": "版本导入大镜像包下载被HTTP2对端重置",
+      "path": "07_OBS网关与文件传输/OBS-29.md",
+      "status": "出口选路PR427已发布121；214旧断流原因及恢复仍待验证",
+      "source_checked_at": "2026-10-28",
+      "verification_note": "2026-10-28已确认214:8080容器g_web_installer进程43745，精准wfoff17:29任务首包4311.29MiB、8.50MiB采样后17:33:33 HTTP2 stream23 INTERNAL_ERROR peer，完整包/预检/导入全0且packages空。nerdctl inspect对应JSON主日志同对象GET无Range，HTTP200、elapsed_ms121仅响应头，requestID5a145d0def2a45e1c68c6a6447a5bf5d，host private-obs-gw.digiwincloud.com；仍需该ID关联网关/代理读OBS/写客户端日志，不能定具体内部原因。17:45同版本任务因新事件补查，3/6分钟8.42/16.63MiB，临时文件17776060字节且无正式包/终态，约47KiB/s样本仅证慢传非成功或限速根因。当前磁盘约51.37GiB不倒推故障时；有效编译超时/二进制仍未核。全部只读，未触发下载重试/配置或进程改动，无恢复证据，unverified。 2026-10-28后续出口选路：每任务一次ipwho检测Web出口CN/TW（3秒/4KiB，未知失败回CN、父ctx取消停），逐包现签CN sign-direct或TW sign-cdn，无IAM/Cookie、identity禁redirect下载，原part/size与单PID串行保留；region/client/整合、联合race及server构建通过，3临时测试/产物清理。用户要求交付后3源文件+165/-3提交934701bf68a6c300e5313efd3cafe66c0887ce68，push origin release成功9e5b1e8..934701b；PR427核对范围/head/base后普通merge为bc6cd1a200ec92dd23643f7a270340d45a9aa6d9并fetch祖先核实。121固定alias从69cf625快进bc6cd1a，保留data/配置删除/禁Vue，规定build/mv退出0；单次旧PID1998781归属核对后停止并立即启动，脚本报告PID2084894、web_start_exit=0、SSH退出0。仅121Web，214未发、KK未动，未追加探测或实际GeoIP/4GiBCDN导入验证；未加retry/resume，CN仍网关，不能宣称214旧H2故障恢复，整体unverified。",
+      "sources": []
+    },
+    {
+      "id": "HELM-43",
+      "title": "ES Chart混入AppleDouble元数据导致Helm拒绝加载",
+      "path": "03_Helm与组件部署/HELM-43.md",
+      "status": "本地ES包清理并通过现场Helm加载渲染；交付与组件功能待验证",
+      "source_checked_at": "2026-11-03",
+      "verification_note": "2026-10-28仅只读取证：214现场tgz34854字节/186成员、roots为._elasticsearch与elasticsearch，93个AppleDouble条目，首条magic/version0005160700020000，sha25651194b5e01bd2ed844b96f671aadbfc1b73d53bb927e188e3f6da9b2922b61b4；确认顶层元数据普通成员触发Helm归档loader的outside-base错误。本地与121 test/9a73986源码tgz均32108字节/93成员、f1636765...且干净，不能混为现场坏包来源；实际KK内嵌包和214Chart/CLI版本未查。未清理重打包、测试构建、Helm安装或发布，来源与修复后功能待验证。 2026-11-03用户日志实际为214 RabbitMQ chart根条目._rabbitmq被拒绝、5次失败；现场helm v3.18.5及helm show chart确认RabbitMQ和ES两现场包均无法加载。RabbitMQ现场SHA256 013fb844621c9052fd93df4637c1604c1205b996c269f4572e536203de117bda；ES现场51194b5e01bd2ed844b96f671aadbfc1b73d53bb927e188e3f6da9b2922b61b4。当前本地KK ES源码包与现场同SHA且含._elasticsearch，本地RabbitMQ包5bb7be57c2be0d717445c1893e4a2f0d8a78ab35cbeadc4950a7f2fe10f3f5bd且无._，区别于历史源码快照。KK源码通过go:embed释放复制tgz，实际运行KK内嵌内容及污染来源未确认。未修改或重试，待修复权威制品、交付和功能验证。 2026-11-03后续本地KK elasticsearch.tgz剔除93个._元数据，保留93个条目路径、类型、权限、链接及内容哈希与原包一致；原同级解压目录values.yaml含未打包修改，保留未覆盖且未加入归档。214 Helm3.18.5经匿名内存文件对修复包执行helm show chart和helm template均成功，渲染8个YAML文档；未构建、发布或安装，现场旧包与实际执行KK尚未修复，RabbitMQ制品处理及真实功能待验证。",
+      "sources": []
+    },
+    {
       "id": "OBS-28",
       "title": "V3版本目录一键下载并导入集群数据与镜像的串行任务",
       "path": "07_OBS网关与文件传输/OBS-28.md",
-      "status": "本地实现及定向验证通过，未提交发布；真实导入待验证",
-      "source_checked_at": "2026-10-26",
-      "verification_note": "Web release/5f148d0基线本地新增版本导入API、path/cluster请求及标准success/pid响应；单总PID单execute.log串行完成分页直属识别、逐包下载、全部预检、镜像优先、数据导入及统一终态，缺类跳过/无包no-op，首错停止保留原包和副作用。专用flock仅限制本入口；同步镜像/六类数据核心使用私有快照、严格新路径、context及日志脱敏，旧手动宽松脚本未全部改造。模拟网关/脚本/HTTP/WebSocket定向验证、race及server构建通过，临时测试和产物已清理；Swagger14路径19定义46引用通过。未提交推送发布，无真实OBS/Zot/数据库或现场证据，metadata保持unverified。 2026-10-26只读澄清识别：先校验压缩扩展（完整去.tar.gz），只按最后下划线后的末尾token忽略大小写映射数据库，版本/日期不参与；v_Mysql_backup.zip未知ZIP跳过，命中库但错扩展报错。未知tar类仅镜像候选，内容不符则预检失败，不扫描SQL/BSON猜库。本次未改业务或重跑测试。",
+      "status": "镜像优先按组件执行PR428已合并；121编译替换启动成功，业务未验证",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "2026-10-29镜像优先逐包一次prepare/import/cleanup、无仓库跳过下载；六DB固定顺序逐readiness，不可用跳过继续，实际下载/格式/import与取消停止，单PID/审核/选路/原包保留不变。normal/两包race/server构建通过、3临时测试清理后四源文件42bbcb8e4f78924f40daab52544a78c1385c48a5推送origin，PR428合并a024faf86abf135018df62416d2a1bf381cca728，fetch/祖先核实。121固定alias从bc6cd1a ff-only更新，保留data/users删除/router禁Vue，规定CGO0三tags build/mv成功；单次旧PID2084894归属确认后kill9立即启动，脚本报告PID2689696/startup_command_succeeded true、SSH0。无新OBS导入/API等追加检查，KK未发，新流程业务unverified。",
       "sources": []
     },
     {
@@ -69,20 +177,20 @@
     },
     {
       "id": "BK-36",
-      "title": "Neo4j数据库发现失败因Web凭据与实际密码不一致",
+      "title": "Neo4j Web备份认证失败因组件凭据与数据库不一致",
       "path": "06_Web备份恢复与导入/BK-36.md",
-      "status": "真实凭据更新后列库成功；Web完整备份及恢复待验证",
-      "source_checked_at": "2026-10-22",
-      "verification_note": "214同款Bitnami Chart 0.4.14/Neo4j 5.26.11的失败脚本凭据与实际有效密码不一致，复现列库返回认证失败。用户授权写入运行Web实际配置后，以更新凭据执行同一数据库发现查询退出0并返回__GWI_DB__neo4j；未保存密码值。库存在但节点数0，不能归因为空库。已确认配置与列库恢复，尚无新Web完整备份归档及隔离恢复证据，整体保持unverified。",
+      "status": "121新归档核对12节点10关系及旧版标记通过",
+      "source_checked_at": "2026-10-30",
+      "verification_note": "214同款Bitnami Chart 0.4.14/Neo4j 5.26.11的失败脚本凭据与实际有效密码不一致，复现列库返回认证失败。用户授权写入运行Web实际配置后，以更新凭据执行同一数据库发现查询退出0并返回__GWI_DB__neo4j；未保存密码值。库存在但节点数0，不能归因为空库。已确认配置与列库恢复，尚无新Web完整备份归档及隔离恢复证据，整体保持unverified。 2026-10-30用户手动修改Web保存的Neo4j配置密码后，wfoff的11:07:34手动备份任务成功。实际检查214宿主文件/root/g_web_installer_data/cluster/wfoff/backup/files/neo4j-20261030-110734.tar.gz，压缩包1084字节，gzip/tar完整，只有neo4j.cypher一个数据文件、3938字节，摘要da6f24d471f1a098e3213e96d5f228cc83e06f29c79ae0caf9b88d315a41694e，与此前实际导出文件逐字节一致，含5.26.11旧数据标记及升级后新增中文标记。将包内原始脚本不做改写，使用Cypher Shell导入独立临时5.26.28 Pod；仅emptyDir、无Service、不挂原PVC，监听回环地址，通过本机port-forward查询。用原库和恢复库的HTTP事务查询比较全部标签、属性及类型、关系端点/类型/属性、约束及索引定义；12节点10关系、3约束7索引定义一致，规范化摘要均为894e1f5ceee7460e8bc0f3d288d079adc06d0e9b4400a59768113d4d1d4ac23b。比较不要求内部elementId一致；索引名称另行报告：migration_customer_name变为index_afbf319a，migration_product_price变为index_572ae426，因为脚本为无名称的CREATE RANGE INDEX。约束名称保留，索引定义未缺失。临时Pod已清理，原Pod UID及重启计数未变，原服务与备份文件未修改。此证据验证用户触发的Web备份实际归档及手工隔离恢复，不代表Web恢复API已验证；包为业务图数据与schema，不包含system数据库账号密码或服务配置。完整脱敏结果位于214的/root/neo4j-rehearsal-20261030-yFOomU/evidence/web-backup-20261030-110734-validation.json。 2026-10-30最新核验：121 Web工作目录为/root/wfweb/g_web_installer，k8s_test集群control-plane为214。本次立即备份任务2026-10-30_02-30-10.139_backup_neo4j于EDT02:30即北京时间14:30，在Exporting Neo4j database之后报The client is unauthorized due to authentication failure并退出1。backup/files中neo4j-20261030-023010.tar.gz不存在，records.json没有本次成功记录，214没有该任务导出目录；该Web集群最近成功归档仍为01:58旧文件，早于14:09重装和14:22用户升级。当前214 Pod镜像5.26.28、Ready、0重启，但不能证明备份可用。用户提供的12节点10关系为数据库查询结果，本次没有新归档可核对。未查找或比较具体凭据值，未修改配置或重跑备份；需对齐121 Web该集群Neo4j实际登录凭据后重试。历史214 wfoff的11:07成功归档和隔离恢复属于更早的独立证据。 用户随后说明已修改配置密码并再次执行。重新检查121后仍未找到比02:30更新的Neo4j任务或比01:58更新的Neo4j归档；补充成功日志实际为Milvus，生成milvus-20261030-023116.tar.gz，该文件已在121归档列表中确认。不能据此确认Neo4j改密重试成功，12节点10关系的新Neo4j包核验仍待实际文件。未推断用户UI操作，未读取修改密码或代为触发备份。 2026-10-30最新闭环：用户确认此前误点Milvus后，正确触发Neo4j任务2026-10-30_02-40-19.691_backup_neo4j，于北京时间14:40完成。直接读取121实际文件/root/wfweb/g_web_installer/data/cluster/k8s_test/backup/files/neo4j-20261030-024019.tar.gz：962字节，gzip CRC与tar结构有效，仅neo4j.cypher一个数据文件3094字节。归档SHA256 c2b738c7219f005570b7cdd7b6d36364a50e445dd26ce5e2e172b5cfed8db3ba，脚本SHA256 707c6bec72473357a497e718c482848b98e52c36f9c50e51b622b6301ebeee64。逐条解析UNWIND数组得到ManualUpgradeCustomer/Product/Order各4节点，总12节点；KNOWS2、CONTAINS4、PLACED4，总10关系。标签内业务id唯一、全部关系端点存在；包含old-5.26.11-manual-20261030旧版标记及真实中文名，另有3唯一约束和2普通RANGE索引定义。数量与用户数据库查询一致。本轮为新归档内容检查，没有恢复或全属性快照比较；更早wfoff隔离恢复不替代此新包恢复验证。未读取修改凭据、改业务代码或重启服务。",
       "sources": []
     },
     {
       "id": "BK-35",
       "title": "Neo4j历史包补开APOC导出配置且重启后保留",
       "path": "06_Web备份恢复与导入/BK-35.md",
-      "status": "同款旧包PVC加载与手动APOC导出成功；Web完整备份及恢复待验证",
-      "source_checked_at": "2026-10-22",
-      "verification_note": "2026-10-22取得客户实际Chart 0.4.14/Neo4j 5.26.11归档并在214同款部署核对镜像启动复制逻辑；PVC保存neo4j.conf与apoc.conf，用户重启日志确认加载，SHOW PROCEDURES与手动APOC导出均成功。已补两个文件在PVC及运行目录的检查、主机/Pod/Cypher执行位置、模板标签幂等与避免重复重启。214真实凭据更新后的列库成功另见BK-36；尚无完整Web备份归档和隔离恢复证据，因此整体保持unverified。归档阶段未执行远端操作。",
+      "status": "配置与注册已通过；实际导出Guava缺类问题转BK-37处理",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "2026-10-22取得客户实际Chart 0.4.14/Neo4j 5.26.11归档并在214同款部署核对镜像启动复制逻辑；PVC保存neo4j.conf与apoc.conf，用户重启日志确认加载，SHOW PROCEDURES与手动APOC导出均成功。已补两个文件在PVC及运行目录的检查、主机/Pod/Cypher执行位置、模板标签幂等与避免重复重启。214真实凭据更新后的列库成功另见BK-36；尚无完整Web备份归档和隔离恢复证据，因此整体保持unverified。归档阶段未执行远端操作。2026-10-29客户确认PVC三项配置正确并提供Copying/Found mounted/skipped日志；直接核对Bitnami固定提交76b89b4的libneo4j.sh与neo4j-env.sh，确认先复制自定义文件再跳过环境变量自动配置。已提供运行目录、SHOW SETTINGS和SHOW PROCEDURES检查；尚无本轮客户检查输出或备份证据，未连接远端，不把历史214实测当成客户当前功能通过。2026-10-29后续客户截图确认命令在Linux主机执行，运行目录插件路径返回预期labs值；APOC配置查询仅返回Error from server:。已核对kubectl官方错误格式化源码，仅能确认为其服务端状态错误提示，不能认定文件缺失或配置错误；提供Pod状态与cat单独读取命令，尚无结果，当前客户备份与恢复仍未验证。另澄清cypher仅为语言标记、kubectl和数据库查询执行位置不同；截图不支持本次为执行位置错误。2026-10-29再次补充客户截图：cat和sh仅返回空白服务端错误，bash未加-i/-t无错误返回主机，Pod1/1Running重启0约49分钟。第一条grep成功仅覆盖该次请求，具体exec错误根因仍待验证；已按用户要求提供kubectl exec -it进入Pod与Pod内cypher-shell交互登录两条命令，明确打开客户端而非重启数据库。尚无进入、登录或当前备份成功回传。2026-10-29客户最新截图已确认kubectl exec -it /bin/bash成功进入neo4j-0，Cypher Shell通过认证并连接Bolt，SHOW PROCEDURES查询返回apoc.export.cypher.all一行。当前客户交互进入、登录和APOC注册已通过；此前空白exec错误根因仍未知，本截图未执行文件导出，Web完整归档与隔离恢复仍待验证，保持unverified。2026-10-29客户实际Web备份在Using Neo4j pod和Exporting Neo4j database日志后只报Error from server并退出1。当前release/290fd15源码2395日志后的2396为kubectl exec -i -- sh -s，2412查询设置，2428才调用APOC；本截图不能确认已执行APOC或归因为插件/密码。手动-it /bin/bash登录不等于无TTY的sh脚本请求成功，已给仅echo的sh -s stdin检查，尚无回传。未修改Web业务代码或远端配置。2026-10-29客户回传Master下printf脚本经kubectl exec -i -- sh -s输出neo4j-exec-ok，确认该次最小非TTY标准输入脚本调用成功；不能再归因为sh本身不可用，也不等价于完整Web导出已通过。下一步核对system库SHOW SETTINGS目录查询，尚无查询回传；此前空白服务端错误具体原因未闭环，未改业务代码或远端。2026-10-29客户最新截图确认system库SHOW SETTINGS查询返回两行：import=/bitnami/neo4j/import、neo4j_home=/opt/bitnami/neo4j，符合该Bitnami部署；截图备份项enabled=true。只确认该身份下目录查询与文件中开关，不证明Web保存凭据相同、实际运行配置来源一致或实际APOC文件导出/完整归档成功；此前空白exec错误继续待定位，未改代码或操作远端。2026-10-29客户直接使用kubectl exec -i调用Cypher Shell实际APOC整库导出，仍返回与Web一致的Error from server，没有导出文件或统计。该复现已绕过Web脚本，不能单归因为Web代码未更新；尚无法确认APOC具体执行点。下一步只将同一命令-i改-it对照，暂未取得结果；不直接给Web stdout文件传输增加TTY，未改业务代码或远端状态。2026-10-29后续TTY导出已取得明确ClassNotFoundException: com.google.common.collect.Iterables；与已通过的配置和注册分开，新增BK-37记录Guava类不可见及保数据升级评估。客户实际旧包已复制解压，但尚未升级或证明导出恢复；此前空白服务端错误仍不能倒推同因。",
       "sources": []
     },
     {
@@ -259,7 +367,9 @@
       "id": "KK-O08",
       "title": "Ubuntu24.04离线ISO缺项与按OS版本选择",
       "path": "01_KK在线与离线安装/KK-O08.md",
-      "status": "历史代码已验证；2026-10-20复核osImage并同步manifest到121，24.04功能待验证",
+      "status": "历史代码已验证；2026-10-27补充22.04.5匹配22.04；22.04.5离线安装及24.04功能待验证",
+      "source_checked_at": "2026-10-27",
+      "verification_note": "复核test/9a73986的manifest、artifact打包与OS选择源码；22.04.5主机的ID=ubuntu、VERSION_ID=22.04及节点amd64匹配repository/amd64/ubuntu/22.04，osImage不参与匹配。系统安装盘不能替代KK依赖ISO；主机与实际制品待核对，未执行断网安装，metadata保持unverified。",
       "sources": [
         {
           "session_id": "01a1191d-6db7-7c42-8d00-6194d609a369",
@@ -677,7 +787,9 @@
       "id": "REG-13",
       "title": "HarborStatus端口可连不等于镜像仓库功能正常",
       "path": "04_Zot_Harbor与镜像仓库/REG-13.md",
-      "status": "代码已验证",
+      "status": "历史代码已验证；截图确认多行粘贴拆分，已给整行命令，镜像存在性待验证",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "补充bitnami/neo4j:5.26.28的manifest HEAD只读查询与200/404/401/403、连接失败边界。Web源码固定444目标及rewriteImageToRegistry保留路径已核对；KK要求显式registry.auths，Web常量不等于Zot通用默认密码。用户截图显示多行粘贴含空行，curl报无URL、-u/-H报command not found、URL被独立执行，确认Shell拆分，未取得仓库HTTP响应，不能判断认证、网络或镜像存在性。已给保留四种Accept及超时等参数的整行命令和反斜杠续行规则，修正后结果待回传。仅密码占位，未直接连接现场，拉取和运行未验证。",
       "sources": [
         {
           "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",
@@ -1550,13 +1662,15 @@
       "id": "BK-16",
       "title": "Neo4j升级5.26.28后从离线dump改为APOC在线导出",
       "path": "06_Web备份恢复与导入/BK-16.md",
-      "status": "2026-10-21源码已核对，端到端备份与恢复待验证",
+      "status": "APOC在线备份代码历史已核对；客户Web导出阶段exec错误待定位",
       "sources": [
         {
           "session_id": "01a0eba7-7f86-7033-a5f3-e6ef05de1a2f",
           "session_start": "2026-09-29"
         }
-      ]
+      ],
+      "source_checked_at": "2026-10-29",
+      "verification_note": "2026-10-29只读核对当前Web release/290fd15：9月30日db0a020将离线dump改为APOC，06e31fe对齐Chart服务/Pod标签，4c8d515允许空导出文件；当前sh -s导出调用仍来自db0a020。10月22日a0a4095对文件的主要变化是StarRocks，Neo4j导出及前置校验未新增exec修复；本轮客户Pod配置处理也未改业务代码。客户日志进入Exporting后exec报空白服务端错误，尚不能判断APOC已调用或客户二进制具体版本，完整Web归档恢复仍待验证。"
     },
     {
       "id": "BK-17",
@@ -1606,7 +1720,9 @@
       "id": "BK-20",
       "title": "MySQL导入不能复用为PostgreSQL/pgvector导入",
       "path": "06_Web备份恢复与导入/BK-20.md",
-      "status": "历史功能验证",
+      "status": "历史脚本HTTP双库恢复通过；11-02截图custom来源未明，脚本SQL分支未复现该错误，默认全库/跨平台未测",
+      "source_checked_at": "2026-11-02",
+      "verification_note": "历史 custom/plain SQL 多库 HTTP、vector/HNSW 验证范围保留；2026-10-29 本地 release/290fd15 加未提交改动改为原生 pg_dumpall 多库 SQL/psql、custom pg_restore --create，不从文件名选库，不加 manifest，取消强制 vector，兼容仅全局 Roles 区已有角色的 CREATE 重复并保留其他错误及 ALTER ROLE。214 PostgreSQL17.9/pgvector0.8.3 上用独立测试角色和两个测试库真实运行当前导出脚本及 Go 生成器/ArchiveImport.Run：任意嵌套 .out 多库 SQL、任意 .data custom、任意 .txt pg_dump --create SQL 均按内嵌库定义恢复；已有库 custom 冲突和非法 SQL 两路径预期失败。五路径（三成功两预期失败）及双库逐字段指纹、行数、约束/序列/索引、vector0.8.3、中文最近邻及HNSW EXPLAIN均通过；每次私有包和恢复文件清理通过，最终测试库/角色/源容器/远端临时目录已清理，原postgres保留。只覆盖本轮测试样本；真实HTTP/JWT/PID/WebSocket及异步入口未测，2026-10-29实测时尚未发布Web。 2026-10-30七文件功能提交7df2d97已推送origin/release；用户授权代理合并后，从中央98af373创建临时worktree以no-ff合并为060648601381d5f24bcb5f5981fccc9bf1473236，无冲突，直接正常push中央Installation-package/g_web_installer release并用ls-remote核实，无PR。121在/root/wfweb/g_web_installer的release执行ff-only拉取到0606486，包含关系检查及CGO0三tags构建、替换成功；单次ss核对旧Web PID2715819及exe/cwd后精确停止，立即web_start.sh，exit0返回pid2963862。data、users.json删除状态和禁用Vue的router本地修改保留，未改KK；临时worktree移除。仅证明合并、构建与启动命令成功，未追加API/日志/版本/哈希/多轮进程检查，121 PostgreSQL HTTP/UI及真实异步恢复业务链路未测。 2026-10-30后续专项实测：121已发布新Web经正常POST/api/login认证，临时集群pgapi_1030_6f0daabb指向214现有PG17.9/pgvector0.8.3，不改原k8s_test/wfoff配置或214旧Web；原样执行docs/export_postgresql.sh，以--no-role-passwords/--no-tablespaces及精确排除非测试库生成2257B单postgresql.sql成员ZIP，SHA219884ad7fc438a46d51ff019e400de2655e14a4599e27237c94da6dc51a5bec，未改写SQL/ZIP。正式上传HTTP200/merged=true且包摘要一致，确认两测试库不存在后V2导入HTTP200返回真实PID2026-10-30_01-42-57.142_import_postgresql，通过真实WebSocket读取成功终态。两库分别customers3/orders2，逐字段及约束/序列/索引一致，源目标摘要分别375c8dd24de0a06af41f6677bc7a395d48b631281fb4055543390b091f5d4295和c9b3ebc8281223582d2ec2233b7b76fe8cdf0b8ce3c082111d47d46b76cf1626，vector0.8.3及HNSW EXPLAIN通过。十项检查true、驱动exit0/success=true/cleanup_errors=[]；测试库、角色、121临时集群含历史及临时psql工具已清理，原pg_roles非密码元数据与基线一致。覆盖正式认证/上传/HTTP异步/PID/WebSocket/实库恢复，不含UI，不扩展至214旧Web或121原配置；未记录登录账号、密码或Token。 214 Pod及宿主本轮私有目录（含ZIP/SQL/工具/helper）已精确删除；121客户端仅临时解包使用且已清理，未永久安装，原k8s_test仍无PG组件，不能据此认为日常原配置可直接导入。 2026-11-02客户真实失败截图新增边界：包成员pgsql_20261102/digispace.dump、192.168.10.254:30432连接成功；custom --create执行CREATE DATABASE postgres ENCODING UTF8 LOCALE_PROVIDER libc LOCALE Chinese (Simplified)_China.936，服务端invalid LC_COLLATE locale name、exit1，失败在建库阶段，不能认定数据已恢复。Windows风格locale仅提示可能跨平台，未直接核实源/目标OS；应在数据库服务端/Pod核对可用locale。归档原库名为postgres，文件名digispace不决定目标；维护库postgres已连接成功，修正locale后仍有同名建库冲突，禁止建议--clean或删除现有postgres。方案为先确认源业务库和目标，再用经业务确认且服务端支持的UTF8 locale建新空库，以不带--create的pg_restore -d指定恢复；locale可能改变排序/大小写/唯一约束，显式collation与扩展另核对。当前Web固定--create不支持此手动目标库流程；仅源码与截图分析，未改代码或操作用户目标集群，修复未验证。此前Linux同locale测试和pg_dumpall HTTP成功不覆盖本次组合，verified仅指历史实际成功场景。 2026-11-02用户随后澄清当前需求聚焦当前脚本原样生成包的导出和Web导入，未要求移除或禁止其他格式：Bash脚本调用pg_dumpall -h连接源服务器，ZIP只有postgresql.sql；截图digispace.dump走custom/pg_restore，来源未证实，不是当前脚本原样包，不能认定脚本SQL分支已复现。locale来自源PG服务端定义，Linux客户端不能排除远程Windows源或不同Linux locale差异。官方PG17 pg_dumpall默认不带--clean时连接已有postgres/template1导入内容，不CREATE DATABASE postgres，故custom原库名冲突不能套用SQL分支；业务库仍按源locale建库、内置库内容仍可能对象冲突。此前214正式HTTP脚本测试排除postgres/template0/template1且带--no-role-passwords/--no-tablespaces，不覆盖默认全库或跨平台。本轮仅只读代码/官方资料，未实施或验证优化；前述手动custom处理方向不属于用户确认的脚本原包需求。",
       "sources": [
         {
           "session_id": "01a01d0c-3c4a-7130-81fb-1abdc5c41eea",
@@ -1654,7 +1770,9 @@
       "id": "BK-23",
       "title": "MariaDB schema-sync缺USE和完全限定表名风险",
       "path": "06_Web备份恢复与导入/BK-23.md",
-      "status": "源码结论",
+      "status": "源码结论；2026-10-29补充上传、四接口、PID与恢复范围",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "本地release/934701b源码复核：prepare备份A并暂存B后生成差异，plan只下载，apply执行服务器计划且started后拒绝重放，restore删A∪B后导入prepare备份。URL始终用prepare PID，POST响应仅任务启动。B导入force告警不直接失败、完全限定引用未通用重写。数据包经POST /api/v1/files/:cluster上传，filename=mariadb_data.zip且省略task_id，merged=true后prepare；无真实上传HTTP或数据库验证，unverified。",
       "sources": [
         {
           "session_id": "01a04627-24b7-7301-bf0b-a002f6a815eb",
@@ -2525,6 +2643,51 @@
       "status": "待验证；已确认v3回退和MOUNT认证拒绝，源端口与认证策略需现场证据",
       "source_checked_at": "2026-10-21",
       "verification_note": "截图和本地源码确认v3已回退、MOUNT收到auth_stat=5；当前RPC未绑定保留源端口，但尚无现场导出配置或mountd日志，未修复或验证功能。",
+      "sources": []
+    },
+    {
+      "id": "KK-C12",
+      "title": "KK与Web的GPU节点隔离及模型服务调度设计",
+      "path": "02_集群运行时与网络/KK-C12.md",
+      "status": "方案设计（未实现）",
+      "source_checked_at": "2026-10-29",
+      "verification_note": "首次核对KK test/9a73986、Web release/39f55cd源码；用户随后明确同一集群1～2台GPU节点专用部署AI、其余为普通节点，本次按官方v1.32调度语义收敛设计。官方Example Use Cases明确列举专用节点与GPU等特殊硬件节点，属于典型污点用途；taint拒绝、toleration放行、标签加硬选址固定AI节点、GPU limits分配设备，污点不识别AI业务。建议GPU节点workload=ai标签及dedicated=ai:NoSchedule污点，AI工作负载精准容忍加硬选址，实际使用GPU的容器另申请GPU扩展资源；CPU辅助服务按明确业务分类安排。普通业务不容忍且校验宽泛容忍，必要基础节点组件明确例外，两类容量不足均不跨池回退。单机、全GPU与混用策略不在当前范围。2026-10-29源码复核确认HostCfg无Taints、节点配置只应用labels、roadmap的taints未完成，普通json.Unmarshal会忽略未知hosts[].taints；全局kubeletArgs可透传register-with-taints至未入群节点注册阶段，但为共用参数，不能只选1～2台GPU主机或更新已有Node；后置脚本可在有权限master执行kubectl taint指定节点，role选择执行机器，存在晚打污点窗口且不驱逐存量。首master KubeletConfiguration传入项被注释，不据RawExtension泛化逐节点支持。仍未改业务代码、未测试构建、未连接服务器或实测调度、未发布，metadata保持unverified。",
+      "sources": []
+    },
+    {
+      "id": "HELM-44",
+      "title": "组件安装在Greetings阶段因角色主机SSH地址为空失败",
+      "path": "03_Helm与组件部署/HELM-44.md",
+      "status": "实际日志与源码确认有效SSH地址为空；当前配置与修正后任务待验证",
+      "source_checked_at": "2026-10-30",
+      "verification_note": "2026-10-30用户提供121安装Neo4j真实InstallComponentsPipeline/GreetingsModule日志：k8s-master、k8s-worker成功，ssdf连接地址为空并报No address specified for SSH connection。源码确认Web复制完整集群配置作为任务快照，KK在组件部署前Greetings检查由roleGroups引用并去重的全部运行主机；有效SSH Address为空触发该错误。address空但internalAddress非空会默认回退，不能只凭address空认定；角色引用但hosts不存在则更早hostVerify失败，不是本次路径。实际集群名、PID、快照及源配置未读取；HELM-40历史同名空地址记录只作关联，不当成本次当前核验。处理方向核对任务快照与源配置：误填主机连同所有角色引用一致清理，真实节点补正确SSH地址；修正源后创建新任务。仅分析和本地归档，无业务/目标配置修改、远程、部署重启或重试，未验证恢复。",
+      "sources": []
+    },
+    {
+      "id": "BK-38",
+      "title": "Milvus分布式部署被Standalone备份校验拒绝",
+      "path": "06_Web备份恢复与导入/BK-38.md",
+      "status": "214实际包3库6集合600行及全部字段向量匹配；未恢复",
+      "source_checked_at": "2026-10-30",
+      "verification_note": "121的k8s_test Milvus立即备份返回remote validation failed: Process exited with status 1。只读核对121目标配置与校验源码、214当前milvus-16.0.2/Milvus2.6.0分布式部署，现场分步谓词证实kubectl和namespace通过、standalone匹配返回1、minio匹配通过。后续脚本也固定standalone Pod、milvus Service、MinIO9000服务端口和/export路径，与现场proxy、MinIO服务80及/bitnami/minio/data不符。根因已定位，未修改代码或配置、未部署重启、未执行备份恢复，实际功能仍待验证。 2026-10-30后续按用户授权核对121中央版本：Web源码与运行程序构建revision均0606486，已是origin/release最新；KK从9a73986快进到中央test/55e257a，make kk及复制到/g_web_installer/kk退出0，版本脚本GIT_MAJOR警告仍存在。随后核对8080旧进程归属并重启Web，启动脚本退出0并返回PID2998200。保留数据和配置，没有重测Milvus备份；不代表原兼容问题修复。 2026-10-30用户通过Web重新部署后再次报错，重新核对当前现场：PID2998200/revision0606486；Helm部署时间13:18:39+0800、Chart16.0.2/app2.6.0，新分布式Pod全部业务容器1/1Running；standalone谓词仍返回1，其他前置项通过。直接读取KK实际内嵌milvus.tgz确认默认分布式模板、无standalone模板，Web安装通过KK生成proxy，而Web备份仍要求standalone，安装与备份适配不一致。本轮仍仅定位和归档，未修改代码、部署配置或重启、未执行备份恢复。 2026-10-30用户授权优化并明确仅支持当前16.0.2/2.6.0分布式。本地Web实现统一Ready proxy/coordinator和实际Service/命名targetPort发现、只读解析最终渲染配置、保护stdin传参；官方milvus-backup0.5.14在控制节点UUID临时目录以local目标导出逻辑对象，检查五meta后归档回传。数据库过滤失败拒绝继续，移除旧standalone与MinIO物理卷打包。相关包测试和五类完整shellmock通过；214只读发现校验通过并实际覆盖tcp-api/80/targetPort=api映射。临时新增测试已删除，未改接口入参或URL。尚未提交发布、未重启121或执行真实备份恢复，verification_status保持unverified。 2026-10-30按用户明确提交发布指令，仅四个Web文件提交1538dcd并推个人origin/release；隔离工作区正常合入中央release并推送发布提交0be7ab1，未强推。121快进拉取后验证目标提交祖先关系，Web编译及替换退出0，核对8080旧进程归属后重启，启动脚本返回PID3007614且退出0。保留data、禁Vue router及原本地配置状态，未重发KK、未追加测试或真实备份恢复请求。发布启动完成，业务功能仍未验证。 2026-10-30用户再次手动立即备份PID2026-10-30_01-52-15.449_backup_milvus成功。只读检查实际execute.log确认create和归档完成且无GC失败警告；实际tar37188字节，SHA256为9714e72cffbbcaad5ee0ebd9e7f88ff31740ea06f429732b6723784811da2475，5meta和6非空binlog(42824字节)。目标default.web_backup_verify_20261030_gc、collectionID470112696659616506，对应一个segment元数据num_of_rows1000。verified仅指本次Web带数据备份、归档和GC告警修复，未还原或逐行验证binlog数据；本轮无代码变更、重发、备份触发或GC控制调用。 2026-10-30最新214新Web/新安装服务的备份准备：用户授权先插数、随后自己触发备份，并明确允许进程内复用214 Web安装配置中对应组件凭据，不输出另存。批次backupverify_20261030_155051。Neo4j实际5.26.28 Community、插数前0节点，neo4j库创建120节点(20客户40订单60商品)、180关系(40PLACED120CONTAINS20KNOWS)，含中文数组布尔数字原生DATE和ZONED DATETIME；3唯一约束及5相关索引ONLINE，全部属性类型和关系端点读回，图SHA256 64d951d8c8da40cf68e2aaa4ee230365fa5a73ac2e3f1ab176462ee417b59942。Community只支持单业务库，不把system或标签当多库。Milvus实际2.6.0，default及新建bkv_sales_20261030_155051、bkv_docs_20261030_155051三个数据库，各有bkv_products_20261030_155051和bkv_documents_20261030_155051集合，均100行，共6集合600行，含8维向量、Int64、VarChar、Double、Bool、JSON及Array。各集合Strong查询100行，解包REST JSON/ARRAY表现后全部字段及向量逐项匹配并保存哈希；保留已完成集合，不删除或重复覆盖现有数据。214的/root/backup-validation-20261030_155051下保存baseline-summary.json、neo4j-baseline.json、milvus-baseline.json，0600，15:58:31完成。不含凭据，无常驻临时脚本，未触发备份恢复或改部署代码；本轮新归档与还原仍待用户触发后验证，不能复用历史归档替代。 2026-10-30用户要求交付121固定插数/清库脚本，并提供214 Web手动备份日志。已交付/root/wfweb/shscript/insert_neo4j.sh、insert_milvus.sh、clear_neo4j.sh、clear_milvus.sh，数据及214连接参数、已授权实际凭据按用户明确要求写死，仅四脚本保存凭据且0700，不在归档输出值。Bash及121 Python3.6语法通过；四脚本--check全部实跑只读通过，未执行清库或备份后插数写分支。Neo4j清理范围为neo4j业务库图数据/约束/非LOOKUP索引，保留system账号；Milvus为default和本批次两个bkv测试库，其他数据库保留。214实际新包Neo4j5284字节/SHA230da5dbafffc121c8845776b81337af55f7fb20a04d17c8a802ad0160a7cc85，静态完整匹配120节点180关系全部标签属性原生类型及端点，图SHA64d951d8c8da40cf68e2aaa4ee230365fa5a73ac2e3f1ab176462ee417b59942，3约束2普通索引定义保留，普通索引名未导出。Milvus28746字节/SHA833fb4832c335c69e70ef5fe8183d84132ad5f419cd934e2d85a31ca0521c9f7，5元数据61binlog全部结构和引用检查，真实Parquet+ARRAY protobuf解码，3库6集合600行所有字段、JSON数组及4800向量分量逐条匹配六份原基线摘要。100条upsert delta与插入同时间戳，按v2.6.0 DeletedRecord.h忽略相同时间戳删除规则处理，保持600有效行；浮点JSON编码差异仅作等值规范化。源服务、原归档未改，没有清库或恢复；结果在214 /root/backup-validation-20261030_155051/backup-files-validation.json，临时校验代码及离线依赖随后清理。",
+      "sources": []
+    },
+    {
+      "id": "BK-39",
+      "title": "Milvus备份GC管理地址误选coordinator导致404",
+      "path": "06_Web备份恢复与导入/BK-39.md",
+      "status": "真实带数据备份及GC告警修复已验证；恢复与还原后一致性未测",
+      "source_checked_at": "2026-10-30",
+      "verification_note": "用户真实手动Milvus备份在工具0.5.15下create成功并生成403字节归档，但GC pause/resume返回404。官方Milvus2.6.0源码确认管理HTTP入口在proxy，发布代码错误选择coordinatorIP。读取实际记录及tar：五metadata、1database、0collection/binlog、size0，不能证明业务数据恢复。proxy纯节点列表查询通过。最初OPTIONS探测因handler不限制method可能执行resume，已停止此类控制路径探测并如实记录。本地改用proxyService实际HTTP端口，针对性临时测试通过后删除；尚未提交发布、未重新备份或恢复，功能状态unverified。 2026-10-30用户授权提交发布并写测试数据：仅GC源文件提交21b5aa0并推个人release，中央release合并0a59b63；121快进后编译替换与启动命令退出0，新PID3013004，保留配置data及无关.gitignore。随后REST在default新建web_backup_verify_20261030_gc并分5批写1000条8维向量、中文text与batch，Strong count1000，全1000行读回一致，向量检索top1=1；源与读回摘要均67009672c772f3a7a56a32697307d753559a421b1299120b62136ddcce004a81。flush接受后初始stats0，后续有界只读检查stats已1000。原集合保留，无drop、新Pod或额外依赖；未再调用GC控制、未触发修正后备份或恢复，功能状态仍unverified。 2026-10-30用户再次手动立即备份PID2026-10-30_01-52-15.449_backup_milvus成功。只读检查实际execute.log确认create和归档完成且无GC失败警告；实际tar37188字节，SHA256为9714e72cffbbcaad5ee0ebd9e7f88ff31740ea06f429732b6723784811da2475，5meta和6非空binlog(42824字节)。目标default.web_backup_verify_20261030_gc、collectionID470112696659616506，对应一个segment元数据num_of_rows1000。verified仅指本次Web带数据备份、归档和GC告警修复，未还原或逐行验证binlog数据；本轮无代码变更、重发、备份触发或GC控制调用。",
+      "sources": []
+    },
+    {
+      "id": "BK-40",
+      "title": "Neo4j空库立即备份与测试图数据基线",
+      "path": "06_Web备份恢复与导入/BK-40.md",
+      "status": "214实际Neo4j包120节点180关系全量匹配；脚本已交付",
+      "source_checked_at": "2026-10-30",
+      "verification_note": "用户k8s_test Neo4j5.26.28空库立即备份日志145字节后授权插入数据，随后由用户手动备份。实际预查节点0关系0，通过121调用现有HTTP NodePort30030，在neo4j库原子创建batch=neo4j_backup_verify_20261030的100节点(20客户30订单50商品)、140关系(30下单90明细20推荐)。包含中文、数值、布尔、数组和原生日期，全量标签属性端点及日期类型验证通过；源/读回规范化SHA256均1101c051ce43934bc9aa94e823c37cca11ede062b53bd33fa7c0fac2fedaf63c。认证仅复用已知组件配置在内存，无输出保存；数据保留，无drop、索引约束、新Pod、代码发布或备份恢复操作。unverified限后续用户新备份与恢复尚未验证。 2026-10-30用户新手动备份PID2026-10-30_01-58-42.987_backup_neo4j的实际包已只读核对：4167字节，归档SHA256为9d48a2540d3d4be1a470634f95e8a5bf0f5578bf94ca4a208671aa42ae3d9b26，单一neo4j.cypher47526字节/58行，gzip检查通过。受限静态解析APOC UNWIND记录，逐对象比较100节点140关系全部标签属性及端点，日期表达式100/140保留，规范化图SHA256与写入/读回基线同为1101c051ce43934bc9aa94e823c37cca11ede062b53bd33fa7c0fac2fedaf63c。独立静态复核一致。verified仅限实际导出归档与包内数据静态匹配，未执行Cypher或还原、未修改原文件/集群数据、未重备份或发布重启。 2026-10-30最新214新Web/新安装服务的备份准备：用户授权先插数、随后自己触发备份，并明确允许进程内复用214 Web安装配置中对应组件凭据，不输出另存。批次backupverify_20261030_155051。Neo4j实际5.26.28 Community、插数前0节点，neo4j库创建120节点(20客户40订单60商品)、180关系(40PLACED120CONTAINS20KNOWS)，含中文数组布尔数字原生DATE和ZONED DATETIME；3唯一约束及5相关索引ONLINE，全部属性类型和关系端点读回，图SHA256 64d951d8c8da40cf68e2aaa4ee230365fa5a73ac2e3f1ab176462ee417b59942。Community只支持单业务库，不把system或标签当多库。Milvus实际2.6.0，default及新建bkv_sales_20261030_155051、bkv_docs_20261030_155051三个数据库，各有bkv_products_20261030_155051和bkv_documents_20261030_155051集合，均100行，共6集合600行，含8维向量、Int64、VarChar、Double、Bool、JSON及Array。各集合Strong查询100行，解包REST JSON/ARRAY表现后全部字段及向量逐项匹配并保存哈希；保留已完成集合，不删除或重复覆盖现有数据。214的/root/backup-validation-20261030_155051下保存baseline-summary.json、neo4j-baseline.json、milvus-baseline.json，0600，15:58:31完成。不含凭据，无常驻临时脚本，未触发备份恢复或改部署代码；本轮新归档与还原仍待用户触发后验证，不能复用历史归档替代。 2026-10-30用户要求交付121固定插数/清库脚本，并提供214 Web手动备份日志。已交付/root/wfweb/shscript/insert_neo4j.sh、insert_milvus.sh、clear_neo4j.sh、clear_milvus.sh，数据及214连接参数、已授权实际凭据按用户明确要求写死，仅四脚本保存凭据且0700，不在归档输出值。Bash及121 Python3.6语法通过；四脚本--check全部实跑只读通过，未执行清库或备份后插数写分支。Neo4j清理范围为neo4j业务库图数据/约束/非LOOKUP索引，保留system账号；Milvus为default和本批次两个bkv测试库，其他数据库保留。214实际新包Neo4j5284字节/SHA230da5dbafffc121c8845776b81337af55f7fb20a04d17c8a802ad0160a7cc85，静态完整匹配120节点180关系全部标签属性原生类型及端点，图SHA64d951d8c8da40cf68e2aaa4ee230365fa5a73ac2e3f1ab176462ee417b59942，3约束2普通索引定义保留，普通索引名未导出。Milvus28746字节/SHA833fb4832c335c69e70ef5fe8183d84132ad5f419cd934e2d85a31ca0521c9f7，5元数据61binlog全部结构和引用检查，真实Parquet+ARRAY protobuf解码，3库6集合600行所有字段、JSON数组及4800向量分量逐条匹配六份原基线摘要。100条upsert delta与插入同时间戳，按v2.6.0 DeletedRecord.h忽略相同时间戳删除规则处理，保持600有效行；浮点JSON编码差异仅作等值规范化。源服务、原归档未改，没有清库或恢复；结果在214 /root/backup-validation-20261030_155051/backup-files-validation.json，临时校验代码及离线依赖随后清理。",
       "sources": []
     }
   ]

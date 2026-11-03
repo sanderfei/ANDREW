@@ -1,0 +1,17 @@
+{
+  "title": "ES Chart混入AppleDouble元数据导致Helm拒绝加载",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "online",
+    "offline"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-03",
+  "verification_note": "2026-10-28仅只读取证：214现场tgz34854字节/186成员、roots为._elasticsearch与elasticsearch，93个AppleDouble条目，首条magic/version0005160700020000，sha25651194b5e01bd2ed844b96f671aadbfc1b73d53bb927e188e3f6da9b2922b61b4；确认顶层元数据普通成员触发Helm归档loader的outside-base错误。本地与121 test/9a73986源码tgz均32108字节/93成员、f1636765...且干净，不能混为现场坏包来源；实际KK内嵌包和214Chart/CLI版本未查。未清理重打包、测试构建、Helm安装或发布，来源与修复后功能待验证。 2026-11-03用户日志实际为214 RabbitMQ chart根条目._rabbitmq被拒绝、5次失败；现场helm v3.18.5及helm show chart确认RabbitMQ和ES两现场包均无法加载。RabbitMQ现场SHA256 013fb844621c9052fd93df4637c1604c1205b996c269f4572e536203de117bda；ES现场51194b5e01bd2ed844b96f671aadbfc1b73d53bb927e188e3f6da9b2922b61b4。当前本地KK ES源码包与现场同SHA且含._elasticsearch，本地RabbitMQ包5bb7be57c2be0d717445c1893e4a2f0d8a78ab35cbeadc4950a7f2fe10f3f5bd且无._，区别于历史源码快照。KK源码通过go:embed释放复制tgz，实际运行KK内嵌内容及污染来源未确认。未修改或重试，待修复权威制品、交付和功能验证。 2026-11-03后续本地KK elasticsearch.tgz剔除93个._元数据，保留93个条目路径、类型、权限、链接及内容哈希与原包一致；原同级解压目录values.yaml含未打包修改，保留未覆盖且未加入归档。214 Helm3.18.5经匿名内存文件对修复包执行helm show chart和helm template均成功，渲染8个YAML文档；未构建、发布或安装，现场旧包与实际执行KK尚未修复，RabbitMQ制品处理及真实功能待验证。"
+}

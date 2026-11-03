@@ -1,0 +1,16 @@
+{
+  "title": "pgvector 已完成 Job 检查的 JSONPath 引号丢失导致组件安装失败",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-03",
+  "verification_note": "2026-11-03用户提供组件安装日志，已有 pgvector Job 检查时因嵌套 shell 使 JSONPath 中 Complete 的引号丢失，kubectl 报 unrecognized identifier Complete。日志中的旧 Job Complete=True、succeeded=1，不证明当前数据库扩展状态。KK 源码已为 PgvectorRun.PreCheck 的双引号增加跨 shell 转义，保持原判断语义；隔离测试通过真实 PreCheck、SudoPrefix 和两层 shell，模拟完成、未完成、失败、无条件及 NotFound 场景，临时测试已删除。现场 KK 版本未核实，未构建发布或访问现场，实际功能和恢复未验证。"
+}

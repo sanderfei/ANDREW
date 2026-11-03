@@ -10,5 +10,7 @@
   "install_modes": [
     "offline"
   ],
-  "verification_status": "unverified"
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-29",
+  "verification_note": "补充444离线Zot中bitnami/neo4j:5.26.28的只读manifest HEAD查询；Web目标及名称映射、KK显式认证要求已核对。用户截图显示多行粘贴含空行，curl未接收URL且-u/-H/URL被当作独立命令；确认Shell拆分，未取得仓库HTTP响应，不能判断镜像存在、认证或网络。已给等价整行命令及续行规则，修正后结果待回传。未直接连接现场，命令认证脱敏，拉取及运行未验证。"
 }

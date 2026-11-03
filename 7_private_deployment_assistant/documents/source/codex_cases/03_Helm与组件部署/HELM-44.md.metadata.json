@@ -1,0 +1,16 @@
+{
+  "title": "组件安装在Greetings阶段因角色主机SSH地址为空失败",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-30",
+  "verification_note": "2026-10-30用户提供121安装Neo4j真实InstallComponentsPipeline/GreetingsModule日志：k8s-master、k8s-worker成功，ssdf连接地址为空并报No address specified for SSH connection。源码确认Web复制完整集群配置作为任务快照，KK在组件部署前Greetings检查由roleGroups引用并去重的全部运行主机；有效SSH Address为空触发该错误。address空但internalAddress非空会默认回退，不能只凭address空认定；角色引用但hosts不存在则更早hostVerify失败，不是本次路径。实际集群名、PID、快照及源配置未读取；HELM-40历史同名空地址记录只作关联，不当成本次当前核验。处理方向核对任务快照与源配置：误填主机连同所有角色引用一致清理，真实节点补正确SSH地址；修正源后创建新任务。仅分析和本地归档，无业务/目标配置修改、远程、部署重启或重试，未验证恢复。 同日用户明确授权修复后，实际核对121运行Web为/root/wfweb/g_web_installer/server且cwd同目录，唯一k8s_test源配置；用户日志00:13:12精确匹配2026-10-30_00-13-12.033_install_component快照及execute.log，确认同一ssdf空地址和control-plane/nfs引用。仅从源配置删除ssdf主机块及这两处角色引用共3段，保留214/215真实主机、nfs215、worker双主机和registry空组；候选全文语义符合仅删除预期，hash并发保护后原子替换，owner和0644保留，写后字节与结构复核通过。未保存凭据、未建备份、未改history快照、业务代码或二进制，未重启或重跑安装。源配置已修正且角色引用有效，安装功能仍待新任务验证，保持unverified。"
+}

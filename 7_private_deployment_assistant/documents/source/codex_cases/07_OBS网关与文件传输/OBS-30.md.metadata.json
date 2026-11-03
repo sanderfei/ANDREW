@@ -1,0 +1,16 @@
+{
+  "title": "121版本包下载ENOSPC与保留组件的磁盘清理",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-10-29",
+  "verification_note": "121清盘/旧任务83109a4c及下载history删除事实保持；旧任务五包CDN及三镜像预检未再ENOSPC，最终配置缺失失败。镜像逐包清理/按组件readiness跳过策略已42bbcb8经PR428合a024faf并完成121Web编译替换启动PID2689696，保留data及本地配置调整。没有新下载/导入或追加清理，既有空间快照不作为新业务保证，导入恢复仍unverified。 后续按版本接口历史下载清理授权，121仅删k8s_test/obs-import下5旧目录尾9cbcbe01/84d952cb/c808436d/58978c3f/7c272993；2有Completed、3无日志且mtime早于当前Web启动，全部无proc引用并验证realpath。SSH0、5路径不存在，移除约4.210GiB，free52.41到56.62GiB；两history日志inode/size及config inode/size/mtime保持，Web仍2715819未重启。此次保留history，未新导入或改代码，业务恢复unverified。"
+}
