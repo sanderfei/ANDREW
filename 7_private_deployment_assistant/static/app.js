@@ -10,7 +10,7 @@ let remoteBusy = false;
 // 连接句柄仅保留在页面内存；密码从不写入 state、消息或 localStorage。
 const remoteConnections = new Map();
 const workflowLabels = {
-  needs_information: "等待补充关键信息", framework_ready: "框架模式",
+  needs_information: "等待补充关键信息", framework_ready: "历史框架响应",
   awaiting_evidence: "等待现场证据", awaiting_verification: "方案待功能复测",
   awaiting_remote_authorization: "等待授权只读远程诊断",
   resolved: "问题已确认解决", collecting_evidence: "正在采集现场信息",
@@ -577,7 +577,7 @@ async function loadEvaluations() {
     if (!breakdown.childElementCount) {
       const empty = document.createElement("p");
       empty.className = "field-help";
-      empty.textContent = "尚无模型用量记录。框架模式不会调用 GLM；模型未返回用量时也不会编造 Token 数。";
+      empty.textContent = "尚无模型用量记录。模型未返回用量时不会编造 Token 数。";
       breakdown.append(empty);
     }
     const list = document.getElementById("trace-list");
@@ -656,12 +656,9 @@ async function loadWorkspace() {
     const response = await fetch("/api/workspace");
     if (!response.ok) throw new Error();
     const workspace = await response.json();
-    const live = workspace.mode === "glm";
-    document.getElementById("assistant-mode").textContent = live ? "GLM 模式" : "LangGraph 框架";
-    document.getElementById("assistant-summary").textContent = live ? "GLM 问答 · 只读远程诊断" : "框架模式 · 只读远程诊断";
-    document.getElementById("assistant-scope").textContent = live
-      ? "发送问题将调用配置的 GLM 与检索服务。可单独授权只读诊断，复测确认后整理案例并尝试入库。"
-      : "框架模式按规则整理信息，不调用 GLM。远程诊断需单独授权，案例入库需要本地数据库和向量模型。";
+    document.getElementById("assistant-mode").textContent = "GLM 问答";
+    document.getElementById("assistant-summary").textContent = "GLM 问答 · 只读远程诊断";
+    document.getElementById("assistant-scope").textContent = "发送问题将调用配置的 GLM 与检索服务。可单独授权只读诊断，复测确认后整理案例并尝试入库。";
     renderDocuments(workspace.documents);
     const matrix = document.getElementById("support-matrix"); matrix.replaceChildren();
     Object.entries(workspace.support_matrix).forEach(([version, systems]) => {

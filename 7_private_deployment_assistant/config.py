@@ -46,7 +46,7 @@ class VectorSettings:
 
 @dataclass(frozen=True)
 class AssistantSettings:
-    mode: str = "framework"
+    mode: str = "glm"
     model: str = "glm-4-flash"
     base_url: str = "https://open.bigmodel.cn/api/paas/v4/"
     api_key: str = field(default="", repr=False)
@@ -128,7 +128,7 @@ def load_business_settings(config_path: Path | None = None) -> BusinessSettings:
 
 
 def load_assistant_settings(config_path: Path | None = None) -> AssistantSettings:
-    """默认只运行框架；密钥不会写入 TOML，也不会出现在配置对象 repr 中。"""
+    """读取助手配置；密钥不会写入 TOML，也不会出现在配置对象 repr 中。"""
     path = Path(config_path) if config_path is not None else PROJECT_DIR / "config.toml"
     with path.open("rb") as stream:
         config = tomllib.load(stream)
@@ -153,8 +153,8 @@ def load_assistant_settings(config_path: Path | None = None) -> AssistantSetting
         top_k=int(assistant.get("top_k", defaults.top_k)),
         max_remote_rounds=int(assistant.get("max_remote_rounds", defaults.max_remote_rounds)),
     )
-    if settings.mode not in {"framework", "glm"}:
-        raise ValueError("assistant.mode 只能为 framework 或 glm。")
+    if settings.mode != "glm":
+        raise ValueError("assistant.mode 只能为 glm；framework 模式已移除。")
     if not isinstance(settings.model, str) or not settings.model.strip():
         raise ValueError("必须配置聊天模型名称。")
     if not isinstance(settings.base_url, str) or not settings.base_url.strip():

@@ -26,8 +26,8 @@ chunk_overlap = 120
 allowed_roots = ["documents/source"]
 
 [assistant]
-# framework：只演示流程，不调用真实模型或向量库；改为 glm 才启用真实问答。
-mode = "framework"
+# 问答使用 GLM 和向量检索。
+mode = "glm"
 # 下列模型和地址可被 ZHIPU_CHAT_MODEL、ZHIPU_BASE_URL 覆盖。
 # 密钥仅从 ZHIPU_API_KEY 读取，不要写入此文件。
 # 环境优先级：进程环境 > runtime/local.env > 仓库根目录 .env。

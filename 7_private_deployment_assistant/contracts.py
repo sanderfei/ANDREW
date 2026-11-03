@@ -57,7 +57,7 @@ class AssistantResponse(BaseModel):
     workflow_status: Literal[
         "needs_information", "framework_ready", "awaiting_evidence", "awaiting_verification",
         "awaiting_remote_authorization", "resolved"
-    ] = "framework_ready"
+    ]
     retrieval_status: Literal["not_run", "matched", "no_matches"] = "not_run"
     steps: list[str] = Field(default_factory=list)
     sources: list[dict] = Field(default_factory=list)

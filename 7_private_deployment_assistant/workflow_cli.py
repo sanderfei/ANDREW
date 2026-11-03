@@ -16,7 +16,7 @@ from workflows.assistant import AssistantWorkflow, WorkflowExecutionError
 # graph：输出实际 Mermaid 图；sessions：读取服务端会话。
 # ask "问题" [--thread-id 会话ID] [--request-id 请求ID]：同 thread 续聊，同请求ID重试。
 # ask 环境参数：--k8s 1.23.10/1.32.8、--os Ubuntu/CentOS、--install-mode online/offline。
-# 顶级 --mode framework/glm 放在子命令前；glm 会访问真实模型和向量库。
+# 问答会访问真实模型和向量库；可选 --mode glm 放在子命令前。
 # metrics [--thread-id ID]：Token/费用统计；jobs [--thread-id ID]：持久入库任务。
 # langfuse-status [--check]：查看上报配置；--check 才连接平台检查项目认证。
 # verify ID --root-cause "明确根因" --step "实际步骤" [--step "另一步"]
@@ -25,7 +25,7 @@ from workflows.assistant import AssistantWorkflow, WorkflowExecutionError
 # 示例：.venv/bin/python 7_private_deployment_assistant/workflow_cli.py ask "离线安装失败" --thread-id demo-7
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("framework", "glm"))
+    parser.add_argument("--mode", choices=("glm",))
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("graph")
     ask = commands.add_parser("ask")

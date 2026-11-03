@@ -60,20 +60,20 @@ class AssistantWorkflow:
         builder = StateGraph(WorkflowState)
         for name in (
             "prepare_input", "check_information", "ask_for_information", "retrieve_documents",
-            "framework_pending", "assess_evidence", "answer_from_cases", "diagnose",
+            "assess_evidence", "answer_from_cases", "diagnose",
             "request_evidence", "validate_citations", "await_verification", "collect_remote_evidence",
             "verify_resolution", "publish_case",
         ):
             builder.add_node(name, getattr(self, f"_{name}"))
         builder.add_conditional_edges(START, lambda state: state.get("action", "message"),
                                       {"message": "prepare_input", "verify_resolution": "verify_resolution"})
+        # 仅为旧检查点保留节点名；新工作流没有指向此节点的边。
+        builder.add_node("framework_pending", self._obsolete_framework_pending)
         builder.add_edge("prepare_input", "check_information")
         builder.add_conditional_edges("check_information", lambda state: bool(state["missing_information"]),
                                       {True: "ask_for_information", False: "retrieve_documents"})
         builder.add_edge("ask_for_information", END)
-        builder.add_conditional_edges("retrieve_documents", lambda state: self.settings.mode,
-                                      {"framework": "framework_pending", "glm": "assess_evidence"})
-        builder.add_edge("framework_pending", END)
+        builder.add_edge("retrieve_documents", "assess_evidence")
         builder.add_conditional_edges("assess_evidence", lambda state: state["assessment"]["sufficient"],
                                       {True: "answer_from_cases", False: "diagnose"})
         builder.add_edge("answer_from_cases", "validate_citations")
@@ -95,6 +95,10 @@ class AssistantWorkflow:
 
     def _diagnosis_route(self, state: WorkflowState) -> str:
         if state["draft"].get("proposed_solution"):
+    @staticmethod
+    def _obsolete_framework_pending(state: WorkflowState):
+        raise WorkflowExecutionError("旧框架模式请求无法继续，请使用新的 request_id 重新提问。")
+
             return "solution"
         checks = state["draft"].get("requested_checks", [])
         unseen = [check for check in checks if _json(check) not in state.get("executed_checks", [])]
@@ -110,7 +114,7 @@ class AssistantWorkflow:
         except Exception:
             raise WorkflowExecutionError("聊天模型初始化失败，请检查 ZHIPU_API_KEY、接口地址与模型配置。") from None
         if self._model is None:
-            raise WorkflowExecutionError("当前框架模式未启用聊天模型。")
+            raise WorkflowExecutionError("聊天模型不可用，请检查模型配置。")
         parser = PydanticOutputParser(pydantic_object=schema)
         chain = prompt.partial(format_instructions=parser.get_format_instructions()) | self._model | parser
         try:
@@ -119,39 +123,11 @@ class AssistantWorkflow:
             raise WorkflowExecutionError("模型调用或结构化输出解析失败，请检查模型配置与服务。") from None
 
     def _prepare_input(self, state: WorkflowState, config: RunnableConfig):
-        if self.settings.mode == "glm":
-            analysis = self._structured(ANALYZE_INPUT, InputAnalysis, {
-                "question": state["question"], "context": _json(state["context"]),
-                "history": _history_messages(state["history"]),
-                "evidence": self._model_evidence(state),
-            }, config)
-        else:
-            # 框架模式只做规则演示，不伪装成模型分析或现场事实。
-            context = {}
-            conflicts = []
-            texts = [item["content"] for item in state["history"] if item["role"] == "user"] + [state["question"]]
-            for text in texts:
-                versions = re.findall(r"(?<![\d.])1\.(?:23\.10|32\.8)(?![\d.])", text)
-                if versions:
-                    context["kubernetes_version"] = versions[-1]
-                for pattern, field, value in (
-                    (r"ubuntu", "operating_system", "Ubuntu"), (r"centos", "operating_system", "CentOS"),
-                    (r"离线|\boffline\b", "install_mode", "offline"), (r"在线|\bonline\b", "install_mode", "online"),
-                ):
-                    if re.search(pattern, text, re.I):
-                        context[field] = value
-            for field in ("kubernetes_version", "operating_system", "install_mode"):
-                confirmed = state.get("explicit_context", {}).get(field)
-                if confirmed is not None:
-                    if field in context and context[field] != confirmed:
-                        conflicts.append(f"环境摘要与用户描述中的 {field} 不一致，请确认实际环境。")
-                    context[field] = confirmed
-            is_fault = bool(re.search(r"失败|报错|异常|无法|故障|error|exception|backoff|timeout", state["question"], re.I))
-            labels = {"kubernetes_version": "Kubernetes 版本", "operating_system": "操作系统", "install_mode": "在线或离线部署方式"}
-            missing = [f"请补充{label}。" for key, label in labels.items() if is_fault and not context.get(key)]
-            missing.extend(conflicts)
-            analysis = InputAnalysis(summary=state["question"][:1500], query=state["question"][:2000],
-                                     environment=context, missing_information=missing, is_fault=is_fault)
+        analysis = self._structured(ANALYZE_INPUT, InputAnalysis, {
+            "question": state["question"], "context": _json(state["context"]),
+            "history": _history_messages(state["history"]),
+            "evidence": self._model_evidence(state),
+        }, config)
         extracted = analysis.environment.model_dump(exclude_none=True)
         missing = list(analysis.missing_information)
         for field, value in extracted.items():
@@ -171,12 +147,9 @@ class AssistantWorkflow:
 
     def _ask_for_information(self, state: WorkflowState):
         lines = "\n".join(f"{number}. {question}" for number, question in enumerate(state["missing_information"], 1))
-        prefix = "框架模式按规则识别了当前描述。" if self.settings.mode == "framework" else "继续判断前，需要补充以下信息："
-        return _update("ask_for_information", workflow_status="needs_information", answer=f"{prefix}\n{lines}\n请在当前会话继续补充。")
+        return _update("ask_for_information", workflow_status="needs_information", answer=f"继续判断前，需要补充以下信息：\n{lines}\n请在当前会话继续补充。")
 
     def _retrieve_documents(self, state: WorkflowState):
-        if self.settings.mode == "framework":
-            return _update("retrieve_documents", retrieval_status="not_run", documents=[])
         filters = {key: state["context"][field] for key, field in (
             ("kubernetes_versions", "kubernetes_version"), ("operating_systems", "operating_system"),
             ("install_modes", "install_mode"),
@@ -197,14 +170,6 @@ class AssistantWorkflow:
                 except Exception:
                     logging.getLogger(__name__).warning("检索资源释放失败。")
         return _update("retrieve_documents", documents=documents, retrieval_status="matched" if documents else "no_matches")
-
-    def _framework_pending(self, state: WorkflowState):
-        environment = _json({key: value for key, value in state["context"].items() if value is not None})
-        return _update("framework_pending", workflow_status="framework_ready", answer=(
-            f"LangGraph 工作流框架已运行。\n当前问题：{state['query']}\n已知环境：{environment}\n\n"
-            "下一步将按环境检索文档，再判断是复用案例还是进入 GLM 诊断。\n"
-            "当前为 framework 模式：未执行向量检索、未调用 GLM，也没有连接主机或生成故障诊断结论。\n"
-            "配置 assistant.mode=glm 后启用检索与模型分析。远程授权、功能验证、案例归档和执行记录已有独立业务入口。"))
 
     def _assess_evidence(self, state: WorkflowState, config: RunnableConfig):
         if not state["documents"]:
@@ -357,6 +322,8 @@ class AssistantWorkflow:
                     and not snapshot.next and snapshot.values.get("answer") and snapshot.values.get("workflow_status")):
                 response = self._save_result(request, request.request_id, history, snapshot.values, snapshot.values.get("trace_id"))
                 self.business.observability.finalize_recovered(response.trace_id, response.answer, response.workflow_status)
+            if request.request_id and snapshot.values.get("request_id") == request.request_id and "framework_pending" in snapshot.next:
+                raise WorkflowExecutionError("旧框架模式请求无法继续，请使用新的 request_id 重新提问。")
                 return response
             if request.action == "verify_resolution" and (request.verification is None or request.verification.thread_id != request.thread_id):
                 raise WorkflowExecutionError("解决验证请求缺少信息，或不属于当前会话。")

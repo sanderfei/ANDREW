@@ -16,21 +16,21 @@ LangChain 负责提示词、模型和结构化输出，LangGraph 负责节点、
 
 Web 地址为 <http://127.0.0.1:8070>。`graph` 输出实际 Mermaid，不调用模型、SSH 或向量库；
 构造工作流会初始化本地 SQLite 和案例目录。
-默认 `[assistant].mode="framework"` 不调用聊天模型、Embedding 或向量检索，可以学习追问流程：
+问答需要准备数据库、已录入资料和模型密钥，以下命令会调用真实模型，并在信息足够时检索资料：
 
 ```bash
 .venv/bin/python 7_private_deployment_assistant/workflow_cli.py ask "离线安装失败" --thread-id demo-7 --request-id turn-1
 .venv/bin/python 7_private_deployment_assistant/workflow_cli.py ask "1.32.8，Ubuntu，添加节点出现 ImagePullBackOff" --thread-id demo-7
 ```
 
-真实问答需要准备数据库、已录入资料和模型密钥，再显式选择 GLM 模式：
+也可在提交问题时直接给出环境信息：
 
 ```bash
 # 会访问实际模型和向量库，可能产生模型调用费用。
-.venv/bin/python 7_private_deployment_assistant/workflow_cli.py --mode glm ask "离线添加节点出现 ImagePullBackOff，下一步检查什么？" --thread-id incident-7 --request-id incident-7-turn-1 --k8s 1.32.8 --os Ubuntu --install-mode offline
+.venv/bin/python 7_private_deployment_assistant/workflow_cli.py ask "离线添加节点出现 ImagePullBackOff，下一步检查什么？" --thread-id incident-7 --request-id incident-7-turn-1 --k8s 1.32.8 --os Ubuntu --install-mode offline
 ```
 
-顶级 `--mode framework/glm` 放在子命令前。GLM 读取 `ZHIPU_API_KEY`、`ZHIPU_CHAT_MODEL`、`ZHIPU_BASE_URL`，
+GLM 读取 `ZHIPU_API_KEY`、`ZHIPU_CHAT_MODEL`、`ZHIPU_BASE_URL`，
 优先级为进程环境、教程 7 的 `runtime/local.env`、仓库根 `.env`。不要把密钥放入 TOML、对话或案例。
 
 ## 执行图
@@ -41,8 +41,7 @@ flowchart TD
     B --> C{关键资料是否完整}
     C -->|不足| D[ask_for_information 追问]
     C -->|足够| E[retrieve_documents]
-    E -->|framework| F[framework_pending 未执行真实检索]
-    E -->|glm| G[assess_evidence 判断案例适用性]
+    E --> G[assess_evidence 判断案例适用性]
     G -->|可复用| H[answer_from_cases]
     G -->|不足| I[diagnose 分析与选择检查]
     I -->|已授权且需取证| J[collect_remote_evidence 固定只读工具]
@@ -53,7 +52,7 @@ flowchart TD
     L --> M[await_verification 等待功能复测]
     M --> N[用户提交根因、实际步骤和复测证据]
     N --> O[verify_resolution]
-    O -->|未通过| M
+    O -->|未通过| T[结束本轮并等待补充复测证据]
     O -->|明确确认通过| P[publish_case 保存案例及任务]
     P --> Q[Web worker 或 CLI index-pending]
     Q -->|成功| R[案例可供后续检索]
@@ -164,7 +163,6 @@ Web 对应接口为 `GET /api/assistant/observability`，显式检查使用 `?ch
 LangGraph 节点、LangChain 模型调用和用户反馈关联到请求的远端 Trace，同一 `thread_id` 作为 Langfuse
 Session 聚合多轮请求；Session 不替代 LangGraph 检查点。已有实验父上下文时，工作流沿用其远端 Trace，
 每轮仍保留独立本地 `trace_id`；执行列表中的 `langfuse_trace_id`、`langfuse_observation_id` 用于定位远端记录。
-`framework` 模式也能记录流程节点，仍不执行 GLM 和向量检索。
 
 SDK 使用异步批量上报；认证通过、已生成远端 ID 或 flush 完成都不证明记录已经能从平台查询。
 远端上报失败保留本地观测，不中断排障；上报失败和 usage 缺失均不能视为零消耗。
@@ -175,7 +173,7 @@ SDK 使用异步批量上报；认证通过、已生成远端 ID 或 flush 完�
 
 | 配置节 | 字段 | 功能 |
 | --- | --- | --- |
-| `[assistant]` | `mode`、`model`、`base_url`、`top_k`、`max_remote_rounds` | 模式、模型与检索/诊断预算 |
+| `[assistant]` | `mode`、`model`、`base_url`、`top_k`、`max_remote_rounds` | `mode` 固定为 `glm`，配置模型与检索/诊断预算 |
 | `[business]` | `runtime_dir` | SQLite 和锁目录 |
 | `[business]` | `auto_index`、`index_interval` | Web 自动入库与轮询秒数 |
 | `[business]` | `connection_ttl`、`command_timeout`、`max_output_chars` | 连接有效期、命令超时及输出上限 |

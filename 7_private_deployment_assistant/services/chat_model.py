@@ -1,4 +1,4 @@
-"""为助手构造 LangChain 聊天模型；默认框架模式不会加载或调用远端模型。"""
+"""为助手构造 LangChain 聊天模型。"""
 
 from typing import TYPE_CHECKING
 
@@ -8,12 +8,10 @@ if TYPE_CHECKING:
     from langchain_openai import ChatOpenAI
 
 
-def build_chat_model(settings: AssistantSettings) -> "ChatOpenAI | None":
+def build_chat_model(settings: AssistantSettings) -> "ChatOpenAI":
     """只构造客户端，模型推理由工作流中的显式 invoke 调用触发。"""
-    if settings.mode == "framework":
-        return None
     if settings.mode != "glm":
-        raise ValueError("assistant.mode 只能为 framework 或 glm。")
+        raise ValueError("assistant.mode 只能为 glm。")
     if not settings.api_key:
         raise ValueError(
             "assistant.mode=glm 需要 ZHIPU_API_KEY；请在进程环境、"

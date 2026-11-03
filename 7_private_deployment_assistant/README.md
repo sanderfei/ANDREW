@@ -2,8 +2,8 @@
 
 基于 Web/KK 安装与运维场景的项目，提供纯文本会话窗口、原始文档浏览下载、可切换的
 Qdrant / PostgreSQL+pgvector 录入与检索，以及 LangChain / LangGraph 多轮排障工作流。
-问答默认使用 `framework` 模式，只演示信息收集和流程分支，不调用聊天模型、Embedding 或向量数据库。
-显式启用 `glm` 模式后，才运行真实检索与 GLM 分析；回答会区分追问、待补充证据与待验证方案。
+问答使用文档检索与 GLM 分析，回答会区分追问、待补充证据与待验证方案。
+使用前需要配置模型密钥，准备向量数据库并录入资料。
 已提供临时 SSH 授权与只读取证、功能复测确认、案例自动归档及可靠入库任务，
 服务端会话和 LangGraph 检查点写入本地 SQLite。执行记录、反馈与 Token 统计始终启用，
 Langfuse 远程上报由配置单独控制，仓库配置已开启；连接和认证状态可通过独立接口核验。
@@ -11,7 +11,7 @@ Langfuse 远程上报由配置单独控制，仓库配置已开启；连接和�
 两套数据库的最简启动命令、配置切换、指定本地文件的录入接口见
 [向量数据库使用说明](docs/vector-databases.md)。原始资料由使用者指定文件录入；
 确认解决后生成的案例自动保存，Web 后台按配置处理其入库任务。
-问答流程、节点职责和启用 GLM 的方式见 [助手工作流说明](docs/assistant-workflow.md)。
+问答流程、节点职责和 GLM 配置见 [助手工作流说明](docs/assistant-workflow.md)。
 
 ## 本地启动（2026-10-13 已验证）
 
@@ -65,7 +65,7 @@ Web 的 `/api/health`、`/api/workspace` 和 `/docs` 返回 200。
 
 已逐文件调用 `POST /api/documents/ingest`，将 1 份 DOCX、196 篇案例和 1 份覆盖范围说明录入本地 Qdrant，
 共 198 份文档、604 个片段。集合为 `private_deployment_1d864d88e5`。只运行本地 MiniLM Embedding，
-聊天模型调用数为 0；应用保持 `framework` 模式，本次启动临时关闭 Langfuse 上报。
+聊天模型调用数为 0；当时的旧版应用使用 `framework` 模式，本次启动临时关闭 Langfuse 上报。
 DOCX 的正文和表格参与检索，50 张图片未执行 OCR。
 
 首轮 30 条人工问题的结果如下。Hit@5 表示前 5 条包含已标注的主要相关文档，不是最终回答正确率。
@@ -127,7 +127,7 @@ DOCX 的正文和表格参与检索，50 张图片未执行 OCR。
 - 确认解决：提交明确根因、实际处理步骤与原故障功能复测证据，生成脱敏案例并排队入库。
 - 执行与评测：展示本地真实执行记录、Token 汇总和用户反馈；已有独立纯检索批测，端到端回答质量和 Langfuse 实验仍待补充。
 - 已完成会话由服务端保存，浏览器保留输入草稿与会话选择；没有用户账号和多租户权限系统。
-- 发送问题进入 LangGraph 工作流。默认模式返回信息追问或框架待接入说明，不将未执行的检索写成“未命中”；清空会话需要在页面确认。
+- 发送问题进入 LangGraph 工作流，按问题和环境信息追问、检索资料或进行诊断；清空会话需要在页面确认。
 
 ## 纯文本问答接口
 
@@ -148,7 +148,7 @@ DOCX 的正文和表格参与检索，50 张图片未执行 OCR。
 ```
 
 `history` 只包含此前成功完成的问答轮次，最多携带最近 20 轮；当前问题单独放在
-`question` 中，成功完成的追问、框架说明和诊断回复都属于正常对话，可进入历史；
+`question` 中，成功完成的追问和诊断回复都属于正常对话，可进入历史；
 失败、停止等待和旧版 HTTP 501 待接入提示不进入历史。
 服务端已有历史时以服务端为准；浏览器历史只用于尚无服务端记录的会话初始化，避免重复追加。
 本地 `runtime/assistant.sqlite3` 保存会话、幂等响应、案例任务和执行记录，
@@ -171,14 +171,14 @@ DOCX 的正文和表格参与检索，50 张图片未执行 OCR。
 
 `status=completed` 表示本轮请求处理完成，不表示故障已经解决；排障进度看 `workflow_status`。
 `steps` 是已执行节点名称列表，`sources` 是来源列表；完整合同见 API 文档。
-框架模式不会返回真实案例命中或模型诊断结论。模型调用失败、结构化输出不合法、
+模型调用失败、结构化输出不合法、
 引用越界或检索执行错误会返回 HTTP 503，不伪装成“没有相关案例”。
 停止等待只取消浏览器请求，不保证后端任务终止；重试使用原请求 ID，不在会话中重复插入问题。
 
 ## 业务入口
 
 ```bash
-# 同一会话补充信息；framework 模式不会调用聊天模型或向量检索。
+# 同一会话补充信息；问答会调用聊天模型，并在信息足够时检索资料。
 .venv/bin/python 7_private_deployment_assistant/workflow_cli.py ask \
   "离线安装失败" --thread-id demo-7 --request-id demo-7-turn-1
 .venv/bin/python 7_private_deployment_assistant/workflow_cli.py ask \
@@ -225,7 +225,7 @@ LangChain 回调所需的 `langchain`。从进程环境、教程 7 的 `runtime/
 .venv/bin/python 7_private_deployment_assistant/workflow_cli.py langfuse-status --check
 ```
 
-`framework` 模式也可上报流程 Trace 和节点，仍不调用 GLM 或向量检索。GLM 模式的模型调用、
+工作流节点、模型调用、
 实际 usage 和用户反馈会关联到对应远端 Trace。Web“执行与评测”区分未启用、配置不完整、
 已配置、认证通过和检查失败；只开启开关不会显示为已连接。SDK 使用异步批量上报，
 关闭时执行 flush/shutdown；认证通过或 flush 完成不等于记录已经能在平台查询。
