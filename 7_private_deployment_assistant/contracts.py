@@ -75,6 +75,29 @@ class ConnectionRequest(BaseModel):
     host_key_sha256: str | None = Field(default=None, max_length=128)
 
 
+class ClusterConfigRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=128)
+    yaml_content: SecretStr
+    host_key_sha256: str | None = Field(default=None, max_length=128)
+
+
+class ClusterNodeRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=128)
+    node_name: str = Field(min_length=1, max_length=253)
+    host_key_sha256: str | None = Field(default=None, max_length=128)
+
+
+class ClusterSelectionRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=128)
+    cluster_name: str = Field(min_length=1, max_length=255)
+
+
+class WebLogSelectionRequest(BaseModel):
+    thread_id: str = Field(min_length=1, max_length=128)
+    scope: Literal["cluster", "obs"]
+    pid: str = Field(min_length=1, max_length=255)
+
+
 class DiagnosticsRequest(BaseModel):
     thread_id: str = Field(min_length=1, max_length=128)
     connection_id: str = Field(min_length=1, max_length=128)

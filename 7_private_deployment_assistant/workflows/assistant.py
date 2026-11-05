@@ -19,6 +19,8 @@ from services.chat_model import build_chat_model
 from services.business_runtime import BusinessRuntime, _safe
 from services.ingestion import redact
 from services.remote_diagnostics import CHECK_CATALOG, RemoteDiagnosticError
+from services.cluster_config import ClusterConfigError
+from services.web_task_logs import WebTaskLogError
 from services.vector_service import VectorService
 from workflows.prompts import ANALYZE_INPUT, ASSESS_EVIDENCE, ANSWER_FROM_CASES, DIAGNOSE
 from workflows.state import AnswerDraft, DiagnosisDraft, EvidenceAssessment, InputAnalysis, WorkflowState
@@ -65,10 +67,10 @@ class AssistantWorkflow:
             "verify_resolution", "publish_case",
         ):
             builder.add_node(name, getattr(self, f"_{name}"))
-        builder.add_conditional_edges(START, lambda state: state.get("action", "message"),
-                                      {"message": "prepare_input", "verify_resolution": "verify_resolution"})
         # 仅为旧检查点保留节点名；新工作流没有指向此节点的边。
         builder.add_node("framework_pending", self._obsolete_framework_pending)
+        builder.add_conditional_edges(START, lambda state: state.get("action", "message"),
+                                      {"message": "prepare_input", "verify_resolution": "verify_resolution"})
         builder.add_edge("prepare_input", "check_information")
         builder.add_conditional_edges("check_information", lambda state: bool(state["missing_information"]),
                                       {True: "ask_for_information", False: "retrieve_documents"})
@@ -93,12 +95,12 @@ class AssistantWorkflow:
         return _json([{**item, "stdout": str(item.get("stdout", ""))[:6000], "stderr": str(item.get("stderr", ""))[:2000]}
                       for item in state.get("evidence", [])[-6:]])
 
-    def _diagnosis_route(self, state: WorkflowState) -> str:
-        if state["draft"].get("proposed_solution"):
     @staticmethod
     def _obsolete_framework_pending(state: WorkflowState):
         raise WorkflowExecutionError("旧框架模式请求无法继续，请使用新的 request_id 重新提问。")
 
+    def _diagnosis_route(self, state: WorkflowState) -> str:
+        if state["draft"].get("proposed_solution"):
             return "solution"
         checks = state["draft"].get("requested_checks", [])
         unseen = [check for check in checks if _json(check) not in state.get("executed_checks", [])]
@@ -177,6 +179,7 @@ class AssistantWorkflow:
         else:
             assessment = self._structured(ASSESS_EVIDENCE, EvidenceAssessment, {
                 "query": state["query"], "context": _json(state["context"]), "documents": _json(state["documents"]),
+                "evidence": self._model_evidence(state),
             }, config)
             valid_ids = {item["source_id"] for item in state["documents"]}
             if not set(assessment.source_ids) <= valid_ids or (assessment.sufficient and not assessment.source_ids):
@@ -190,6 +193,7 @@ class AssistantWorkflow:
         draft = self._structured(ANSWER_FROM_CASES, AnswerDraft, {
             "query": state["query"], "context": _json(state["context"]),
             "assessment": _json(state["assessment"]), "documents": _json(state["documents"]),
+            "evidence": self._model_evidence(state),
         }, config)
         return _update("answer_from_cases", draft=draft.model_dump())
 
@@ -273,7 +277,8 @@ class AssistantWorkflow:
             proposal = state["proposal"]
         verification = dict(state["verification_request"])
         if verification["method"] == "remote_check":
-            verification["checks"] = state.get("evidence", [])
+            verification["checks"] = [item for item in state.get("evidence", [])
+                                      if item.get("source") != "web_task_log"]
         result = self.business.knowledge.verify(state["thread_id"], proposal, verification)
         return _update("verify_resolution", verification=result, proposal=proposal, workflow_status="awaiting_verification",
                        answer="功能复测尚未确认通过，请继续提供复测结果。")
@@ -317,26 +322,76 @@ class AssistantWorkflow:
             context = {key: redact(value) if isinstance(value, str) else value for key, value in context.items()}
             options = {**(config or {}), "configurable": {**(config or {}).get("configurable", {}), "thread_id": request.thread_id}}
             snapshot = self.graph.get_state(options)
+            if request.request_id and snapshot.values.get("request_id") == request.request_id and "framework_pending" in snapshot.next:
+                raise WorkflowExecutionError("旧框架模式请求无法继续，请使用新的 request_id 重新提问。")
             # 图已完成但响应缓存尚未落盘的崩溃窗口：仅补存结果，不重跑模型和归档。
             if (request.request_id and snapshot.values.get("request_id") == request.request_id
                     and not snapshot.next and snapshot.values.get("answer") and snapshot.values.get("workflow_status")):
                 response = self._save_result(request, request.request_id, history, snapshot.values, snapshot.values.get("trace_id"))
                 self.business.observability.finalize_recovered(response.trace_id, response.answer, response.workflow_status)
-            if request.request_id and snapshot.values.get("request_id") == request.request_id and "framework_pending" in snapshot.next:
-                raise WorkflowExecutionError("旧框架模式请求无法继续，请使用新的 request_id 重新提问。")
                 return response
             if request.action == "verify_resolution" and (request.verification is None or request.verification.thread_id != request.thread_id):
                 raise WorkflowExecutionError("解决验证请求缺少信息，或不属于当前会话。")
             if request.action == "verify_resolution" and not snapshot.values:
                 raise WorkflowExecutionError("找不到需要验证的问题会话。")
             request_id = request.request_id or uuid4().hex
+            evidence = saved.get("evidence", [])
+            if request.action == "message":
+                resuming = snapshot.values.get("request_id") == request_id and bool(snapshot.next)
+                previous_identity = snapshot.values.get("context", {}).get("cluster_config_identity")
+                try:
+                    cluster = self.business.cluster_access.get_config(request.thread_id)
+                except ClusterConfigError:
+                    if resuming and previous_identity is not None:
+                        raise WorkflowExecutionError("集群配置已过期，不能继续使用旧日志，请重新粘贴配置并使用新的 request_id 提问。") from None
+                    if context.get("cluster_config_status"):
+                        context["cluster_config_status"] = "expired"
+                        context["cluster_config_identity"] = None
+                        evidence = [item for item in evidence if item.get("source") != "web_task_log"]
+                        evidence.append({"source": "web_task_log", "status": "unavailable",
+                                         "message": "集群配置已过期，请重新粘贴配置后读取当前任务日志。",
+                                         "stdout": "", "stderr": ""})
+                else:
+                    identity = {"generation": cluster["generation"], "web_cluster_name": cluster.get("web_cluster_name"),
+                                "selected_log": cluster.get("selected_log")}
+                    if resuming and previous_identity != identity:
+                        raise WorkflowExecutionError("集群配置或所选任务已变化，请使用新的 request_id 重新提问。")
+                    cluster_context = {"cluster_name": cluster.get("web_cluster_name") or cluster["cluster_name"],
+                        "kubernetes_version": cluster["kubernetes_version"],
+                        "install_mode": cluster["install_mode"]}
+                    context = {**context, **{k: v for k, v in cluster_context.items() if v},
+                               **request.context.model_dump(exclude_none=True),
+                               "config_metadata_name": cluster["cluster_name"],
+                               "web_cluster_name": cluster.get("web_cluster_name"),
+                               "cluster_config_status": "provided",
+                               "cluster_config_identity": identity,
+                               "configured_details": {key: cluster.get(key) for key in
+                                   ("container_manager", "control_plane_endpoint", "network", "registry")},
+                               "configured_nodes": [{"name": n["name"], "address": n["address"],
+                                                     "roles": n["roles"]} for n in cluster["nodes"]]}
+                    # 历史任务日志可能不属于本轮问题；每轮重新筛选，保留其他只读取证。
+                    evidence = [item for item in evidence if item.get("source") != "web_task_log"]
+                    if not resuming:
+                        try:
+                            evidence += self.business.cluster_access.evidence(request.thread_id, request.question)
+                            latest_cluster = self.business.cluster_access.get_config(request.thread_id)
+                            if latest_cluster.get("web_cluster_name"):
+                                context["web_cluster_name"] = latest_cluster["web_cluster_name"]
+                                if not request.context.cluster_name:
+                                    context["cluster_name"] = latest_cluster["web_cluster_name"]
+                            context["cluster_config_identity"] = {"generation": latest_cluster["generation"],
+                                "web_cluster_name": latest_cluster.get("web_cluster_name"),
+                                "selected_log": latest_cluster.get("selected_log")}
+                        except (ClusterConfigError, RemoteDiagnosticError, WebTaskLogError) as exc:
+                            evidence.append({"source": "web_task_log", "status": "unavailable",
+                                             "message": str(exc), "stdout": "", "stderr": ""})
             initial: WorkflowState = {
                 "thread_id": request.thread_id, "request_id": request_id, "action": request.action,
                 "question": redact(request.question), "history": history[-40:], "context": context,
                 "explicit_context": _safe(request.context.model_dump(exclude_none=True)),
                 "retrieval_status": "not_run", "documents": [], "sources": [], "steps": Overwrite([]),
                 "analysis": {}, "assessment": {}, "draft": {}, "missing_information": [], "answer": "",
-                "evidence": saved.get("evidence", []), "connection_id": request.connection_id,
+                "evidence": evidence, "connection_id": request.connection_id,
                 "executed_checks": [], "remote_rounds": 0, "proposal": {}, "case": None,
             }
             if request.action == "verify_resolution":

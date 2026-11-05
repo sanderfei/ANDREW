@@ -16,6 +16,7 @@ from services.ingestion import redact
 from services.knowledge_business import KnowledgeBusiness
 from services.observability import ObservabilityService
 from services.remote_diagnostics import RemoteDiagnosticsService
+from services.cluster_access import ClusterAccess
 
 
 class SessionBusyError(RuntimeError):
@@ -102,6 +103,7 @@ class BusinessRuntime:
         self.remote = remote or RemoteDiagnosticsService(
             ttl_seconds=self.settings.connection_ttl, command_timeout=self.settings.command_timeout,
             max_output_chars=self.settings.max_output_chars, known_hosts_path=self.settings.known_hosts_path)
+        self.cluster_access = ClusterAccess(self.remote, ttl_seconds=self.settings.connection_ttl)
         self.knowledge = knowledge or KnowledgeBusiness(directory / "assistant.sqlite3", self.settings.source_dir, retriever_factory)
         self.observability = observability or ObservabilityService(
             directory / "assistant.sqlite3", enabled=self.settings.langfuse_enabled,
@@ -138,6 +140,7 @@ class BusinessRuntime:
         self._wake.set()
         if self._worker:
             self._worker.join(timeout=5)
+        self.cluster_access.close()
         if hasattr(self.remote, "close"):
             self.remote.close()
         self.observability.close()

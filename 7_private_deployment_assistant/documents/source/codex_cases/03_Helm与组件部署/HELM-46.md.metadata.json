@@ -1,0 +1,16 @@
+{
+  "title": "Neo4j Helm 升级时缺少 neo4j 配置导致模板渲染失败",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-05",
+  "verification_note": "214 使用客户原包复现 Helm 模板错误，并在另一隔离命名空间复现默认 PVC 模板、旧版配置加载及非空 APOC 导出的 Guava 缺类。合成数据和临时文件已清理，隔离库认证已重启恢复并验证；客户截图已确认 PVC 挂载、容器 UID、NFS 路径、Service 端口及 Secret 引用名称。客户交互 exec 仅返回空的 Error from server，原因待查；客户现场修复、真实 Web 备份及恢复仍未验证。"
+}

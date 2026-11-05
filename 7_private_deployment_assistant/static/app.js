@@ -9,6 +9,12 @@ let restoringSessions = false;
 let remoteBusy = false;
 // 连接句柄仅保留在页面内存；密码从不写入 state、消息或 localStorage。
 const remoteConnections = new Map();
+// 配置摘要和日志列表只保存在当前页面内存；不保存 YAML 或凭据。
+const clusterContexts = new Map();
+let clusterBusy = false;
+let webLogPage = null;
+let clusterRevision = 0;
+let clusterRestoreId = 0;
 const workflowLabels = {
   needs_information: "等待补充关键信息", framework_ready: "历史框架响应",
   awaiting_evidence: "等待现场证据", awaiting_verification: "方案待功能复测",
@@ -25,7 +31,7 @@ function safeText(value) {
 }
 
 async function apiRequest(url, {method = "GET", body, signal} = {}) {
-  const response = await fetch(url, {method, signal,
+  const response = await fetch(url, {method, signal, cache: "no-store",
     headers: body === undefined ? {} : {"Content-Type": "application/json"},
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -99,7 +105,7 @@ function switchView(view) {
 }
 
 function newSession() {
-  if (pending) { notify("请等待当前请求结束。"); return; }
+  if (pending || clusterBusy) { notify("请等待当前请求结束。"); return; }
   const id = createId();
   state.sessions.unshift({id, title: "新的部署问题", messages: [], draft: ""});
   state.activeId = id;
@@ -120,7 +126,7 @@ function renderSessions() {
     button.textContent = session.title;
     button.title = session.title;
     button.addEventListener("click", () => {
-      if (pending) { notify("请等待当前请求结束。"); return; }
+      if (pending || clusterBusy) { notify("请等待当前请求结束。"); return; }
       state.activeId = session.id;
       saveState(); renderSessions(); renderMessages(); restoreDraft(); switchView("workspace");
     });
@@ -215,12 +221,16 @@ function updateBusinessControls() {
   document.getElementById("collect-diagnostics").disabled = busy || !connection;
   document.getElementById("revoke-remote").disabled = remoteBusy || !connection;
   document.getElementById("verify-resolution").disabled = busy || !session?.messages.some(message => message.role === "user");
-  document.getElementById("refresh-sessions").disabled = busy;
+  document.getElementById("refresh-sessions").disabled = busy || clusterBusy;
+  document.getElementById("open-cluster-config").disabled = busy || clusterBusy;
+  document.getElementById("refresh-web-logs").disabled = busy || clusterBusy || !clusterContexts.has(session?.id);
 }
 
 function restoreDraft() {
   document.getElementById("question").value = activeSession()?.draft || "";
+  renderClusterContext();
   updateChatControls();
+  if (activeSession()) restoreClusterContext(activeSession().id);
 }
 
 function setChatExpanded(expanded) {
@@ -282,7 +292,7 @@ async function sendQuestion(question, retryId = null) {
       method: "POST", headers: {"Content-Type": "application/json"}, signal: request.controller.signal,
       body: JSON.stringify({thread_id: session.id, request_id: user.id,
         connection_id: currentConnection()?.connection_id || null,
-        question: user.content, history: session.serverOwned ? [] : completedHistory(session, user.id), context: {server_url: state.serverUrl || null}})
+        question: user.content, history: session.serverOwned ? [] : completedHistory(session, user.id), context: {}})
     });
     const result = await response.json();
     if (pending !== request) return;
@@ -327,7 +337,7 @@ function appendAssistantResponse(session, result, replyTo) {
 }
 
 async function restoreServerSessions() {
-  if (pending || restoringSessions) return;
+  if (pending || restoringSessions || clusterBusy) return;
   restoringSessions = true;
   updateChatControls();
   const controller = new AbortController();
@@ -367,6 +377,296 @@ async function restoreServerSessions() {
     clearTimeout(timer);
     restoringSessions = false;
     updateChatControls();
+  }
+}
+
+async function restoreClusterContext(threadId) {
+  const requestId = ++clusterRestoreId;
+  const revision = clusterRevision;
+  try {
+    const response = await fetch(`/api/assistant/cluster-config?thread_id=${encodeURIComponent(threadId)}`, {cache: "no-store"});
+    if (requestId !== clusterRestoreId || revision !== clusterRevision || state.activeId !== threadId) return;
+    if (response.status === 404) {
+      clusterContexts.delete(threadId);
+      renderClusterContext(); updateBusinessControls();
+      return;
+    }
+    if (!response.ok) throw new Error("读取失败");
+    const result = await response.json();
+    if (requestId !== clusterRestoreId || revision !== clusterRevision || state.activeId !== threadId) return;
+    if (!result.cluster || !Array.isArray(result.cluster.nodes)) throw new Error("结果格式错误");
+    const entry = {cluster: result.cluster, logs: result.logs || {items: []},
+      selectedLog: result.selected_log || null};
+    clusterContexts.set(threadId, entry);
+    if (!remoteConnections.has(threadId)) {
+      setClusterConnection(threadId, entry.cluster, result.connection,
+        result.connection?.node_name || entry.cluster.master_name);
+    }
+    renderClusterContext(); updateBusinessControls();
+  } catch {
+    if (requestId === clusterRestoreId && revision === clusterRevision && state.activeId === threadId) {
+      notify("集群摘要暂未恢复，请检查本地服务。");
+    }
+  }
+}
+
+function renderClusterContext() {
+  const session = activeSession();
+  const entry = session && clusterContexts.get(session.id);
+  const summary = document.getElementById("cluster-summary");
+  const nodes = document.getElementById("cluster-nodes");
+  const logs = document.getElementById("web-logs-list");
+  const credentials = document.getElementById("cluster-credentials");
+  const choice = document.getElementById("web-cluster-choice");
+  const select = document.getElementById("web-cluster-select");
+  nodes.replaceChildren();
+  logs.replaceChildren();
+  credentials.replaceChildren();
+  choice.hidden = true;
+  if (!entry) {
+    summary.textContent = "粘贴 config.yaml 后识别节点，并通过第一个 master 查找 Web 任务日志。";
+    document.getElementById("web-logs-status").textContent = "尚未读取。";
+    return;
+  }
+  const cluster = entry.cluster;
+  const fields = [
+    ["集群", cluster.cluster_name || "未指定"],
+    ["Kubernetes", cluster.kubernetes_version || "未指定"],
+    ["安装方式", cluster.install_mode || "未指定"],
+    ["首个 master", cluster.master_name || "未指定"],
+    ["容器运行时", cluster.container_manager],
+    ["控制面地址", cluster.control_plane_endpoint?.address],
+    ["控制面域名", cluster.control_plane_endpoint?.domain],
+    ["控制面端口", cluster.control_plane_endpoint?.port],
+    ["网络插件", cluster.network?.plugin],
+    ["Pod 网段", cluster.network?.kube_pods_cidr],
+    ["Service 网段", cluster.network?.kube_service_cidr],
+    ["仓库类型", cluster.registry?.type],
+    ["仓库地址", cluster.registry?.private_registry],
+  ];
+  summary.textContent = fields.filter(([, value]) => value).map(([label, value]) => `${label}：${value}`).join(" · ");
+  for (const node of cluster.nodes || []) {
+    const row = document.createElement("div");
+    row.className = "cluster-node";
+    const text = document.createElement("span");
+    text.textContent = `${node.name || "未命名"} · ${node.address || "未指定地址"}:${node.port || 22} · ${node.username || "root"} · ${(node.roles || []).join(" / ") || "未指定角色"}`;
+    const fingerprint = document.createElement("input");
+    fingerprint.type = "text";
+    fingerprint.className = "node-fingerprint";
+    fingerprint.placeholder = "主机指纹（可选）";
+    fingerprint.setAttribute("aria-label", `${node.name} 的 SHA256 主机指纹`);
+    fingerprint.maxLength = 64;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chat-action";
+    button.textContent = "使用此节点诊断";
+    button.disabled = clusterBusy || Boolean(pending) || !node.name;
+    button.addEventListener("click", () => connectClusterNode(node, fingerprint.value.trim() || null));
+    row.append(text);
+    appendCredentialViewer(row, session.id, "node", node.name, node.has_password);
+    row.append(fingerprint, button);
+    nodes.append(row);
+  }
+  for (const [category, label, items] of [["component", "组件", cluster.components || []], ["registry", "镜像仓库", cluster.registries || []]]) {
+    for (const item of items) {
+      const name = category === "registry" ? item.address : item.name;
+      const row = document.createElement("div");
+      row.className = "cluster-node";
+      const text = document.createElement("span");
+      text.textContent = `${label} · ${name || "未命名"} · 账号：${item.username || "未配置"}`;
+      row.append(text);
+      appendCredentialViewer(row, session.id, category, name, item.has_password);
+      credentials.append(row);
+    }
+  }
+  document.getElementById("web-logs-status").textContent = entry.logs.error
+    ? safeText(entry.logs.error)
+    : `找到 ${(entry.logs.items || []).length} 条任务日志。`;
+  const options = entry.logs.cluster_options || [];
+  if (options.length > 1 || (options.length && !entry.logs.selected_cluster)) {
+    select.replaceChildren();
+    const empty = document.createElement("option");
+    empty.value = ""; empty.textContent = "请选择集群目录";
+    select.append(empty);
+    for (const name of options) {
+      const option = document.createElement("option");
+      option.value = name; option.textContent = name;
+      select.append(option);
+    }
+    select.value = entry.logs.selected_cluster || "";
+    select.disabled = clusterBusy;
+    choice.hidden = false;
+  }
+  for (const item of entry.logs.items || []) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "web-log-item";
+    const selected = entry.selectedLog?.scope === item.scope && entry.selectedLog?.pid === item.pid;
+    button.textContent = `${item.scope === "obs" ? "OBS" : "集群"} · ${item.pid} · ${formatSize(item.size || 0)}${selected ? " · 当前诊断任务" : ""}`;
+    button.addEventListener("click", () => openWebLog(item));
+    logs.append(button);
+  }
+}
+
+function appendCredentialViewer(row, threadId, category, name, hasPassword) {
+  if (!hasPassword || !name) return;
+  const button = document.createElement("button");
+  button.type = "button"; button.className = "chat-action"; button.textContent = "查看密码";
+  const value = document.createElement("span");
+  value.className = "credential-value";
+  button.addEventListener("click", async () => {
+    if (value.textContent) {
+      value.textContent = ""; button.textContent = "查看密码";
+      return;
+    }
+    button.disabled = true;
+    try {
+      const params = new URLSearchParams({thread_id: threadId, category, name});
+      const result = await apiRequest(`/api/assistant/cluster-config/credential?${params}`);
+      if (typeof result.password !== "string") throw new Error("账号密码不可用。");
+      value.textContent = result.password;
+      button.textContent = "隐藏密码";
+    } catch { notify("账号密码读取失败，请重新导入配置。"); }
+    finally { button.disabled = false; }
+  });
+  row.append(button, value);
+}
+
+function setClusterConnection(sessionId, cluster, connection, nodeName) {
+  if (!connection?.connection_id) return;
+  const node = (cluster.nodes || []).find(item => item.name === nodeName) || {};
+  remoteConnections.set(sessionId, {connection_id: connection.connection_id,
+    host: node.address || node.name || nodeName, username: node.username || "root", expires_at: connection.expires_at});
+}
+
+async function submitClusterConfig(event) {
+  event.preventDefault();
+  const session = activeSession();
+  const input = document.getElementById("cluster-yaml");
+  if (!session || clusterBusy || !input.value.trim()) return;
+  clusterRevision++;
+  const payload = {thread_id: session.id, yaml_content: input.value,
+    host_key_sha256: document.getElementById("cluster-master-fingerprint").value.trim() || null};
+  input.value = "";
+  clusterBusy = true;
+  document.getElementById("submit-cluster-config").disabled = true;
+  document.getElementById("cluster-config-status").textContent = "正在解析配置并查找 Web 任务日志…";
+  updateBusinessControls();
+  try {
+    const result = await apiRequest("/api/assistant/cluster-config", {method: "POST", body: payload});
+    if (!result.cluster || !Array.isArray(result.cluster.nodes)) throw new Error("服务端未返回有效集群配置。");
+    const entry = {cluster: result.cluster, logs: result.logs || {items: []}};
+    clusterContexts.set(session.id, entry);
+    setClusterConnection(session.id, entry.cluster, result.connection || result, entry.cluster.master_name);
+    document.getElementById("cluster-config-dialog").close();
+    renderClusterContext();
+    notify(entry.logs.error ? "集群配置已读取，Web 日志暂不可用。" : "集群配置和 Web 任务日志已读取。");
+  } catch (error) {
+    document.getElementById("cluster-config-status").textContent = `配置读取未完成。${safeText(error.message)} 请重新粘贴配置。`;
+  } finally {
+    payload.yaml_content = "";
+    clusterBusy = false;
+    document.getElementById("submit-cluster-config").disabled = false;
+    renderClusterContext();
+    updateBusinessControls();
+  }
+}
+
+async function connectClusterNode(node, hostKeySha256 = null) {
+  const session = activeSession();
+  const entry = session && clusterContexts.get(session.id);
+  if (!entry || clusterBusy || pending) return;
+  clusterRevision++;
+  clusterBusy = true;
+  renderClusterContext(); updateBusinessControls();
+  try {
+    const result = await apiRequest("/api/assistant/cluster-config/connect", {method: "POST",
+      body: {thread_id: session.id, node_name: node.name, host_key_sha256: hostKeySha256}});
+    if (!result.connection_id) throw new Error("服务端未返回节点连接。");
+    setClusterConnection(session.id, entry.cluster, result, node.name);
+    notify(`已选择节点 ${node.name} 进行只读诊断。`);
+  } catch (error) { notify(`节点连接未建立。${safeText(error.message)}`); }
+  finally { clusterBusy = false; renderClusterContext(); updateBusinessControls(); }
+}
+
+async function refreshWebLogs() {
+  const session = activeSession();
+  const entry = session && clusterContexts.get(session.id);
+  if (!entry || clusterBusy) return;
+  clusterRevision++;
+  clusterBusy = true;
+  document.getElementById("web-logs-status").textContent = "正在读取任务日志列表…";
+  updateBusinessControls();
+  try {
+    const result = await apiRequest(`/api/assistant/web-logs/list?thread_id=${encodeURIComponent(session.id)}`);
+    entry.logs = result;
+  } catch (error) { entry.logs = {items: [], error: `日志列表读取失败。${safeText(error.message)}`}; }
+  finally { clusterBusy = false; renderClusterContext(); updateBusinessControls(); }
+}
+
+async function selectWebCluster(event) {
+  const session = activeSession();
+  const entry = session && clusterContexts.get(session.id);
+  const name = event.target.value;
+  if (!entry || clusterBusy || !name) return;
+  clusterRevision++;
+  clusterBusy = true;
+  renderClusterContext(); updateBusinessControls();
+  try {
+    const result = await apiRequest("/api/assistant/cluster-config/select", {method: "POST",
+      body: {thread_id: session.id, cluster_name: name}});
+    entry.logs = result.logs || result;
+    entry.selectedLog = null;
+  } catch (error) { notify(`集群目录选择失败。${safeText(error.message)}`); }
+  finally { clusterBusy = false; renderClusterContext(); updateBusinessControls(); }
+}
+
+async function openWebLog(item) {
+  const session = activeSession();
+  if (!session) return;
+  clusterRevision++;
+  webLogPage = {threadId: session.id, scope: item.scope, pid: item.pid, offsets: [0], index: 0, next: null};
+  const page = webLogPage;
+  document.getElementById("web-log-title").textContent = `任务日志 · ${item.pid}`;
+  document.getElementById("web-log-content").textContent = "";
+  document.getElementById("web-log-status").textContent = "正在选择任务并读取日志…";
+  document.getElementById("web-log-previous").disabled = true;
+  document.getElementById("web-log-next").disabled = true;
+  document.getElementById("web-log-dialog").showModal();
+  try {
+    await apiRequest("/api/assistant/web-logs/select", {method: "POST",
+      body: {thread_id: session.id, scope: item.scope, pid: item.pid}});
+    const entry = clusterContexts.get(session.id);
+    if (entry) entry.selectedLog = {scope: item.scope, pid: item.pid};
+    page.selectionStatus = "已选作后续诊断任务";
+    renderClusterContext();
+  } catch (error) {
+    page.selectionStatus = `未选作后续诊断任务：${safeText(error.message)}`;
+  }
+  if (webLogPage === page) loadWebLogPage();
+}
+
+async function loadWebLogPage() {
+  const page = webLogPage;
+  if (!page || page.loading) return;
+  page.loading = true;
+  const previous = document.getElementById("web-log-previous"), next = document.getElementById("web-log-next");
+  previous.disabled = true; next.disabled = true;
+  document.getElementById("web-log-status").textContent = "正在读取日志…";
+  try {
+    const params = new URLSearchParams({thread_id: page.threadId, scope: page.scope, pid: page.pid,
+      offset: String(page.offsets[page.index])});
+    const result = await apiRequest(`/api/assistant/web-logs?${params}`);
+    if (webLogPage !== page) return;
+    if (typeof result.content !== "string") throw new Error("服务端未返回日志内容。");
+    document.getElementById("web-log-content").textContent = result.content;
+    page.next = result.eof ? null : result.next_offset;
+    document.getElementById("web-log-status").textContent = `${page.selectionStatus} · 第 ${page.index + 1} 页 · 文件大小 ${formatSize(result.size || 0)}${result.eof ? " · 已到末尾" : ""}`;
+  } catch (error) {
+    if (webLogPage === page) document.getElementById("web-log-status").textContent = `日志读取失败。${safeText(error.message)}`;
+  } finally {
+    page.loading = false;
+    if (webLogPage === page) { previous.disabled = page.index === 0; next.disabled = page.next == null; }
   }
 }
 
@@ -680,12 +980,45 @@ document.querySelectorAll("[data-question]").forEach(button => button.addEventLi
 }));
 document.getElementById("new-session").addEventListener("click", newSession);
 document.getElementById("clear-sessions").addEventListener("click", () => {
-  if (pending) { notify("请等待当前请求结束。"); return; }
-  if (!confirm("清空浏览器会话缓存？服务端历史不会删除，刷新后仍可恢复。服务器地址草稿将保留。")) return;
+  if (pending || clusterBusy) { notify("请等待当前请求结束。"); return; }
+  if (!confirm("清空浏览器会话缓存？服务端历史不会删除，刷新后仍可恢复。")) return;
   state.sessions = []; state.activeId = null; saveState(); newSession(); notify("本地缓存已清空，服务端历史仍可恢复。");
 });
 document.getElementById("refresh-sessions").addEventListener("click", restoreServerSessions);
 document.getElementById("refresh-evaluations").addEventListener("click", loadEvaluations);
+document.getElementById("open-cluster-config").addEventListener("click", () => {
+  if (!activeSession() || pending || clusterBusy) return;
+  document.getElementById("cluster-config-form").reset();
+  document.getElementById("cluster-config-status").textContent = "";
+  document.getElementById("cluster-config-dialog").showModal();
+});
+document.getElementById("cluster-config-form").addEventListener("submit", submitClusterConfig);
+for (const id of ["close-cluster-config", "cancel-cluster-config"]) {
+  document.getElementById(id).addEventListener("click", () => document.getElementById("cluster-config-dialog").close());
+}
+document.getElementById("cluster-config-dialog").addEventListener("close", () => {
+  document.getElementById("cluster-yaml").value = "";
+  document.getElementById("cluster-master-fingerprint").value = "";
+  document.getElementById("cluster-config-status").textContent = "";
+});
+document.getElementById("refresh-web-logs").addEventListener("click", refreshWebLogs);
+document.getElementById("web-cluster-select").addEventListener("change", selectWebCluster);
+document.getElementById("close-web-log").addEventListener("click", () => document.getElementById("web-log-dialog").close());
+document.getElementById("web-log-dialog").addEventListener("close", () => {
+  webLogPage = null;
+  document.getElementById("web-log-content").textContent = "";
+});
+document.getElementById("web-log-previous").addEventListener("click", () => {
+  if (webLogPage && webLogPage.index > 0) { webLogPage.index--; loadWebLogPage(); }
+});
+document.getElementById("web-log-next").addEventListener("click", () => {
+  if (webLogPage?.next != null) {
+    webLogPage.offsets = webLogPage.offsets.slice(0, webLogPage.index + 1);
+    webLogPage.offsets.push(webLogPage.next);
+    webLogPage.index++;
+    loadWebLogPage();
+  }
+});
 document.getElementById("authorize-remote").addEventListener("click", openRemoteDialog);
 document.getElementById("remote-form").addEventListener("submit", authorizeRemote);
 document.getElementById("collect-diagnostics").addEventListener("click", collectBasicDiagnostics);
@@ -703,17 +1036,6 @@ for (const id of ["close-verification-dialog", "cancel-verification-dialog"]) {
 }
 document.getElementById("remote-dialog").addEventListener("close", clearRemoteForm);
 document.getElementById("remote-dialog").addEventListener("cancel", clearRemoteForm);
-document.getElementById("save-server").addEventListener("click", () => {
-  const input = document.getElementById("server-url");
-  const value = input.value.trim();
-  if (value) {
-    try {
-      const url = new URL(value);
-      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error();
-    } catch { notify("请输入不含凭据或查询参数的 HTTP(S) 服务器地址。"); input.focus(); return; }
-  }
-  state.serverUrl = value; saveState(); notify(value ? "地址草稿已保存，服务器连接将在后续接入。" : "服务器地址草稿已清除。");
-});
 document.getElementById("question").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
@@ -749,7 +1071,6 @@ document.getElementById("question-form").addEventListener("submit", event => {
 });
 
 loadState();
-document.getElementById("server-url").value = state.serverUrl;
 if (!activeSession()) newSession();
 else { renderSessions(); renderMessages(); restoreDraft(); }
 loadWorkspace();

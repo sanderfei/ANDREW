@@ -9,18 +9,21 @@ import json
 import mimetypes
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from adapters.web_installer import WebInstallerAdapter
 from config import Settings
 from contracts import (AssistantRequest, AssistantResponse, IngestRequest, VectorSearchRequest,
-                       ConnectionRequest, DiagnosticsRequest, VerificationRequest, FeedbackRequest)
+                       ConnectionRequest, DiagnosticsRequest, VerificationRequest, FeedbackRequest,
+                       ClusterConfigRequest, ClusterNodeRequest, ClusterSelectionRequest, WebLogSelectionRequest)
 from services.documents import DocumentCatalog
 from services.vector_service import VectorService
 from workflows.assistant import AssistantWorkflow, WorkflowExecutionError
 from services.business_runtime import SessionBusyError
 from services.remote_diagnostics import CHECK_CATALOG, RemoteDiagnosticError
+from services.cluster_config import ClusterConfigError
+from services.web_task_logs import WebTaskLogError
 
 
 def create_app(workflow: AssistantWorkflow | None = None) -> FastAPI:
@@ -103,6 +106,75 @@ def create_app(workflow: AssistantWorkflow | None = None) -> FastAPI:
     @application.get("/api/assistant/sessions")
     def sessions() -> dict:
         return {"items": workflow.sessions()}
+
+    @application.post("/api/assistant/cluster-config")
+    def import_cluster_config(payload: ClusterConfigRequest) -> dict:
+        try:
+            with workflow.business.sessions.lock(payload.thread_id):
+                return workflow.business.cluster_access.import_config(
+                    payload.thread_id, payload.yaml_content.get_secret_value(), payload.host_key_sha256)
+        except (ClusterConfigError, RemoteDiagnosticError, WebTaskLogError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        except SessionBusyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+
+    @application.get("/api/assistant/cluster-config")
+    def get_cluster_config(thread_id: str):
+        try:
+            return JSONResponse(workflow.business.cluster_access.snapshot(thread_id),
+                                headers={"Cache-Control": "no-store"})
+        except ClusterConfigError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+
+    @application.post("/api/assistant/cluster-config/connect")
+    def connect_cluster_node(payload: ClusterNodeRequest) -> dict:
+        try:
+            return workflow.business.cluster_access.connect(payload.thread_id, payload.node_name, payload.host_key_sha256)
+        except (ClusterConfigError, RemoteDiagnosticError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @application.post("/api/assistant/cluster-config/select")
+    def select_web_cluster(payload: ClusterSelectionRequest) -> dict:
+        try:
+            with workflow.business.sessions.lock(payload.thread_id):
+                return workflow.business.cluster_access.select_cluster(payload.thread_id, payload.cluster_name)
+        except (ClusterConfigError, RemoteDiagnosticError, WebTaskLogError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        except SessionBusyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+
+    @application.get("/api/assistant/cluster-config/credential")
+    def cluster_credential(thread_id: str, category: str, name: str):
+        try:
+            result = workflow.business.cluster_access.credential(thread_id, category, name)
+            return JSONResponse(result, headers={"Cache-Control": "no-store"})
+        except ClusterConfigError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @application.get("/api/assistant/web-logs/list")
+    def list_web_logs(thread_id: str) -> dict:
+        try:
+            return workflow.business.cluster_access.list_logs(thread_id)
+        except (ClusterConfigError, RemoteDiagnosticError, WebTaskLogError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @application.post("/api/assistant/web-logs/select")
+    def select_web_log(payload: WebLogSelectionRequest) -> dict:
+        try:
+            with workflow.business.sessions.lock(payload.thread_id):
+                return workflow.business.cluster_access.select_log(payload.thread_id, payload.scope, payload.pid)
+        except (ClusterConfigError, RemoteDiagnosticError, WebTaskLogError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        except SessionBusyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+
+    @application.get("/api/assistant/web-logs")
+    def read_web_log(thread_id: str, scope: str, pid: str, offset: int = 0):
+        try:
+            return JSONResponse(workflow.business.cluster_access.read_log(thread_id, scope, pid, offset),
+                                headers={"Cache-Control": "no-store"})
+        except (ClusterConfigError, RemoteDiagnosticError, WebTaskLogError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
 
     @application.post("/api/assistant/connections")
     def authorize_connection(payload: ConnectionRequest) -> dict:

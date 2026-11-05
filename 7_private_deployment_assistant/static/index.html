@@ -41,14 +41,14 @@
         <div class="page-heading"><div><p class="eyebrow">DEPLOYMENT WORKSPACE</p><h1>私有化部署运维工作台</h1><p class="subtitle">集群环境、部署资料与问题记录，集中在一个工作空间。</p></div><span class="quiet-tag">在线 / 离线部署</span></div>
 
         <section class="context-card" aria-labelledby="context-title">
-          <div class="section-heading"><h2 id="context-title"><span class="section-icon">▥</span> 集群上下文</h2><span class="muted-badge">尚未连接</span></div>
-          <div class="context-fields">
-            <div class="field server-field"><label for="server-url">Web 部署服务器</label><div class="input-action"><input id="server-url" type="url" placeholder="https://web-installer.example.com" autocomplete="off"><button id="save-server">保存草稿</button></div></div>
-            <div class="field"><label for="cluster-select">目标集群</label><select id="cluster-select" disabled><option>连接服务器后选择集群</option></select></div>
-            <button class="outline-button refresh-button" disabled title="集群配置读取尚未接入">↻ 读取配置</button>
-          </div>
-          <div class="context-summary"><span>K8s 版本 <b>待读取</b></span><span>操作系统 <b>待读取</b></span><span>安装模式 <b>待读取</b></span><span>节点信息 <b>待读取</b></span></div>
-          <p class="field-help">Web 地址仅保存为浏览器草稿。远程只读诊断请单独授权 SSH 连接。</p>
+          <div class="section-heading"><h2 id="context-title"><span class="section-icon">▥</span> 集群上下文</h2><button id="open-cluster-config" type="button" class="outline-button">粘贴 KK 配置</button></div>
+          <p id="cluster-summary" class="field-help">粘贴 config.yaml 后识别节点，并通过第一个 master 查找 Web 任务日志。</p>
+          <div id="cluster-nodes" class="cluster-nodes"></div>
+          <div id="cluster-credentials" class="cluster-nodes"></div>
+          <div class="section-heading cluster-logs-heading"><h3>Web 任务日志</h3><button id="refresh-web-logs" type="button" class="chat-action" disabled>刷新列表</button></div>
+          <p id="web-logs-status" class="field-help">尚未读取。</p>
+          <div id="web-cluster-choice" class="field web-cluster-choice" hidden><label for="web-cluster-select">Web 中的集群目录</label><select id="web-cluster-select"></select></div>
+          <div id="web-logs-list" class="web-logs-list"></div>
           <div class="diagnostic-toolbar" aria-label="远程诊断与验证">
             <div class="diagnostic-status"><strong id="remote-status">未授权远程连接</strong><span id="workflow-status">等待提问</span></div>
             <div class="diagnostic-actions"><button id="authorize-remote" type="button" class="outline-button">授权只读诊断</button><button id="collect-diagnostics" type="button" class="outline-button" disabled>采集基础信息</button><button id="revoke-remote" type="button" class="chat-action" disabled>撤销连接</button><button id="verify-resolution" type="button" class="primary-button" disabled>确认复测并归档</button></div>
@@ -70,7 +70,7 @@
                   <button data-question="Helm 部署后 Pod 未就绪，如何逐步定位问题？"><span>Helm 部署</span>配置与工作负载排查 <b>↗</b></button>
                   <button data-question="Web 与 KK 发布前，需要核对哪些部署条件？"><span>发布支持</span>版本与环境核对 <b>↗</b></button>
                 </div>
-                <div class="scope-note"><span aria-hidden="true">ⓘ</span><span id="assistant-scope">默认运行 LangGraph 框架，按规则整理信息；不调用模型或向量库。</span></div>
+                <div class="scope-note"><span aria-hidden="true">ⓘ</span><span id="assistant-scope">提问将结合集群配置、任务日志和部署案例进行分析。</span></div>
               </div>
               <div id="messages" class="messages"></div>
               <div id="reply-pending" class="reply-pending" role="status" hidden><span class="waiting-dot" aria-hidden="true"></span> 正在等待回复…</div>
@@ -108,6 +108,22 @@
     </div>
     <footer>Web / KK 运维知识工作空间<span>界面与项目框架 · v0.1</span></footer>
   </main>
+  <dialog id="cluster-config-dialog" class="business-dialog cluster-config-dialog" aria-labelledby="cluster-config-title">
+    <form id="cluster-config-form" autocomplete="off">
+      <div class="dialog-heading"><h2 id="cluster-config-title">粘贴 KK 配置</h2><button id="close-cluster-config" type="button" class="icon-button" aria-label="关闭配置窗口">×</button></div>
+      <p class="dialog-help">粘贴完整 config.yaml。连接信息用于本次会话，配置不会作为聊天消息保存。</p>
+      <div class="field"><label for="cluster-yaml">config.yaml</label><textarea id="cluster-yaml" required rows="14" spellcheck="false" autocomplete="off" placeholder="粘贴 KK 集群配置"></textarea></div>
+      <div class="field"><label for="cluster-master-fingerprint">第一个 master 的 SHA256 主机指纹（可选）</label><input id="cluster-master-fingerprint" type="text" maxlength="64" placeholder="使用已信任的 known_hosts 时可不填" autocomplete="off"></div>
+      <p id="cluster-config-status" class="form-status" role="status"></p>
+      <div class="dialog-actions"><button id="cancel-cluster-config" type="button" class="outline-button">取消</button><button id="submit-cluster-config" type="submit" class="primary-button">读取集群和日志</button></div>
+    </form>
+  </dialog>
+  <dialog id="web-log-dialog" class="business-dialog web-log-dialog" aria-labelledby="web-log-title">
+    <div class="dialog-heading"><h2 id="web-log-title">任务日志</h2><button id="close-web-log" type="button" class="icon-button" aria-label="关闭日志窗口">×</button></div>
+    <p id="web-log-status" class="field-help" role="status"></p>
+    <pre id="web-log-content" class="web-log-content"></pre>
+    <div class="dialog-actions"><button id="web-log-previous" type="button" class="outline-button" disabled>上一页</button><button id="web-log-next" type="button" class="outline-button" disabled>下一页</button></div>
+  </dialog>
   <dialog id="remote-dialog" class="business-dialog" aria-labelledby="remote-dialog-title">
     <form id="remote-form" autocomplete="off">
       <div class="dialog-heading"><h2 id="remote-dialog-title">授权本会话只读诊断</h2><button id="close-remote-dialog" type="button" class="icon-button" aria-label="关闭连接窗口">×</button></div>

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 import hmac
 import ipaddress
+from io import StringIO
 from pathlib import Path
 import re
 import secrets
@@ -45,6 +46,7 @@ class _Connection:
     deadline: float
     fingerprint: str | None
     _password: str = field(repr=False)
+    _private_key: str = field(default="", repr=False)
     timer: threading.Timer | None = field(default=None, repr=False)
 
     def __repr__(self) -> str:
@@ -82,7 +84,7 @@ class RemoteDiagnosticsService:
         self._connections: dict[str, _Connection] = {}
         self._lock = threading.RLock()
 
-    def create_connection(self, thread_id, host, username, password, port=22, host_key_sha256=None) -> dict:
+    def create_connection(self, thread_id, host, username, password, port=22, host_key_sha256=None, private_key="") -> dict:
         """登记临时连接；网络连接延迟到 collect，返回结果中不包含密码。"""
         self._validate_thread(thread_id)
         if not isinstance(host, str) or not host or len(host) > 253:
@@ -94,14 +96,15 @@ class RemoteDiagnosticsService:
                 raise RemoteDiagnosticError("SSH 主机地址格式不合法。")
         if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,63}", username):
             raise RemoteDiagnosticError("SSH 用户名格式不合法。")
-        if not isinstance(password, str) or not password or len(password) > 4096:
-            raise RemoteDiagnosticError("请输入有效的 SSH 密码。")
+        if (not isinstance(password, str) or len(password) > 4096 or not isinstance(private_key, str)
+                or len(private_key) > 32768 or not (password or private_key)):
+            raise RemoteDiagnosticError("请提供有效的 SSH 密码或私钥。")
         if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
             raise RemoteDiagnosticError("SSH 端口必须为 1..65535 的整数。")
         fingerprint = self._fingerprint(host_key_sha256)
         connection_id = secrets.token_urlsafe(32)
         entry = _Connection(thread_id, host, username, port, time.time() + self.ttl_seconds,
-                            time.monotonic() + self.ttl_seconds, fingerprint, password)
+                            time.monotonic() + self.ttl_seconds, fingerprint, password, private_key)
         timer = threading.Timer(self.ttl_seconds, self._expire, args=(connection_id,))
         timer.daemon = True
         entry.timer = timer
@@ -116,6 +119,16 @@ class RemoteDiagnosticsService:
     def revoke(self, connection_id, thread_id) -> None:
         self._entry(connection_id, thread_id)
         self._expire(connection_id)
+
+    def open_connection(self, connection_id, thread_id):
+        """打开已经登记的连接；调用方负责关闭。"""
+        entry = self._entry(connection_id, thread_id)
+        try:
+            return self._open(entry)
+        except RemoteDiagnosticError:
+            raise
+        except Exception:
+            raise RemoteDiagnosticError("SSH 连接失败，请检查地址、凭据与主机信任配置。") from None
 
     def close(self) -> None:
         """清空临时凭据并取消到期计时器；允许重复关闭空实例。"""
@@ -165,6 +178,7 @@ class RemoteDiagnosticsService:
             entry = self._connections.pop(connection_id, None)
             if entry is not None:
                 entry._password = ""
+                entry._private_key = ""
                 if entry.timer is not None:
                     entry.timer.cancel()
 
@@ -203,8 +217,19 @@ class RemoteDiagnosticsService:
                 if self.known_hosts_path is not None:
                     client.load_host_keys(str(self.known_hosts_path))
             client.set_missing_host_key_policy(_HostKeyPolicy(entry.fingerprint))
+            pkey = None
+            if entry._private_key:
+                from paramiko import RSAKey, ECDSAKey, Ed25519Key
+                for key_type in (Ed25519Key, RSAKey, ECDSAKey):
+                    try:
+                        pkey = key_type.from_private_key(StringIO(entry._private_key))
+                        break
+                    except Exception:
+                        continue
+                if pkey is None:
+                    raise RemoteDiagnosticError("无法读取 SSH 私钥，请检查格式和口令。")
             client.connect(hostname=entry.host, port=entry.port, username=entry.username,
-                           password=entry._password, timeout=self.command_timeout,
+                           password=entry._password or None, pkey=pkey, timeout=self.command_timeout,
                            auth_timeout=self.command_timeout, banner_timeout=self.command_timeout,
                            look_for_keys=False, allow_agent=False)
             if entry.fingerprint is not None:

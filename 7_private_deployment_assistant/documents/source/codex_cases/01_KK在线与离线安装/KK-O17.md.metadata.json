@@ -1,0 +1,14 @@
+{
+  "title": "轻量化离线安装因已有 Docker 数据目录不一致被预检阻止",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "CentOS"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified"
+}
