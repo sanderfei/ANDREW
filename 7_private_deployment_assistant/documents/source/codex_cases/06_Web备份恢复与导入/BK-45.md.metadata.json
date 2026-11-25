@@ -1,0 +1,16 @@
+{
+  "title": "214 Milvus服务异常阻碍新旧备份兼容验证",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-13",
+  "verification_note": "214 测试数据经授权清除后，分别安装 Milvus 2.6.0 和 2.5.10 并完成立即备份；旧版早期物理归档含 xl.meta，bb8280e 经中央合并 2b5e88d 发布后，通过 MinIO 对象接口导出。旧版任务 success，归档 2107 字节，5 个标准 JSON、5 个普通 insert binlog，无 xl.meta，2 条主键和 float32 向量与测试数据一致；凭据临时配置已清理。定时成功记录早于修复发布，修复后定时触发和两版本恢复均未验证。"
+}

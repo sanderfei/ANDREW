@@ -1,0 +1,10 @@
+{
+  "title": "StarRocks 安装时 Helm 提示另一项操作进行中",
+  "kind": "case",
+  "kubernetes_versions": ["any"],
+  "operating_systems": ["any"],
+  "install_modes": ["any"],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-11",
+  "verification_note": "用户截图中 starrocks release 的 Helm upgrade --install 报 another operation in progress，KK 重试后任务失败。实际运行中任务、最新修订状态与前一次失败原因未知；未访问现场、执行修复或验证业务。"
+}

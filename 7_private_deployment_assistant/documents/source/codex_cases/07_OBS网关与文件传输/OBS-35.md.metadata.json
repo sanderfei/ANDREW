@@ -1,0 +1,16 @@
+{
+  "title": "私有化 OBS 最后一片上传成功后重复关闭合并文件返回 500",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-23",
+  "verification_note": "第 5/5 片的网关 PUT 发送 99,597,998 字节并返回 201，私有化接口约 4.05 秒后以“文件已上传，但关闭合并文件失败”返回 500。对照 c41b48f9 发现合并文件直接作为 HTTP 请求体传输，传输层和分片代码都会关闭同一文件。本机实际 OBSGateway.Put 请求回环测试服务，直接传 *os.File 时调用方再次 Close 命中 os.ErrClosed，传 io.NewSectionReader 时调用方 Close 成功。现场对象、资源记录及修复后端到端结果待核对。"
+}

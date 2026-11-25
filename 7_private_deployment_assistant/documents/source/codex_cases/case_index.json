@@ -1,9 +1,72 @@
 {
   "created_at": "2026-10-14",
-  "case_count": 214,
+  "case_count": 221,
   "raw_files_scanned": 421,
   "distinct_sessions": 378,
   "cases": [
+    {
+      "id": "OBS-35",
+      "title": "私有化 OBS 最后一片上传成功后重复关闭合并文件返回 500",
+      "path": "07_OBS网关与文件传输/OBS-35.md",
+      "status": "错误分支和文件关闭机制已定位，现场修复待验证",
+      "source_checked_at": "2026-11-23",
+      "verification_note": "第 5/5 片的网关 PUT 发送 99,597,998 字节并返回 201，私有化接口约 4.05 秒后以“文件已上传，但关闭合并文件失败”返回 500。对照 c41b48f9 发现合并文件直接作为 HTTP 请求体传输，传输层和分片代码都会关闭同一文件。本机实际 OBSGateway.Put 请求回环测试服务，直接传 *os.File 时调用方再次 Close 命中 os.ErrClosed，传 io.NewSectionReader 时调用方 Close 成功。现场对象、资源记录及修复后端到端结果待核对。",
+      "sources": []
+    },
+    {
+      "id": "OBS-34",
+      "title": "私有化 OBS 分片上传在 10.02 秒显示 canceled",
+      "path": "07_OBS网关与文件传输/OBS-34.md",
+      "status": "源码配置已核对，现场取消来源和上传结果待验证",
+      "source_checked_at": "2026-11-23",
+      "verification_note": "2026-11-23 浏览器两次 upload 请求在 10.02 秒显示 canceled、0.0 kB，其余多次约 7 秒返回 HTTP 200。private-service c41b48f9 的 HTTP 样例为 100 秒，OBS 元数据请求 60 秒，文件传输上限 6 小时，中间分片暂存在本地。现场生效配置、取消来源和完整上传结果待核。",
+      "sources": []
+    },
+    {
+      "id": "BK-45",
+      "title": "214 Milvus服务异常阻碍新旧备份兼容验证",
+      "path": "06_Web备份恢复与导入/BK-45.md",
+      "status": "新旧版立即备份成功；旧版标准归档已核对，恢复与修复后定时待验证",
+      "source_checked_at": "2026-11-13",
+      "verification_note": "214 测试数据经授权清除后，分别安装 Milvus 2.6.0 和 2.5.10 并完成立即备份；旧版早期物理归档含 xl.meta，bb8280e 经中央合并 2b5e88d 发布后，通过 MinIO 对象接口导出。旧版任务 success，归档 2107 字节，5 个标准 JSON、5 个普通 insert binlog，无 xl.meta，2 条主键和 float32 向量与测试数据一致；凭据临时配置已清理。定时成功记录早于修复发布，修复后定时触发和两版本恢复均未验证。",
+      "sources": []
+    },
+    {
+      "id": "HELM-48",
+      "title": "StarRocks 安装时 Helm 提示另一项操作进行中",
+      "path": "03_Helm与组件部署/HELM-48.md",
+      "status": "现场状态、恢复和功能待验证",
+      "source_checked_at": "2026-11-11",
+      "verification_note": "用户截图中 starrocks release 的 Helm upgrade --install 报 another operation in progress，KK 重试后任务失败。实际运行中任务、最新修订状态与前一次失败原因未知；未访问现场、执行修复或验证业务。",
+      "sources": []
+    },
+    {
+      "id": "HELM-47",
+      "title": "RabbitMQ 4.2 拒绝业务创建旧版镜像队列策略",
+      "path": "03_Helm与组件部署/HELM-47.md",
+      "status": "旧镜像策略与4.x不兼容；客户修复及业务功能待验证",
+      "source_checked_at": "2026-11-10",
+      "verification_note": "2026-11-10用户截图显示RegisterController设置vhost的ha-all策略失败，返回bad_request并指出ha-mode=all、ha-sync-mode=automatic为未识别策略字段。官方文档确认RabbitMQ 4.0起移除经典队列镜像，旧策略与4.2不兼容；未证明AMQP长连接失败。当前本机KK install_tiny da595f94c304的内嵌包为Chart16.0.18、appVersion4.2.1、默认单副本，不能推断客户现场。需业务端适配并确认是否需要quorum及迁移，不可直接删除生产队列；现场版本、注册、发送消费和故障恢复均待验证。",
+      "sources": []
+    },
+    {
+      "id": "OBS-33",
+      "title": "OBS本地下载大制品中途收到HTTP2对端重置",
+      "path": "07_OBS网关与文件传输/OBS-33.md",
+      "status": "后续任务仅见启动日志，等待锁待核；对端根因及完整下载待验证",
+      "source_checked_at": "2026-11-10",
+      "verification_note": "2026-11-10用户截图显示本地下载总量7748.16MiB，11:23累计1188.84MiB、11:26累计1193.80MiB，11:26:21报HTTP2 stream 11 INTERNAL_ERROR received from peer。协议表明连接对端重置流，具体源站或网关内部原因未定；当前源码9c6bf3ca408b失败删除临时文件并保留旧正式文件，现场版本及实际文件状态未核实。未访问现场或执行修复、重试，完整下载未验证。 后续反馈同一路径被下载或导入占用；当前源码为进程内路径锁，下载回调结束后先释放再记录Completed，新任务/导入/等待及实例版本差异需核实，未证实死锁。 当前源码OBS下载PID为进程内协程任务标识，无单PID取消接口，command kill注册表不适用；未停止或重启，现场版本未核。 用户自行重新触发14:03下载，任务日志仅见Started/Owner/UserId，容器Writer Ping为日志WebSocket心跳；当前源码提示可能等待全局目录锁，现场运行版本、持锁者、实际传输及终态均未验证。 用户补充容器日志：14:03本地下载接口受理及日志跟踪；14:02网关GET在该任务前，14:08 sign-cdn/sign-direct响应200仅证明签名接口响应，不证明本地下载开始或完成；持锁者及任务终态待核。",
+      "sources": []
+    },
+    {
+      "id": "BK-44",
+      "title": "Milvus备份未找到符合条件的Ready Proxy容器",
+      "path": "06_Web备份恢复与导入/BK-44.md",
+      "status": "214新旧版立即备份及旧版标准归档已检查；现场与恢复待验证",
+      "source_checked_at": "2026-11-13",
+      "verification_note": "客户截图为 Milvus 2.5.10 standalone，旧版 Web 仅发现分布式 proxy。214 测试环境先后验证新版及旧版立即备份；旧版最初归档为 MinIO 内部 xl.meta，后续 bb8280e 改为经对象接口导出，中央合并 2b5e88d 并发布 121。旧版立即备份成功，归档含 5 个标准 JSON、5 个普通 insert binlog、无 xl.meta，2 条主键和 float32 向量与测试数据一致。修复后定时触发、两版本恢复和客户现场均未验证。",
+      "sources": []
+    },
     {
       "id": "HELM-46",
       "title": "Neo4j Helm 升级时缺少 neo4j 配置导致模板渲染失败",
@@ -753,7 +816,9 @@
       "id": "REG-09",
       "title": "Zot就绪检查节点缺curl",
       "path": "04_Zot_Harbor与镜像仓库/REG-09.md",
-      "status": "待验证",
+      "status": "截图与源码已定位执行节点；现场及恢复待验证",
+      "source_checked_at": "2026-11-16",
+      "verification_note": "用户截图显示 master 节点执行 Zot API 探测时 curl command not found、退出 127。本地 KK install_tiny/da595f94c304 的 InstallZot 通过 registry 角色节点的 runner 执行探测；Web 调用 KK。用户补充纯离线最小 Ubuntu 缺 curl；讨论 KK 在 Web 容器内使用 Go HTTP 客户端检测，以消除节点 curl 依赖，需核实容器到节点网络并保持 TLS、认证、API、GUI 和重试。registry 可在任意机器；ping 仅测 ICMP，不能验证端口、HTTPS、API 或认证，且可能未安装或被禁。建议 KK 所在环境通过 Go HTTPS 检查具体 registry 节点并保留 CA、域名及认证，容器和宿主机网络需区分。方案尚未实现或现场验证；实际节点地址、Web 与节点的主机关系、现场 KK 版本及恢复均未核实。",
       "sources": [
         {
           "session_id": "01a0bca9-a5c7-7c81-bf16-7ef6acbf6739",

@@ -1,0 +1,16 @@
+{
+  "title": "Milvus备份未找到符合条件的Ready Proxy容器",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-13",
+  "verification_note": "客户截图为 Milvus 2.5.10 standalone，旧版 Web 仅发现分布式 proxy。214 测试环境先后验证新版及旧版立即备份；旧版最初归档为 MinIO 内部 xl.meta，后续 bb8280e 改为经对象接口导出，中央合并 2b5e88d 并发布 121。旧版立即备份成功，归档含 5 个标准 JSON、5 个普通 insert binlog、无 xl.meta，2 条主键和 float32 向量与测试数据一致。修复后定时触发、两版本恢复和客户现场均未验证。"
+}

@@ -1,0 +1,16 @@
+{
+  "title": "私有化 OBS 分片上传在 10.02 秒显示 canceled",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-23",
+  "verification_note": "2026-11-23 浏览器两次 upload 请求在 10.02 秒显示 canceled、0.0 kB，其余多次约 7 秒返回 HTTP 200。private-service c41b48f9 的 HTTP 样例为 100 秒，OBS 元数据请求 60 秒，文件传输上限 6 小时，中间分片暂存在本地。现场生效配置、取消来源和完整上传结果待核。"
+}

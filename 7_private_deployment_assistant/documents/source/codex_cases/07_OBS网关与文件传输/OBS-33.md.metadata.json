@@ -1,0 +1,16 @@
+{
+  "title": "OBS本地下载大制品中途收到HTTP2对端重置",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "offline"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-10",
+  "verification_note": "2026-11-10用户截图显示本地下载总量7748.16MiB，11:23累计1188.84MiB、11:26累计1193.80MiB，11:26:21报HTTP2 stream 11 INTERNAL_ERROR received from peer。协议表明连接对端重置流，具体源站或网关内部原因未定；当前源码9c6bf3ca408b失败删除临时文件并保留旧正式文件，现场版本及实际文件状态未核实。未访问现场或执行修复、重试，完整下载未验证。 后续反馈同一路径被下载或导入占用；当前源码为进程内路径锁，下载回调结束后先释放再记录Completed，新任务/导入/等待及实例版本差异需核实，未证实死锁。 当前源码OBS下载PID为进程内协程任务标识，无单PID取消接口，command kill注册表不适用；未停止或重启，现场版本未核。 用户自行重新触发14:03下载，任务日志仅见Started/Owner/UserId，容器Writer Ping为日志WebSocket心跳；当前源码提示可能等待全局目录锁，现场运行版本、持锁者、实际传输及终态均未验证。 用户补充容器日志：14:03本地下载接口受理及日志跟踪；14:02网关GET在该任务前，14:08 sign-cdn/sign-direct响应200仅证明签名接口响应，不证明本地下载开始或完成；持锁者及任务终态待核。"
+}

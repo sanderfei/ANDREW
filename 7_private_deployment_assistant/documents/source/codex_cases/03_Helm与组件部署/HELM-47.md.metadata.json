@@ -1,0 +1,16 @@
+{
+  "title": "RabbitMQ 4.2 拒绝业务创建旧版镜像队列策略",
+  "kind": "case",
+  "kubernetes_versions": [
+    "any"
+  ],
+  "operating_systems": [
+    "any"
+  ],
+  "install_modes": [
+    "any"
+  ],
+  "verification_status": "unverified",
+  "source_checked_at": "2026-11-10",
+  "verification_note": "2026-11-10用户截图显示RegisterController设置vhost的ha-all策略失败，返回bad_request并指出ha-mode=all、ha-sync-mode=automatic为未识别策略字段。官方文档确认RabbitMQ 4.0起移除经典队列镜像，旧策略与4.2不兼容；未证明AMQP长连接失败。当前本机KK install_tiny da595f94c304的内嵌包为Chart16.0.18、appVersion4.2.1、默认单副本，不能推断客户现场。需业务端适配并确认是否需要quorum及迁移，不可直接删除生产队列；现场版本、注册、发送消费和故障恢复均待验证。"
+}
